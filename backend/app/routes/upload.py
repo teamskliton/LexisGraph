@@ -25,6 +25,7 @@ async def upload_document(file: UploadFile) -> dict:
         raise HTTPException(status_code=400, detail="Filename is required")
 
     try:
+        logger.info("[UPLOAD] STEP 1: Upload started filename=%s", file.filename)
         file_bytes = await file.read()
         if not file_bytes:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
@@ -42,12 +43,15 @@ async def upload_document(file: UploadFile) -> dict:
             "user",
             file_hash,
         )
+        logger.info("[UPLOAD] STEP 2: Raw file saved path=%s hash=%s", saved_path, file_hash)
 
         saved_path_obj = Path(saved_path)
         if not saved_path_obj.exists() or saved_path_obj.parent != Path("data/raw/user"):
             raise RuntimeError("Raw file validation failed")
 
+        logger.info("[UPLOAD] STEP 3: Extracting text filename=%s", file.filename)
         extracted_text = await to_thread(extract_text, file_bytes, file.filename)
+        logger.info("[UPLOAD] STEP 4: Preprocessing started hash=%s", file_hash)
         clauses = await to_thread(preprocess_text, extracted_text)
 
         document_payload = {
@@ -62,6 +66,7 @@ async def upload_document(file: UploadFile) -> dict:
         }
 
         processed_path = await to_thread(save_processed_json, document_payload, file_hash, "user")
+        logger.info("[UPLOAD] STEP 5: JSON saved path=%s", processed_path)
         processed_path_obj = Path(processed_path)
         if not processed_path_obj.exists() or processed_path_obj.parent != Path("data/processed/user"):
             raise RuntimeError("Processed file validation failed")
@@ -78,7 +83,7 @@ async def upload_document(file: UploadFile) -> dict:
             logger.warning("Pipeline validation failed for file=%s hash=%s; skipping DB store", file.filename, file_hash)
 
         logger.info(
-            "Upload processed: raw_path=%s processed_path=%s hash=%s clauses=%s stored_in_db=%s",
+            "[UPLOAD] STEP 6: Process completed raw_path=%s processed_path=%s hash=%s clauses=%s stored_in_db=%s",
             saved_path,
             processed_path,
             file_hash,

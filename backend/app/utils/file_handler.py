@@ -1,12 +1,17 @@
 from io import BytesIO
 import json
+import logging
 from pathlib import Path
+
 
 import pdfplumber
 from docx import Document
 
 
+logger = logging.getLogger(__name__)
+
 BASE_DATA_DIR = Path("data/raw")
+
 PROCESSED_DATA_DIR = Path("data/processed")
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
@@ -30,15 +35,19 @@ def _validate_extension(filename: str) -> str:
 def extract_text(file_bytes: bytes, filename: str) -> str:
     """Extract UTF-8 text from PDF, DOCX, or TXT file bytes."""
     extension = _validate_extension(filename)
+    logger.info("[EXTRACT] Starting text extraction for %s (type: %s)", filename, extension)
 
     if extension == ".txt":
+        logger.info("[EXTRACT] Processing TXT file")
         try:
             text = file_bytes.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
             raise ValueError("TXT file must be UTF-8 encoded") from exc
+        logger.info("[EXTRACT] TXT extraction complete: %s chars", len(text))
         return text.strip()
 
     if extension == ".pdf":
+        logger.info("[EXTRACT] Processing PDF file")
         try:
             with pdfplumber.open(BytesIO(file_bytes)) as pdf:
                 pages = [page.extract_text() or "" for page in pdf.pages]
@@ -47,8 +56,10 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
             raise ValueError("Failed to extract text from PDF") from exc
         if not text:
             raise ValueError("No extractable text found in PDF")
+        logger.info("[EXTRACT] PDF extraction complete: %s pages, %s chars", len(pages), len(text))
         return text
 
+    logger.info("[EXTRACT] Processing DOCX file")
     try:
         document = Document(BytesIO(file_bytes))
         paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs]
@@ -58,7 +69,9 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
 
     if not text:
         raise ValueError("No extractable text found in DOCX")
+    logger.info("[EXTRACT] DOCX extraction complete: %s paragraphs, %s chars", len(paragraphs), len(text))
     return text
+
 
 
 def save_raw_file(

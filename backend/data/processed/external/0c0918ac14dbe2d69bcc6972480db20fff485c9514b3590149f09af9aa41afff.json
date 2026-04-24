@@ -4,18 +4,14 @@
   "title": "Gazette Directory",
   "url": "https://egazette.gov.in/GazetteDirectory.aspx",
   "date": "",
+  "priority": "high",
   "raw_text": "Directorate of Printing Department of Publication M/o Housing and Urban Affairs Government of India",
   "clauses": [
     {
       "text": "Directorate of Printing Department of Publication M/o Housing and Urban Affairs Government of India",
       "type": "general",
       "entities": [
-        {
-          "text": "Directorate of Printing Department of Publication M/o Housing and Urban Affairs Government",
-          "label": "ORG",
-          "start": 0,
-          "end": 90
-        }
+        "Directorate of Printing Department of Publication M/o Housing and Urban Affairs Government"
       ],
       "embedding": [
         -0.032391998916864395,

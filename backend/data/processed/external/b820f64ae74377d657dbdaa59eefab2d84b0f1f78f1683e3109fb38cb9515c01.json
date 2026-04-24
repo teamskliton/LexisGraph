@@ -4,48 +4,20 @@
   "title": "*** Departments / Offices may avail Help Regarding Pre-requisites and Guides for their Registration through Help Option Available in e-Publish Menu ***",
   "url": "http://egazette.nic.in/(S(10z20ngggm0lsvihzpi5vhyt))/HelpForOrganization.aspx",
   "date": "",
+  "priority": "high",
   "raw_text": "*** All the Central Government Ministries, Departments, Attached and Subordinate Offices are requested to Register their Organization through e-Publish Option on this Portal for the purpose of e-Publishing of Gazette Notifications *** *** Departments / Offices may avail Help Regarding Pre-requisites and Guides for their Registration through Help Option Available in e-Publish Menu *** *** This Site uses Cookies. Please make Sure that Cookies are Enabled in Your Browser ***",
   "clauses": [
     {
       "text": "All the Central Government Ministries, Departments, Attached and Subordinate Offices are requested to Register their Organization through e-Publish Option on this Portal for the purpose of e-Publishing of Gazette Notifications Departments / Offices may avail Help Regarding Pre-requisites and Guides for their Registration through Help Option Available in e-Publish Menu This Site uses Cookies.",
       "type": "general",
       "entities": [
-        {
-          "text": "the Central Government Ministries",
-          "label": "ORG",
-          "start": 4,
-          "end": 37
-        },
-        {
-          "text": "Register their Organization through e-Publish Option",
-          "label": "ORG",
-          "start": 102,
-          "end": 154
-        },
-        {
-          "text": "Portal",
-          "label": "LOC",
-          "start": 163,
-          "end": 169
-        },
-        {
-          "text": "Gazette Notifications Departments / Offices",
-          "label": "PERSON",
-          "start": 205,
-          "end": 248
-        },
-        {
-          "text": "Help Regarding Pre-requisites",
-          "label": "ORG",
-          "start": 259,
-          "end": 288
-        },
-        {
-          "text": "Guides",
-          "label": "PERSON",
-          "start": 293,
-          "end": 299
-        }
+        "the Central Government Ministries",
+        "Register their Organization through e-Publish Option",
+        "Portal",
+        "Gazette Notifications Departments / Offices",
+        "Help Regarding Pre-requisites",
+        "Guides",
+        "Cookies"
       ],
       "embedding": [
         -0.0034451736137270927,
@@ -438,12 +410,13 @@
       "text": "Please make Sure that Cookies are Enabled in Your Browser",
       "type": "general",
       "entities": [
-        {
-          "text": "Cookies",
-          "label": "NORP",
-          "start": 22,
-          "end": 29
-        }
+        "the Central Government Ministries",
+        "Register their Organization through e-Publish Option",
+        "Portal",
+        "Gazette Notifications Departments / Offices",
+        "Help Regarding Pre-requisites",
+        "Guides",
+        "Cookies"
       ],
       "embedding": [
         0.03440684825181961,
