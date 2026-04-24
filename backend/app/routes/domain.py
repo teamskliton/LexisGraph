@@ -8,7 +8,9 @@ import re
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 
-from app.services.preprocessing import preprocess_text, split_text_into_chunks
+from app.db.mongo import store_document
+from app.services.graph_builder import build_graph
+from app.services.preprocessing import build_processed_document
 from app.utils.file_handler import UnsupportedFileTypeError, extract_text
 from app.utils.hash import generate_content_hash
 
@@ -32,7 +34,6 @@ def _set_upload_status(file_hash: str, status: str, step: str, progress: int, me
     if message:
         payload["message"] = message
     if extra:
-        payload["extra"] = dict(extra)
         payload.update(extra)
     UPLOAD_STATUS[file_hash] = payload
 
@@ -125,51 +126,48 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
             warning_message = "Large file detected, processing took longer than usual"
             logger.warning("[DOMAIN-%s] %s", normalized_domain, warning_message)
 
-        _set_upload_status(file_hash, "processing", "Creating chunks", 45)
-        chunks = await to_thread(split_text_into_chunks, extracted_text)
-        if not chunks:
-            raise Exception("Chunk creation failed")
-        logger.info("[DOMAIN-%s] STEP 4: Chunking completed chunks=%s", normalized_domain, len(chunks))
-
-        _set_upload_status(
-            file_hash,
-            "processing",
-            "Chunks created",
-            50,
-            extra={"chunk_count": len(chunks)},
-        )
-
         _set_upload_status(
             file_hash,
             "processing",
             "Preprocessing started",
             60,
-            extra={"chunk_count": len(chunks)},
         )
         try:
-            clauses = await wait_for(
-                to_thread(preprocess_text, extracted_text),
+            payload = await wait_for(
+                to_thread(
+                    build_processed_document,
+                    Path(filename).name,
+                    extracted_text,
+                    normalized_domain,
+                ),
                 timeout=_PROCESS_TIMEOUT_SECONDS,
             )
         except AsyncTimeoutError as exc:
             raise Exception("Preprocessing timed out") from exc
         except Exception as exc:  # noqa: BLE001
             raise Exception(f"Preprocessing error: {exc}") from exc
+        clauses = payload["clauses"]
+        mongo_doc_payload = {
+            "source": "external",
+            "source_type": "domain",
+            "domain": normalized_domain,
+            "title": Path(filename).name,
+            "clauses": clauses,
+            "hash": file_hash,
+        }
+        stored_doc_id = await to_thread(store_document, mongo_doc_payload, "external")
+        if stored_doc_id:
+            logger.info("[DOMAIN-%s] STEP 4A: Building graph for document_id=%s", normalized_domain, stored_doc_id)
+            await to_thread(build_graph, stored_doc_id)
+        else:
+            logger.info("[DOMAIN-%s] STEP 4A: Skipping graph build for duplicate hash=%s", normalized_domain, file_hash)
 
         _set_upload_status(
             file_hash,
             "processing",
             "Saving JSON",
             90,
-            extra={"chunk_count": len(chunks)},
         )
-        payload = {
-            "domain": normalized_domain,
-            "title": Path(filename).name,
-            "clauses": clauses,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "hash": file_hash,
-        }
         processed_path = await to_thread(_save_processed_json, processed_dir, payload)
         logger.info("[DOMAIN-%s] STEP 5: JSON saved path=%s", normalized_domain, processed_path)
 
@@ -186,7 +184,8 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
                 "raw_path": str(raw_path),
                 "processed_path": str(processed_path),
                 "warning": warning_message,
-                "chunk_count": len(chunks),
+                "stored_in_db": bool(stored_doc_id),
+                "document_id": stored_doc_id or "",
             },
         )
         logger.info("[DOMAIN-%s] STEP 6: Process completed hash=%s clauses=%s", normalized_domain, file_hash, len(clauses))
@@ -229,13 +228,7 @@ async def upload_domain_document(
         await _process_domain_upload(file_bytes, file.filename, normalized_domain, file_hash)
 
         status = UPLOAD_STATUS.get(file_hash, {})
-        extra = status.get("extra") if isinstance(status.get("extra"), dict) else {}
-        if not extra:
-            extra = {
-                "clauses_count": status.get("clauses_count", 0),
-                "raw_path": status.get("raw_path", ""),
-                "processed_path": status.get("processed_path", ""),
-            }
+        extra = status.get("extra", {})
 
         return JSONResponse(
             status_code=200,

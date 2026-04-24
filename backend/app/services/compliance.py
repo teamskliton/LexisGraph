@@ -3,7 +3,8 @@ import logging
 from sklearn.metrics.pairwise import cosine_similarity
 
 from app.db.neo4j import run_query
-from app.services.clause_utils import collect_unique_clauses, generate_clause_id
+from app.services.graph_builder import generate_clause_id
+from app.services.retrieval import _collect_clauses
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ _GRAPH_WEIGHT = 0.2
 
 
 def _collect_clause_embeddings(collection_name: str) -> list[dict]:
-    return collect_unique_clauses((collection_name,))
+    return _collect_clauses((collection_name,))
 
 
 def _best_graph_neighbor_score(clause_text: str) -> float:
@@ -36,17 +37,17 @@ def _best_graph_neighbor_score(clause_text: str) -> float:
     score = rows[0].get("score")
     return float(score) if isinstance(score, (int, float)) else 0.0
 
-
 def detect_compliance_gaps() -> list[dict]:
     """Detect policy compliance using direct embedding similarity and graph context."""
     user_clauses = _collect_clause_embeddings("user_documents")
     external_clauses = _collect_clause_embeddings("external_documents")
 
     if not user_clauses:
+        logger.info("[COMPLIANCE] Gap detection complete clauses=0")
         return []
 
     if not external_clauses:
-        return [
+        results = [
             {
                 "policy_clause": item["text"],
                 "status": "gap",
@@ -55,6 +56,8 @@ def detect_compliance_gaps() -> list[dict]:
             }
             for item in user_clauses
         ]
+        logger.info("[COMPLIANCE] Gap detection complete clauses=%s", len(results))
+        return results
 
     results_by_clause: list[dict] = []
     external_by_dim: dict[int, list[dict]] = {}
@@ -80,8 +83,8 @@ def detect_compliance_gaps() -> list[dict]:
 
         graph_score = _best_graph_neighbor_score(user_text)
         combined_score = (_VECTOR_WEIGHT * best_score) + (_GRAPH_WEIGHT * graph_score)
-
         status = "compliant" if combined_score >= _SIMILARITY_THRESHOLD else "gap"
+
         results_by_clause.append(
             {
                 "policy_clause": user_text,
@@ -90,8 +93,8 @@ def detect_compliance_gaps() -> list[dict]:
                 "matched_clause": best_match,
                 "vector_score": round(best_score, 4),
                 "graph_score": round(graph_score, 4),
-                "combined_confidence": round(combined_score, 4),
             }
         )
 
+    logger.info("[COMPLIANCE] Gap detection complete clauses=%s", len(results_by_clause))
     return results_by_clause

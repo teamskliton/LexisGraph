@@ -1,33 +1,21 @@
 import logging
+import hashlib
 from pathlib import Path
 import re
 from threading import Lock
-from collections import Counter
 
 import spacy
 from bs4 import BeautifulSoup
-from sentence_transformers import SentenceTransformer
 from spacy.language import Language
+
+from app.services.embedding_model import get_embedding_model
 
 logger = logging.getLogger(__name__)
 
 _SPACY_MODEL_NAME = "en_core_web_sm"
-_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 _NLP: Language | None = None
-_EMBEDDER: SentenceTransformer | None = None
 _MODEL_LOCK = Lock()
-
-_OBLIGATION_KEYWORDS = ("must", "shall", "required")
-_PENALTY_KEYWORDS = (
-    "penalty",
-    "penalties",
-    "fine",
-    "punishable",
-    "disciplinary",
-    "violation",
-)
-_CONDITION_KEYWORDS = ("if", "provided that")
 
 _NAVIGATION_TERMS = {
     "home",
@@ -43,13 +31,24 @@ _NAVIGATION_TERMS = {
     "copyright",
     "skip to content",
 }
+_INVALID_CLAUSE_KEYWORDS = (
+    "CHAPTER",
+    "ACT NO",
+    "LIST OF",
+    "ABBREVIATIONS",
+    "TABLE OF CONTENTS",
+)
+_DEFAULT_DOMAIN = "IT"
+_DEFAULT_MAX_CLAUSES = 500
+_MAX_ENTITIES_PER_CLAUSE = 5
 
 
 def split_text_into_chunks(text: str, max_length: int = 300000) -> list[str]:
-    """Split large text into fixed-size chunks for safe NLP processing."""
+    """Split text into fixed-size chunks for safe spaCy processing."""
     if not text:
         return []
-    return [text[index : index + max_length] for index in range(0, len(text), max_length)]
+
+    return [text[i : i + max_length] for i in range(0, len(text), max_length)]
 
 
 def _get_nlp() -> Language:
@@ -58,108 +57,24 @@ def _get_nlp() -> Language:
         with _MODEL_LOCK:
             if _NLP is None:
                 logger.info("Loading spaCy model: %s", _SPACY_MODEL_NAME)
-                _NLP = spacy.load(_SPACY_MODEL_NAME)
+                _NLP = spacy.load(_SPACY_MODEL_NAME, disable=["parser"])
                 _NLP.max_length = 2_000_000
-                if (
-                    "parser" not in _NLP.pipe_names
-                    and "senter" not in _NLP.pipe_names
-                    and "sentencizer" not in _NLP.pipe_names
-                ):
+                if "sentencizer" not in _NLP.pipe_names:
                     _NLP.add_pipe("sentencizer")
     return _NLP
 
 
-def _get_embedder() -> SentenceTransformer:
-    global _EMBEDDER
-    if _EMBEDDER is None:
-        with _MODEL_LOCK:
-            if _EMBEDDER is None:
-                logger.info("Loading sentence-transformers model: %s", _EMBEDDING_MODEL_NAME)
-                _EMBEDDER = SentenceTransformer(_EMBEDDING_MODEL_NAME)
-    return _EMBEDDER
-
-
-def _contains_any_keyword(text_lower: str, keywords: tuple[str, ...]) -> bool:
-    return any(keyword in text_lower for keyword in keywords)
-
-
-def _classify_clause(clause_text: str) -> str:
-    text_lower = clause_text.lower()
-
-    if _contains_any_keyword(text_lower, _OBLIGATION_KEYWORDS):
-        return "obligation"
-
-    if _contains_any_keyword(text_lower, _PENALTY_KEYWORDS):
-        return "penalty"
-
-    if _contains_any_keyword(text_lower, _CONDITION_KEYWORDS):
-        return "condition"
-
-    return "general"
-
-
 def classify_clause(clause_text: str) -> str:
-    """Public classifier wrapper retained for backward compatibility."""
-    return _classify_clause(clause_text)
-
-
-def _split_long_clause(text: str, max_length: int = 300) -> list[str]:
-    """Split very long clauses on commas and conjunction hints."""
-    compact = re.sub(r"\s+", " ", text).strip()
-    if len(compact) <= max_length:
-        return [compact] if compact else []
-
-    segments = re.split(r",\s+(?=(?:if|provided that|and|or|but)\b)", compact, flags=re.IGNORECASE)
-    rebuilt: list[str] = []
-    buffer = ""
-    for segment in segments:
-        if not segment:
-            continue
-        candidate = f"{buffer} {segment}".strip() if buffer else segment.strip()
-        if len(candidate) > max_length and buffer:
-            rebuilt.append(buffer.strip())
-            buffer = segment.strip()
-        else:
-            buffer = candidate
-
-    if buffer:
-        rebuilt.append(buffer.strip())
-
-    return [part for part in rebuilt if part]
-
-
-def _split_sentence_into_clauses(sentence: str) -> list[str]:
-    """Split a sentence using semicolons and bullet markers."""
-    if not sentence:
-        return []
-
-    parts: list[str] = []
-    for block in sentence.split(";"):
-        candidate = block.strip()
-        if not candidate:
-            continue
-
-        # Split bullet/numbered points while preserving content.
-        bullet_parts = re.split(r"(?:\n|^)(?:[-*•]|\d+[\.)])\s+", candidate)
-        for bullet in bullet_parts:
-            normalized = re.sub(r"\s+", " ", bullet).strip()
-            if not normalized:
-                continue
-            parts.extend(_split_long_clause(normalized))
-
-    return [part for part in parts if part]
-
-
-def _extract_clauses(cleaned_text: str) -> list[str]:
-    """Generate clause candidates from cleaned text with robust splitting."""
-    nlp = _get_nlp()
-    doc = nlp(cleaned_text)
-
-    clauses: list[str] = []
-    for sent in doc.sents:
-        clauses.extend(_split_sentence_into_clauses(sent.text.strip()))
-
-    return clauses
+    text = clause_text.lower()
+    if "must not" in text or "prohibited" in text:
+        return "prohibition"
+    if "shall" in text or "must" in text:
+        return "obligation"
+    if "may" in text:
+        return "permission"
+    if "if" in text or "where" in text:
+        return "condition"
+    return "general"
 
 
 def _normalize_line(line: str) -> str:
@@ -220,89 +135,191 @@ def clean_text(text: str, lowercase: bool = False) -> str:
     # Normalize unusual symbols but preserve legal punctuation.
     cleaned = cleaned.replace("\u00a0", " ")
     cleaned = re.sub(r"[^\w\s\.,;:()\[\]\-/'\"%$]", " ", cleaned)
-    cleaned = re.sub(r"[ \t]+", " ", cleaned)
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = re.sub(r"\n+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\b\d+\b", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = cleaned.strip()
 
     return cleaned.lower() if lowercase else cleaned
 
 
-def preprocess_text(text: str) -> list[dict]:
-    """Preprocess legal text into classified clauses with NER and embeddings.
+def is_valid_clause(text: str) -> bool:
+    value = text.strip()
+    if len(value) < 40:
+        return False
+    if value.isupper():
+        return False
+    if any(keyword in value.upper() for keyword in _INVALID_CLAUSE_KEYWORDS):
+        return False
+    if re.match(r"^[\d\W]+$", value):
+        return False
+    return True
 
-    Output format:
-    [
-        {
-            "text": "...",
-            "type": "...",
-            "entities": [...],
-            "embedding": [...]
-        }
+
+def is_legal_clause(text: str) -> bool:
+    value = text.lower()
+    keywords = [
+        "shall",
+        "must",
+        "may",
+        "required",
+        "prohibited",
+        "not allowed",
+        "should",
+        "liable",
+        "penalty",
+        "if",
+        "where",
+        "subject to",
     ]
-    """
+    return any(word in value for word in keywords)
+
+
+def hash_clause(clause_text: str) -> str:
+    return hashlib.md5(clause_text.encode("utf-8")).hexdigest()
+
+
+def _extract_clause_entities(nlp: Language, clause_text: str) -> list[str]:
+    sent_doc = nlp(clause_text)
+    entities: list[str] = []
+    seen: set[str] = set()
+    for ent in sent_doc.ents:
+        entity_text = ent.text.strip()
+        if len(entity_text) <= 2:
+            continue
+        key = entity_text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        entities.append(entity_text)
+        if len(entities) >= _MAX_ENTITIES_PER_CLAUSE:
+            break
+    return entities
+
+
+def extract_structure(text: str) -> tuple[str | None, str | None, str | None]:
+    words = text.split()
+    subject = words[0] if len(words) > 0 else None
+    action = words[1] if len(words) > 1 else None
+    obj = " ".join(words[2:]) if len(words) > 2 else None
+    return subject, action, obj
+
+
+def preprocess_text(text: str, max_clauses: int = _DEFAULT_MAX_CLAUSES) -> list[dict]:
+    """Preprocess legal text and emit clause metadata plus embeddings."""
+    logger.info("� ===== PREPROCESS PIPELINE STARTED =====")
+    logger.info("�🔥 PREPROCESS FUNCTION CALLED")
     if not text or not text.strip():
         return []
+
+    logger.info("[PREPROCESS] Input length: %s characters", len(text))
+    logger.info("[PREPROCESS] STEP 1: Input received")
 
     cleaned_text = clean_text(text)
     if not cleaned_text:
         return []
 
-    embedder = _get_embedder()
-
-    clauses: list[str] = []
-    for chunk in split_text_into_chunks(cleaned_text):
-        clauses.extend(_extract_clauses(chunk))
-
-    if not clauses:
-        return []
-
-    vectors = embedder.encode(clauses)
-
+    logger.info("[PREPROCESS] Cleaned text length: %s", len(cleaned_text))
+    logger.info("[PREPROCESS] STEP 2: Text cleaned length=%s", len(cleaned_text))
     nlp = _get_nlp()
-    results: list[dict] = []
-    for index, clause in enumerate(clauses):
-        clause_doc = nlp(clause)
-        entities = [
-            {
-                "text": ent.text,
-                "label": ent.label_,
-                "start": ent.start_char,
-                "end": ent.end_char,
-            }
-            for ent in clause_doc.ents
-        ]
+    all_clauses: list[dict] = []
+    clause_texts_for_embedding: list[str] = []
+    seen_clause_hashes: set[str] = set()
+    total_extracted = 0
+    valid_clauses = 0
+    filtered_out = 0
+    duplicates_skipped = 0
 
-        results.append(
-            {
-                "text": clause,
-                "type": _classify_clause(clause),
-                "entities": entities,
-                "embedding": vectors[index].tolist(),
-            }
-        )
+    chunks = split_text_into_chunks(cleaned_text)
+    logger.info("[PREPROCESS] Total chunks created: %s", len(chunks))
+    logger.info("[PREPROCESS] STEP 3: Chunking complete total_chunks=%s", len(chunks))
+    for index, chunk in enumerate(chunks, start=1):
+        logger.info("🔹 Processing chunk %s/%s", index, len(chunks))
+        clauses_before = len(all_clauses)
+        logger.info("[PREPROCESS] STEP 4: Processing chunk %s/%s", index, len(chunks))
+        doc = nlp(chunk)
+        for sent in doc.sents:
+            total_extracted += 1
+            clause_text = sent.text.strip()
+            if not is_valid_clause(clause_text):
+                filtered_out += 1
+                continue
+            if not is_legal_clause(clause_text):
+                filtered_out += 1
+                continue
 
-    type_distribution = Counter(item["type"] for item in results)
+            clause_key = hash_clause(clause_text.lower())
+            if clause_key in seen_clause_hashes:
+                duplicates_skipped += 1
+                continue
+            seen_clause_hashes.add(clause_key)
+
+            valid_clauses += 1
+            subject, action, obj = extract_structure(clause_text)
+            all_clauses.append(
+                {
+                    "id": f"C{len(all_clauses) + 1}",
+                    "text": clause_text,
+                    "type": classify_clause(clause_text),
+                    "subject": subject,
+                    "action": action,
+                    "object": obj,
+                    "entities": _extract_clause_entities(nlp, clause_text),
+                }
+            )
+            clause_texts_for_embedding.append(clause_text)
+            if len(all_clauses) >= max_clauses:
+                logger.info("[PREPROCESS] Clause cap reached max_clauses=%s", max_clauses)
+                break
+        clauses_after = len(all_clauses)
+        logger.info("   → Extracted %s clauses from this chunk", clauses_after - clauses_before)
+        progress = int((index / len(chunks)) * 100) if chunks else 100
+        logger.info("📈 Progress: %s%%", progress)
+        if len(all_clauses) >= max_clauses:
+            break
+
+    if all_clauses:
+        logger.info("⚡ Generating embeddings...")
+        logger.info("[PREPROCESS] STEP 5: Embedding generation started clauses=%s", len(all_clauses))
+        embedder = get_embedding_model()
+        vectors = embedder.encode(clause_texts_for_embedding)
+        for index, clause in enumerate(all_clauses):
+            clause["embedding"] = vectors[index].tolist()
+        logger.info("✅ Embeddings generated successfully")
+
     logger.info(
-        "Preprocessing complete: clauses=%s distribution=%s",
-        len(results),
-        dict(type_distribution),
+        "[PREPROCESS] STEP 6: Completed total_extracted=%s valid_clauses=%s filtered_out=%s duplicates_skipped=%s final_stored=%s",
+        total_extracted,
+        valid_clauses,
+        filtered_out,
+        duplicates_skipped,
+        len(all_clauses),
     )
-
-    return results
-
-
-def process_document(text: str, source: str = "user") -> list[dict]:
-    """Process document text into clauses using the shared preprocessing pipeline."""
-    _ = source  # Reserved for future source-specific preprocessing behavior.
-    return preprocess_text(text)
+    logger.info("[PREPROCESS] Raw clauses: %s", total_extracted)
+    logger.info("[PREPROCESS] After filtering: %s", valid_clauses)
+    logger.info("[PREPROCESS] Removed noise: %s", filtered_out)
+    logger.info("Total clauses extracted: %s", total_extracted)
+    logger.info("Valid clauses: %s", valid_clauses)
+    logger.info("Final stored: %s", len(all_clauses))
+    final_clauses = all_clauses
+    logger.info("🎉 ===== PREPROCESS COMPLETED =====")
+    logger.info("📊 Final clauses stored: %s", len(final_clauses))
+    logger.info("📉 Reduction: %s → %s", total_extracted, len(final_clauses))
+    logger.info("📁 JSON saved successfully and ready for Layer 2")
+    return all_clauses
 
 
 def validate_pipeline_output(data: dict) -> bool:
-    """Validate that pipeline output has text, clauses, and embeddings."""
-    text = data.get("text")
+    """Validate compact pipeline output schema."""
+    domain = data.get("domain")
+    title = data.get("title")
     clauses = data.get("clauses")
 
-    if not isinstance(text, str) or not text.strip():
+    if not isinstance(domain, str) or not domain.strip():
+        return False
+
+    if not isinstance(title, str) or not title.strip():
         return False
 
     if not isinstance(clauses, list) or not clauses:
@@ -311,11 +328,26 @@ def validate_pipeline_output(data: dict) -> bool:
     for clause in clauses:
         if not isinstance(clause, dict):
             return False
-        embedding = clause.get("embedding")
-        if not isinstance(embedding, list) or not embedding:
+        if not isinstance(clause.get("text"), str) or not clause.get("text", "").strip():
             return False
 
     return True
+
+
+def build_processed_document(
+    title: str,
+    text: str,
+    domain: str | None = None,
+    max_clauses: int = _DEFAULT_MAX_CLAUSES,
+) -> dict:
+    normalized_domain = (domain or _DEFAULT_DOMAIN).strip().upper() or _DEFAULT_DOMAIN
+    normalized_title = Path(title).name.strip() or "Untitled"
+    clauses = preprocess_text(text, max_clauses=max_clauses)
+    return {
+        "domain": normalized_domain,
+        "title": normalized_title,
+        "clauses": clauses,
+    }
 
 
 def preprocess_file(file_path: str) -> list[dict]:
