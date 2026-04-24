@@ -1,19 +1,39 @@
 import logging
 import os
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
+
 logger = logging.getLogger(__name__)
+
+if load_dotenv is not None:
+    _DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+    load_dotenv(dotenv_path=_DOTENV_PATH)
 
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-MONGO_DB_NAME = "lexisgraph"
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "lexisgraph")
 
 _CLIENT: MongoClient | None = None
+
+
+def _redact_mongo_uri(uri: str) -> str:
+    """Mask credentials in Mongo URI before logging."""
+    return re.sub(
+        r"(mongodb(?:\+srv)?://[^:\s]+:)([^@\s]+)(@)",
+        r"\1***\3",
+        uri,
+    )
 
 
 def get_client() -> MongoClient:
@@ -22,7 +42,7 @@ def get_client() -> MongoClient:
     if _CLIENT is None:
         _CLIENT = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
         _CLIENT.admin.command("ping")
-        logger.info("MongoDB client initialized at %s", MONGO_URI)
+        logger.info("MongoDB client initialized at %s", _redact_mongo_uri(MONGO_URI))
     return _CLIENT
 
 
@@ -78,14 +98,6 @@ def store_document(data: dict, source: str) -> str | None:
     collection = get_collection(source)
     content_hash = data.get("hash", "")
 
-    if document_hash_exists(source, content_hash):
-        logger.info(
-            "Skipping duplicate %s document with hash=%s",
-            source,
-            content_hash,
-        )
-        return None
-
     document = {
         "source": source,
         "source_type": data.get("source_type", source),
@@ -100,8 +112,19 @@ def store_document(data: dict, source: str) -> str | None:
     }
 
     try:
-        result = collection.insert_one(document)
-        return str(result.inserted_id)
+        result = collection.update_one(
+            {"hash": content_hash},
+            {"$setOnInsert": document},
+            upsert=True,
+        )
+        if result.upserted_id is None:
+            logger.info(
+                "Skipping duplicate %s document with hash=%s",
+                source,
+                content_hash,
+            )
+            return None
+        return str(result.upserted_id)
     except DuplicateKeyError as exc:
         logger.info(
             "Skipping duplicate %s document on insert race with hash=%s",
@@ -109,3 +132,13 @@ def store_document(data: dict, source: str) -> str | None:
             content_hash,
         )
         return None
+
+
+def close_client() -> None:
+    """Close cached MongoDB client if initialized."""
+    global _CLIENT
+
+    if _CLIENT is not None:
+        _CLIENT.close()
+        logger.info("MongoDB client closed")
+        _CLIENT = None

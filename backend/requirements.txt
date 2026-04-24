@@ -15,3 +15,4 @@ neo4j
 numpy
 scikit-learn
 python-dotenv
+pytest

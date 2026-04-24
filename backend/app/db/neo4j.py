@@ -22,7 +22,7 @@ if load_dotenv is not None:
 
 NEO4J_URI = os.getenv("NEO4J_URI") or os.getenv("DB_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER") or os.getenv("DB_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") or os.getenv("DB_PASS", "12345678")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") or os.getenv("DB_PASS")
 
 _DRIVER = None
 
@@ -35,6 +35,9 @@ def get_driver():
         raise RuntimeError(
             "Neo4j driver is not installed. Install with: pip install neo4j"
         )
+
+    if not NEO4J_PASSWORD:
+        raise RuntimeError("Neo4j password is not configured. Set NEO4J_PASSWORD or DB_PASS.")
 
     if _DRIVER is None:
         _DRIVER = GraphDatabase.driver(

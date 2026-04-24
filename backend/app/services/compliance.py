@@ -1,54 +1,96 @@
-from app.db.mongo import get_database
+import logging
+
+from sklearn.metrics.pairwise import cosine_similarity
+
 from app.db.neo4j import run_query
+from app.services.clause_utils import collect_unique_clauses, generate_clause_id
+
+logger = logging.getLogger(__name__)
+
+_SIMILARITY_THRESHOLD = 0.65
+_VECTOR_WEIGHT = 0.8
+_GRAPH_WEIGHT = 0.2
+
+
+def _collect_clause_embeddings(collection_name: str) -> list[dict]:
+    return collect_unique_clauses((collection_name,))
+
+
+def _best_graph_neighbor_score(clause_text: str) -> float:
+    clause_id = generate_clause_id(clause_text)
+    query = """
+    MATCH (c:Clause {id: $id})-[r:SIMILAR_TO]->(n:Clause)
+    RETURN r.score AS score
+    ORDER BY r.score DESC
+    LIMIT 1
+    """
+    try:
+        rows = run_query(query, {"id": clause_id})
+    except Exception:  # noqa: BLE001
+        logger.warning("Skipping graph similarity for clause_id=%s due to Neo4j query failure", clause_id)
+        return 0.0
+
+    if not rows:
+        return 0.0
+
+    score = rows[0].get("score")
+    return float(score) if isinstance(score, (int, float)) else 0.0
 
 
 def detect_compliance_gaps() -> list[dict]:
-    """Detect policy compliance via semantic similarity against regulation clauses."""
-    database = get_database()
+    """Detect policy compliance using direct embedding similarity and graph context."""
+    user_clauses = _collect_clause_embeddings("user_documents")
+    external_clauses = _collect_clause_embeddings("external_documents")
+
+    if not user_clauses:
+        return []
+
+    if not external_clauses:
+        return [
+            {
+                "policy_clause": item["text"],
+                "status": "gap",
+                "confidence": 0.0,
+                "matched_clause": None,
+            }
+            for item in user_clauses
+        ]
+
     results_by_clause: list[dict] = []
-    similarity_threshold = 0.7
+    external_by_dim: dict[int, list[dict]] = {}
+    for external_clause in external_clauses:
+        dimension = len(external_clause["embedding"])
+        external_by_dim.setdefault(dimension, []).append(external_clause)
 
-    user_clauses: list[str] = []
-    for doc in database["user_documents"].find({}, {"clauses.text": 1}):
-        for clause in doc.get("clauses", []):
-            clause_text = (clause.get("text") or "").strip()
-            if clause_text:
-                user_clauses.append(clause_text)
+    for user_clause in user_clauses:
+        user_text = user_clause["text"]
+        user_embedding = user_clause["embedding"]
+        candidate_externals = external_by_dim.get(len(user_embedding), [])
 
-    external_clause_texts: set[str] = set()
-    for doc in database["external_documents"].find({}, {"clauses.text": 1}):
-        for clause in doc.get("clauses", []):
-            clause_text = (clause.get("text") or "").strip()
-            if clause_text:
-                external_clause_texts.add(clause_text)
+        best_score = 0.0
+        best_match = None
 
-    query = """
-    MATCH (c:Clause {text: $text})-[r:SIMILAR_TO]->(n)
-    RETURN n.text AS text, r.score AS score
-    """
+        for external_clause in candidate_externals:
+            external_embedding = external_clause["embedding"]
+            score = float(cosine_similarity([user_embedding], [external_embedding])[0][0])
 
-    for clause_text in user_clauses:
-        semantic_matches = run_query(query, {"text": clause_text})
+            if score > best_score:
+                best_score = score
+                best_match = external_clause["text"]
 
-        found = False
-        best_external_score = 0.0
+        graph_score = _best_graph_neighbor_score(user_text)
+        combined_score = (_VECTOR_WEIGHT * best_score) + (_GRAPH_WEIGHT * graph_score)
 
-        for item in semantic_matches:
-            related_text = (item.get("text") or "").strip()
-            score = item.get("score")
-            score_value = float(score) if isinstance(score, (int, float)) else 0.0
-
-            if related_text and related_text in external_clause_texts:
-                if score_value > best_external_score:
-                    best_external_score = score_value
-                if score_value > similarity_threshold:
-                    found = True
-
+        status = "compliant" if combined_score >= _SIMILARITY_THRESHOLD else "gap"
         results_by_clause.append(
             {
-                "policy_clause": clause_text,
-                "status": "compliant" if found else "gap",
-                "confidence": round(best_external_score, 4),
+                "policy_clause": user_text,
+                "status": status,
+                "confidence": round(combined_score, 4),
+                "matched_clause": best_match,
+                "vector_score": round(best_score, 4),
+                "graph_score": round(graph_score, 4),
+                "combined_confidence": round(combined_score, 4),
             }
         )
 

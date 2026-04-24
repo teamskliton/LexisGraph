@@ -1,4 +1,3 @@
-import hashlib
 import logging
 
 import numpy as np
@@ -6,16 +5,16 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from app.db.mongo import get_database
 from app.db.neo4j import run_query
+from app.services.clause_utils import (
+    collect_unique_clauses,
+    filter_common_dimension_clauses,
+    generate_clause_id,
+)
 
 logger = logging.getLogger(__name__)
 
 _COLLECTIONS = ("user_documents", "external_documents")
 _SIMILARITY_MAX_CLAUSES = 20
-
-
-def generate_clause_id(text: str) -> str:
-    """Generate stable clause id from clause text."""
-    return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
 def _ensure_constraints() -> None:
@@ -38,18 +37,14 @@ def _ensure_constraints() -> None:
 
 def build_graph() -> dict:
     """Build a duplicate-safe graph from MongoDB processed documents."""
-    logger.info("🌐 GRAPH BUILD STARTED")
-    logger.info("[GRAPH] STEP 1: Graph build started")
     _ensure_constraints()
-    logger.info("[GRAPH] STEP 2: Constraints ensured")
 
     database = get_database()
-    documents_processed = 0
-    clauses_processed = 0
-    relationships_processed = 0
+    document_rows: list[dict] = []
+    clause_rows_by_id: dict[str, dict] = {}
+    relationship_rows: list[dict] = []
 
     for collection_name in _COLLECTIONS:
-        logger.info("[GRAPH] STEP 3: Processing collection=%s", collection_name)
         collection = database[collection_name]
 
         for doc in collection.find({}, {"_id": 1, "title": 1, "source_type": 1, "clauses": 1}):
@@ -60,21 +55,14 @@ def build_graph() -> dict:
             title = doc.get("title", "Untitled")
             source_type = doc.get("source_type", "unknown")
 
-            run_query(
-                """
-                MERGE (d:Document {id: $doc_id})
-                SET d.title = $title,
-                    d.source_type = $source_type,
-                    d.collection = $collection_name
-                """,
+            document_rows.append(
                 {
                     "doc_id": doc_id,
                     "title": title,
                     "source_type": source_type,
                     "collection_name": collection_name,
-                },
+                }
             )
-            documents_processed += 1
 
             clauses = doc.get("clauses", []) or []
             for clause in clauses:
@@ -86,34 +74,53 @@ def build_graph() -> dict:
                 embedding = clause.get("embedding", [])
                 clause_id = generate_clause_id(text)
 
-                run_query(
-                    """
-                    MERGE (c:Clause {id: $clause_id})
-                    SET c.text = $text,
-                        c.type = $ctype,
-                        c.embedding = $embedding
-                    """,
-                    {
-                        "clause_id": clause_id,
-                        "text": text,
-                        "ctype": ctype,
-                        "embedding": embedding,
-                    },
-                )
-                clauses_processed += 1
+                clause_rows_by_id[clause_id] = {
+                    "clause_id": clause_id,
+                    "text": text,
+                    "ctype": ctype,
+                    "embedding": embedding,
+                }
+                relationship_rows.append({"doc_id": doc_id, "clause_id": clause_id})
 
-                run_query(
-                    """
-                    MATCH (d:Document {id: $doc_id})
-                    MATCH (c:Clause {id: $clause_id})
-                    MERGE (d)-[:HAS_CLAUSE]->(c)
-                    """,
-                    {
-                        "doc_id": doc_id,
-                        "clause_id": clause_id,
-                    },
-                )
-                relationships_processed += 1
+    if document_rows:
+        run_query(
+            """
+            UNWIND $rows AS row
+            MERGE (d:Document {id: row.doc_id})
+            SET d.title = row.title,
+                d.source_type = row.source_type,
+                d.collection = row.collection_name
+            """,
+            {"rows": document_rows},
+        )
+
+    clause_rows = list(clause_rows_by_id.values())
+    if clause_rows:
+        run_query(
+            """
+            UNWIND $rows AS row
+            MERGE (c:Clause {id: row.clause_id})
+            SET c.text = row.text,
+                c.type = row.ctype,
+                c.embedding = row.embedding
+            """,
+            {"rows": clause_rows},
+        )
+
+    if relationship_rows:
+        run_query(
+            """
+            UNWIND $rows AS row
+            MATCH (d:Document {id: row.doc_id})
+            MATCH (c:Clause {id: row.clause_id})
+            MERGE (d)-[:HAS_CLAUSE]->(c)
+            """,
+            {"rows": relationship_rows},
+        )
+
+    documents_processed = len(document_rows)
+    clauses_processed = len(clause_rows)
+    relationships_processed = len(relationship_rows)
 
     result = {
         "collections": list(_COLLECTIONS),
@@ -121,55 +128,18 @@ def build_graph() -> dict:
         "clauses_processed": clauses_processed,
         "relationships_processed": relationships_processed,
     }
-    logger.info("[GRAPH] STEP 4: Graph build complete %s", result)
+    logger.info("Graph build complete: %s", result)
     return result
 
 
 def _extract_clauses_for_similarity(limit: int = _SIMILARITY_MAX_CLAUSES) -> list[dict]:
     """Extract unique clauses with embeddings from MongoDB for similarity linking."""
-    database = get_database()
-    clauses_by_id: dict[str, dict] = {}
-
-    for collection_name in _COLLECTIONS:
-        collection = database[collection_name]
-        for doc in collection.find({}, {"clauses": 1}):
-            clauses = doc.get("clauses", []) or []
-            for clause in clauses:
-                text = (clause.get("text") or "").strip()
-                embedding = clause.get("embedding")
-                if not text or not isinstance(embedding, list) or not embedding:
-                    continue
-                if not all(isinstance(value, (int, float)) for value in embedding):
-                    continue
-
-                clause_id = generate_clause_id(text)
-                if clause_id in clauses_by_id:
-                    continue
-
-                clauses_by_id[clause_id] = {
-                    "clause_id": clause_id,
-                    "text": text,
-                    "embedding": embedding,
-                }
-
-                if len(clauses_by_id) >= limit:
-                    return list(clauses_by_id.values())
-
-    return list(clauses_by_id.values())
+    return collect_unique_clauses(_COLLECTIONS, limit=limit)
 
 
 def _filter_common_dimension_clauses(clauses: list[dict]) -> list[dict]:
     """Keep clauses from the most common embedding dimension."""
-    if not clauses:
-        return []
-
-    dimension_counts: dict[int, int] = {}
-    for clause in clauses:
-        dimension = len(clause["embedding"])
-        dimension_counts[dimension] = dimension_counts.get(dimension, 0) + 1
-
-    target_dimension = max(dimension_counts, key=dimension_counts.get)
-    return [clause for clause in clauses if len(clause["embedding"]) == target_dimension]
+    return filter_common_dimension_clauses(clauses)
 
 
 def create_similarity_edges(
@@ -178,12 +148,6 @@ def create_similarity_edges(
     max_clauses: int = _SIMILARITY_MAX_CLAUSES,
 ) -> dict:
     """Create SIMILAR_TO edges between semantically close clause nodes."""
-    logger.info(
-        "[SIMILARITY] STEP 1: Similarity build started threshold=%s top_k=%s max_clauses=%s",
-        similarity_threshold,
-        top_k,
-        max_clauses,
-    )
     clauses = _extract_clauses_for_similarity(limit=max_clauses)
     clauses = _filter_common_dimension_clauses(clauses)
 
@@ -196,7 +160,7 @@ def create_similarity_edges(
             "top_k": top_k,
             "max_clauses": max_clauses,
         }
-        logger.info("[SIMILARITY] STEP 2: Skipped (insufficient clauses) %s", result)
+        logger.info("Similarity build skipped (insufficient clauses): %s", result)
         return result
 
     embeddings = np.asarray([clause["embedding"] for clause in clauses], dtype=float)
@@ -233,23 +197,28 @@ def create_similarity_edges(
             if matches_added >= top_k:
                 break
 
-    edges_upserted = 0
-    for (clause_id_1, clause_id_2), score in pair_scores.items():
+    edge_rows = [
+        {
+            "clause_id_1": clause_id_1,
+            "clause_id_2": clause_id_2,
+            "score": score,
+        }
+        for (clause_id_1, clause_id_2), score in pair_scores.items()
+    ]
+
+    edges_upserted = len(edge_rows)
+    if edge_rows:
         run_query(
             """
-            MATCH (c1:Clause {id: $clause_id_1})
-            MATCH (c2:Clause {id: $clause_id_2})
+            UNWIND $rows AS row
+            MATCH (c1:Clause {id: row.clause_id_1})
+            MATCH (c2:Clause {id: row.clause_id_2})
             WHERE c1.id <> c2.id
             MERGE (c1)-[r:SIMILAR_TO]->(c2)
-            SET r.score = $score
+            SET r.score = row.score
             """,
-            {
-                "clause_id_1": clause_id_1,
-                "clause_id_2": clause_id_2,
-                "score": score,
-            },
+            {"rows": edge_rows},
         )
-        edges_upserted += 1
 
     result = {
         "clauses_considered": len(clauses),
@@ -259,5 +228,5 @@ def create_similarity_edges(
         "top_k": top_k,
         "max_clauses": max_clauses,
     }
-    logger.info("[SIMILARITY] STEP 2: Similarity build complete %s", result)
+    logger.info("Similarity build complete: %s", result)
     return result

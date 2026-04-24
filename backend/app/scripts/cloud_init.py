@@ -1,7 +1,6 @@
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-import logging
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 if str(_BACKEND_ROOT) not in sys.path:
@@ -13,21 +12,15 @@ from app.services.graph_builder import build_graph, create_similarity_edges
 from app.services.preprocessing import process_document
 from app.utils.hash import generate_content_hash
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
-
 
 def check_mongo() -> bool:
     db = get_database()
     try:
         db.command("ping")
-        logger.info("[CLOUD-INIT] MongoDB Atlas connected successfully")
+        print("MongoDB Atlas connected successfully")
         return True
     except Exception as exc:
-        logger.exception("[CLOUD-INIT] MongoDB connection failed: %s", exc)
+        print("MongoDB connection failed:", str(exc))
         return False
 
 
@@ -35,12 +28,12 @@ def check_neo4j() -> bool:
     try:
         result = run_query("RETURN 'Neo4j Aura Connected' AS message")
         if result:
-            logger.info("[CLOUD-INIT] %s", result[0].get("message", "Neo4j Aura Connected"))
+            print(result[0].get("message", "Neo4j Aura Connected"))
         else:
-            logger.info("[CLOUD-INIT] Neo4j Aura Connected")
+            print("Neo4j Aura Connected")
         return True
     except Exception as exc:
-        logger.exception("[CLOUD-INIT] Neo4j connection failed: %s", exc)
+        print("Neo4j connection failed:", str(exc))
         return False
 
 
@@ -163,26 +156,26 @@ def seed_data() -> None:
 
 
 def run_pipeline() -> None:
-    logger.info("[CLOUD-INIT] STEP 1: Checking connections")
+    print("Checking connections...")
     if not check_mongo():
         return
     if not check_neo4j():
         return
 
-    logger.info("[CLOUD-INIT] STEP 2: Clearing databases")
+    print("Clearing databases...")
     clear_mongo()
     clear_neo4j()
 
-    logger.info("[CLOUD-INIT] STEP 3: Seeding data")
+    print("Seeding data...")
     seed_data()
 
-    logger.info("[CLOUD-INIT] STEP 4: Building graph")
+    print("Building graph...")
     build_graph()
 
-    logger.info("[CLOUD-INIT] STEP 5: Building similarity edges")
+    print("Building similarity edges...")
     create_similarity_edges()
 
-    logger.info("[CLOUD-INIT] STEP 6: Cloud pipeline completed successfully")
+    print("Cloud pipeline completed successfully")
 
 
 if __name__ == "__main__":

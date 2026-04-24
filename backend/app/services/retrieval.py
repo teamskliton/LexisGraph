@@ -1,14 +1,15 @@
 import logging
-from collections import Counter
 from threading import Lock
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from app.db.mongo import get_database
 from app.db.neo4j import run_query
-from app.services.graph_builder import generate_clause_id
+from app.services.clause_utils import (
+    collect_unique_clauses,
+    filter_common_dimension_clauses,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,44 +29,24 @@ def _get_model() -> SentenceTransformer:
     return _MODEL
 
 
+def is_model_loaded() -> bool:
+    """Return whether retrieval embedding model is currently loaded in memory."""
+    return _MODEL is not None
+
+
+def preload_model() -> None:
+    """Load retrieval embedding model eagerly for startup diagnostics."""
+    _get_model()
+
+
 def _collect_clauses() -> list[dict]:
     """Collect unique clause texts and embeddings from MongoDB."""
-    database = get_database()
-    clauses_by_id: dict[str, dict] = {}
-
-    for collection_name in _COLLECTIONS:
-        collection = database[collection_name]
-        for doc in collection.find({}, {"clauses": 1}):
-            clauses = doc.get("clauses", []) or []
-            for clause in clauses:
-                text = (clause.get("text") or "").strip()
-                embedding = clause.get("embedding")
-                if not text or not isinstance(embedding, list) or not embedding:
-                    continue
-                if not all(isinstance(value, (int, float)) for value in embedding):
-                    continue
-
-                clause_id = generate_clause_id(text)
-                if clause_id in clauses_by_id:
-                    continue
-
-                clauses_by_id[clause_id] = {
-                    "clause_id": clause_id,
-                    "text": text,
-                    "embedding": embedding,
-                }
-
-    return list(clauses_by_id.values())
+    return collect_unique_clauses(_COLLECTIONS)
 
 
 def _filter_common_dimension_clauses(clauses: list[dict]) -> list[dict]:
     """Keep clauses from the dominant embedding dimension only."""
-    if not clauses:
-        return []
-
-    dimension_counts = Counter(len(clause["embedding"]) for clause in clauses)
-    target_dimension, _ = dimension_counts.most_common(1)[0]
-    return [clause for clause in clauses if len(clause["embedding"]) == target_dimension]
+    return filter_common_dimension_clauses(clauses)
 
 
 def retrieve_relevant_clauses(query: str) -> list[dict]:
@@ -85,38 +66,52 @@ def retrieve_relevant_clauses(query: str) -> list[dict]:
     query_vector = np.asarray(query_embedding, dtype=float).reshape(1, -1)
 
     if query_vector.shape[1] != embeddings.shape[1]:
-        logger.warning(
+        logger.error(
             "Embedding dimension mismatch for retrieval query=%s query_dim=%s clause_dim=%s",
             query,
             query_vector.shape[1],
             embeddings.shape[1],
         )
-        return []
+        raise ValueError("Embedding dimension mismatch between query and stored clause vectors")
 
     similarity_scores = cosine_similarity(query_vector, embeddings)[0]
     top_indices = np.argsort(similarity_scores)[::-1][:3]
 
-    expanded_results: list[dict] = []
+    top_clauses = []
+    top_clause_ids: list[str] = []
     for index in top_indices:
         clause = clauses[index]
-        score = float(similarity_scores[index])
+        top_clauses.append((clause, float(similarity_scores[index])))
+        top_clause_ids.append(clause["clause_id"])
+
+    neighbor_rows = run_query(
+        """
+        UNWIND $ids AS clause_id
+        MATCH (c:Clause {id: clause_id})-[r:SIMILAR_TO]->(n:Clause)
+        RETURN clause_id, n.text AS text, r.score AS score
+        ORDER BY clause_id, score DESC
+        """,
+        {"ids": top_clause_ids},
+    )
+
+    neighbors_by_clause: dict[str, list[str]] = {clause_id: [] for clause_id in top_clause_ids}
+    for row in neighbor_rows:
+        clause_id = row.get("clause_id")
+        text = row.get("text")
+        if not isinstance(clause_id, str) or not isinstance(text, str) or not text.strip():
+            continue
+        bucket = neighbors_by_clause.setdefault(clause_id, [])
+        if len(bucket) < 3:
+            bucket.append(text.strip())
+
+    expanded_results: list[dict] = []
+    for clause, score in top_clauses:
         clause_id = clause["clause_id"]
-
-        neighbors = run_query(
-            """
-            MATCH (c:Clause {id: $id})-[r:SIMILAR_TO]->(n:Clause)
-            RETURN n.text AS text
-            ORDER BY r.score DESC
-            LIMIT 3
-            """,
-            {"id": clause_id},
-        )
-
         expanded_results.append(
             {
                 "query_match": clause["text"],
                 "similarity_score": score,
-                "related_clauses": [item.get("text", "") for item in neighbors if item.get("text")],
+                "related_clauses": neighbors_by_clause.get(clause_id, []),
             }
         )
 

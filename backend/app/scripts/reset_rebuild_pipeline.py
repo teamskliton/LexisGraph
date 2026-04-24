@@ -1,18 +1,10 @@
 from datetime import datetime, timezone
-import logging
 
 from app.db.mongo import get_database
 from app.db.neo4j import run_query
 from app.services.graph_builder import build_graph, create_similarity_edges
 from app.services.preprocessing import process_document
 from app.utils.hash import generate_content_hash
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
 
 
 def clear_mongo() -> dict:
@@ -121,26 +113,26 @@ def clear_neo4j() -> None:
 
 
 def run_pipeline() -> dict:
-    logger.info("[RESET-PIPELINE] STEP 1: Clearing MongoDB")
+    print("Clearing MongoDB...")
     mongo_clear_result = clear_mongo()
-    logger.info("[RESET-PIPELINE] Mongo clear result %s", mongo_clear_result)
+    print(mongo_clear_result)
 
-    logger.info("[RESET-PIPELINE] STEP 2: Seeding fresh data")
+    print("Seeding fresh data...")
     seed_result = seed_data()
-    logger.info("[RESET-PIPELINE] Seed result %s", seed_result)
+    print(seed_result)
 
-    logger.info("[RESET-PIPELINE] STEP 3: Clearing Neo4j")
+    print("Clearing Neo4j...")
     clear_neo4j()
 
-    logger.info("[RESET-PIPELINE] STEP 4: Building graph")
+    print("Building graph...")
     graph_result = build_graph()
-    logger.info("[RESET-PIPELINE] Graph result %s", graph_result)
+    print(graph_result)
 
-    logger.info("[RESET-PIPELINE] STEP 5: Building similarity edges")
+    print("Building similarity edges...")
     similarity_result = create_similarity_edges()
-    logger.info("[RESET-PIPELINE] Similarity result %s", similarity_result)
+    print(similarity_result)
 
-    logger.info("[RESET-PIPELINE] STEP 6: Pipeline completed successfully")
+    print("Pipeline completed successfully")
     return {
         "mongo_clear": mongo_clear_result,
         "seed": seed_result,

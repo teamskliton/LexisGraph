@@ -1,5 +1,27 @@
-__pycache__/
+.env
+.env.*
+venv/
+.venv/
+**/__pycache__/
+**pycache**/
 *.pyc
+.pytest_cache/
+node_modules/
+uploads/
+data/raw/
+data/processed/
+*.log
+.DS_Store
+.idea/
+.vscode/
+coverage/
+*.sqlite3
 
+# Backend-specific generated artifacts
+backend/uploads/
+backend/data/raw/
+backend/data/processed/
+
+# Keep explicit domain test exclusions
 backend/data/domain_documents/*/processed/*.json
 backend/data/domain_documents/*/raw/*domain_test*.txt

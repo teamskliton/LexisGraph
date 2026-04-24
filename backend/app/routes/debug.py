@@ -50,6 +50,18 @@ def _get_latest_documents(source: str, limit: int = 5) -> list[dict]:
     return [_serialize_document(doc) for doc in cursor]
 
 
+def _get_full_documents(source: str, limit: int = 1) -> list[dict]:
+    """Return full source documents with only _id normalized for JSON output."""
+    collection = get_collection(source)
+    cursor = collection.find({}).sort("created_at", -1).limit(limit)
+
+    documents: list[dict] = []
+    for doc in cursor:
+        doc["_id"] = str(doc.get("_id", ""))
+        documents.append(doc)
+    return documents
+
+
 @router.get("/debug/user-documents")
 async def debug_user_documents() -> dict:
     """Return latest 5 user documents without raw sensitive content."""
@@ -70,6 +82,28 @@ async def debug_external_documents() -> dict:
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to fetch external debug documents")
         raise HTTPException(status_code=500, detail="Failed to fetch external documents") from exc
+
+
+@router.get("/debug/user-documents-full")
+async def debug_user_documents_full() -> dict:
+    """Return latest full user documents, including clauses and embeddings."""
+    try:
+        documents = await to_thread(_get_full_documents, "user", 1)
+        return {"count": len(documents), "documents": documents}
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to fetch full user debug documents")
+        raise HTTPException(status_code=500, detail="Failed to fetch full user documents") from exc
+
+
+@router.get("/debug/external-documents-full")
+async def debug_external_documents_full() -> dict:
+    """Return latest full external documents, including clauses and embeddings."""
+    try:
+        documents = await to_thread(_get_full_documents, "external", 1)
+        return {"count": len(documents), "documents": documents}
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to fetch full external debug documents")
+        raise HTTPException(status_code=500, detail="Failed to fetch full external documents") from exc
 
 
 @router.get("/debug/stats")
