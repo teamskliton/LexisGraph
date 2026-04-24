@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexisGraph Backend Tester</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #1d4ed8;
+      --primary-hover: #1e40af;
+      --border: #d1d5db;
+      --danger: #b91c1c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 50%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .container {
+      width: min(960px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 1.6rem;
+    }
+
+    .subtitle {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      background: #fff;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 9px 12px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: var(--primary-hover);
+    }
+
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin: 6px 0 12px;
+      min-height: 20px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .status.error {
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    .output-wrap {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0f172a;
+    }
+
+    .output-header {
+      padding: 8px 12px;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 0.85rem;
+      border-bottom: 1px solid #374151;
+    }
+
+    pre {
+      margin: 0;
+      padding: 14px;
+      height: 320px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.85rem;
+      color: #e2e8f0;
+    }
+
+    .note {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      border-left: 3px solid #93c5fd;
+      padding-left: 10px;
+    }
+
+    .progress-block {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .progress-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+      border: 1px solid #d1d5db;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: #2563eb;
+      transition: width 0.3s ease;
+    }
+
+    .progress-bar.completed {
+      background: #16a34a;
+    }
+
+    .progress-bar.error {
+      background: #dc2626;
+    }
+
+    .progress-text {
+      margin-top: 8px;
+      min-height: 18px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .progress-final {
+      margin-top: 10px;
+      min-height: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #166534;
+    }
+
+    .progress-final.error {
+      color: var(--danger);
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>LexisGraph Backend Tester</h1>
+    <p class="subtitle">Use this page to test upload, preprocessing, external ingestion, and debug APIs.</p>
+
+    <section class="grid">
+      <article class="card">
+        <h2>A) File Upload</h2>
+        <input id="fileInput" type="file" accept=".pdf,.docx,.txt" />
+        <div class="row" style="margin-top: 10px;">
+          <button id="uploadBtn">Upload File</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>B) External Data Fetch</h2>
+        <div class="row">
+          <button id="fetchBtn">Fetch Latest Legal Data</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>C) Debug APIs</h2>
+        <div class="row">
+          <button id="userDocsBtn">View User Documents</button>
+          <button id="externalDocsBtn">View External Documents</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>D) Export Data</h2>
+        <div class="row">
+          <button id="userExcelBtn">Download User Excel</button>
+          <button id="userPdfBtn">Download User PDF</button>
+        </div>
+        <div class="row" style="margin-top: 8px;">
+          <button id="externalExcelBtn">Download External Excel</button>
+          <button id="externalPdfBtn">Download External PDF</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>E) Domain Data Storage</h2>
+        <div class="row" style="margin-bottom: 8px;">
+          <label for="domain-select"><strong>Select Domain:</strong></label>
+          <select id="domain-select">
+            <option value="IT" selected>IT</option>
+            <option value="FINANCE">Finance</option>
+            <option value="HEALTHCARE">Healthcare</option>
+            <option value="EDUCATION">Education</option>
+            <option value="CYBERSECURITY">Cybersecurity</option>
+            <option value="E_COMMERCE">E-Commerce</option>
+            <option value="FOOD_INDUSTRY">Food Industry</option>
+            <option value="CIVIL_CONSTRUCTION">Civil Construction</option>
+            <option value="MANUFACTURING">Manufacturing</option>
+            <option value="TELECOMMUNICATION">Telecommunication</option>
+            <option value="ENERGY_UTILITIES">Energy Utilities</option>
+          </select>
+        </div>
+        <input id="domainFileInput" type="file" accept=".pdf,.docx,.txt" />
+        <div class="row" style="margin-top: 10px;">
+          <button id="domainUploadBtn">Upload Domain Data</button>
+          <button id="domainListBtn">View Domain Files</button>
+        </div>
+        <div class="progress-block">
+          <div class="progress-title">Upload Progress</div>
+          <div id="progress-container" class="progress-track">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <p id="status-text" class="progress-text">Idle</p>
+          <div id="final-message" class="progress-final"></div>
+        </div>
+      </article>
+    </section>
+
+    <div id="status" class="status">Ready.</div>
+
+    <section class="output-wrap">
+      <div class="output-header">F) Output (JSON)</div>
+      <pre id="output">{}</pre>
+    </section>
+
+    <p class="note">
+      Backend base URL: <strong>http://127.0.0.1:8000/api/v1</strong>. For browser access, backend must enable CORS.
+    </p>
+  </main>
+
+  <script>
+    const API_CANDIDATES = [
+      "http://127.0.0.1:8000",
+      "http://127.0.0.1:8013",
+      "http://127.0.0.1:8014",
+    ];
+    let BASE_URL = "";
+    let backendInitPromise = null;
+
+    const statusEl = document.getElementById("status");
+    const outputEl = document.getElementById("output");
+
+    const fileInput = document.getElementById("fileInput");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const fetchBtn = document.getElementById("fetchBtn");
+    const userDocsBtn = document.getElementById("userDocsBtn");
+    const externalDocsBtn = document.getElementById("externalDocsBtn");
+    const userExcelBtn = document.getElementById("userExcelBtn");
+    const userPdfBtn = document.getElementById("userPdfBtn");
+    const externalExcelBtn = document.getElementById("externalExcelBtn");
+    const externalPdfBtn = document.getElementById("externalPdfBtn");
+    const domainSelect = document.getElementById("domain-select");
+    const domainFileInput = document.getElementById("domainFileInput");
+    const domainUploadBtn = document.getElementById("domainUploadBtn");
+    const domainListBtn = document.getElementById("domainListBtn");
+    const progressBar = document.getElementById("progress-bar");
+    const statusText = document.getElementById("status-text");
+    const finalMessage = document.getElementById("final-message");
+
+    let domainStatusPollTimer = null;
+    let latestStatusWatchTimer = null;
+    let domainPollFailureCount = 0;
+    let fakeProgress = 10;
+    const DOMAIN_MAX_POLL_FAILURES = 8;
+
+    const DOMAIN_LABELS = {
+      IT: "IT",
+      FINANCE: "Finance",
+      HEALTHCARE: "Healthcare",
+      EDUCATION: "Education",
+      CYBERSECURITY: "Cybersecurity",
+      E_COMMERCE: "E-Commerce",
+      FOOD_INDUSTRY: "Food Industry",
+      CIVIL_CONSTRUCTION: "Civil Construction",
+      MANUFACTURING: "Manufacturing",
+      TELECOMMUNICATION: "Telecommunication",
+      ENERGY_UTILITIES: "Energy Utilities",
+    };
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", isError);
+    }
+
+    function renderOutput(data) {
+      if (data === undefined || data === null) {
+        outputEl.textContent = "No response data.";
+        return;
+      }
+      outputEl.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function stopDomainStatusPolling() {
+      if (domainStatusPollTimer) {
+        clearInterval(domainStatusPollTimer);
+        domainStatusPollTimer = null;
+      }
+      domainPollFailureCount = 0;
+    }
+
+    function stopLatestStatusWatch() {
+      if (latestStatusWatchTimer) {
+        clearInterval(latestStatusWatchTimer);
+        latestStatusWatchTimer = null;
+      }
+    }
+
+    function resetDomainProgress() {
+      stopDomainStatusPolling();
+      fakeProgress = 10;
+      progressBar.style.width = "0%";
+      progressBar.classList.remove("completed", "error");
+      statusText.textContent = "Idle";
+      statusText.style.color = "";
+      finalMessage.textContent = "";
+      finalMessage.classList.remove("error");
+    }
+
+    function setProgressState(status) {
+      progressBar.classList.remove("completed", "error");
+      if (status === "completed") {
+        progressBar.classList.add("completed");
+      }
+      if (status === "error") {
+        progressBar.classList.add("error");
+      }
+    }
+
+    function setDomainProgress(progress, step, state = "processing", textColor = "") {
+      const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+      progressBar.style.width = `${safeProgress}%`;
+      setProgressState(state);
+      statusText.textContent = step || "Processing";
+      statusText.style.color = textColor;
+    }
+
+    function resolveDomainLabel(domainValue, fallbackLabel = "selected") {
+      return DOMAIN_LABELS[String(domainValue || "").toUpperCase()] || fallbackLabel;
+    }
+
+    async function fetchDomainStatus(fileHash) {
+      const endpoint = fileHash
+        ? `/domain/status?hash=${encodeURIComponent(fileHash)}`
+        : "/domain/status/latest";
+      const response = await fetchWithBackendRetry(endpoint);
+      const text = await response.text();
+      const data = text && text.trim() ? JSON.parse(text) : {};
+
+      if (!response.ok) {
+        throw new Error(data?.detail || `Status request failed with ${response.status}`);
+      }
+
+      return data;
+    }
+
+    function renderCompletedState(statusData, selectedDomainText = "selected") {
+      const backendDomainLabel = resolveDomainLabel(statusData?.domain, selectedDomainText);
+      setDomainProgress(
+        100,
+        `File uploaded and preprocessing completed successfully in ${backendDomainLabel} domain`,
+        "completed",
+        "green",
+      );
+      const processedPath = statusData?.processed_path ? ` Stored at: ${statusData.processed_path}` : "";
+      finalMessage.textContent = `File uploaded and preprocessing completed successfully in ${backendDomainLabel} domain. JSON file created and stored.${processedPath}`;
+      finalMessage.classList.remove("error");
+      setStatus(`File uploaded and preprocessing completed successfully in ${backendDomainLabel} domain.`);
+      renderOutput(statusData);
+    }
+
+    function startDomainStatusPolling(fileHash, selectedDomainText, selectedDomainValue) {
+      stopDomainStatusPolling();
+      stopLatestStatusWatch();
+
+      domainStatusPollTimer = setInterval(async () => {
+        try {
+          const statusData = await fetchDomainStatus(fileHash);
+          console.log(statusData);
+          domainPollFailureCount = 0;
+
+          const backendStatus = (statusData?.status || "processing").toLowerCase();
+          const backendStep = statusData?.step || "Processing...";
+          const backendProgress = Number(statusData?.progress ?? fakeProgress);
+          const hasCompletedSignal =
+            backendStatus === "completed" ||
+            backendStatus === "success" ||
+            backendStep.toLowerCase().includes("completed") ||
+            backendProgress >= 100 ||
+            Boolean(statusData?.processed_path);
+
+          if (hasCompletedSignal) {
+            clearInterval(domainStatusPollTimer);
+            domainStatusPollTimer = null;
+            domainUploadBtn.disabled = false;
+            renderCompletedState(statusData, selectedDomainText);
+            return;
+          }
+
+          if (backendStatus === "error") {
+            clearInterval(domainStatusPollTimer);
+            domainStatusPollTimer = null;
+            domainUploadBtn.disabled = false;
+            const errorMessage = statusData?.message || "Processing failed.";
+            setDomainProgress(100, `Processing failed: ${errorMessage}`, "error", "red");
+            finalMessage.textContent = `Upload failed: ${errorMessage}`;
+            finalMessage.classList.add("error");
+            setStatus(`Error: ${errorMessage}`, true);
+            renderOutput(statusData);
+            return;
+          }
+
+          // Optional loading behavior: keep progress moving if backend progress stalls.
+          fakeProgress = Math.max(fakeProgress, backendProgress || 0);
+          if (fakeProgress < 95) {
+            fakeProgress += 2;
+          }
+          const displayProgress = Math.max(backendProgress || 0, fakeProgress);
+          setDomainProgress(displayProgress, backendStep || "Processing...", "processing");
+          finalMessage.textContent = "";
+          finalMessage.classList.remove("error");
+          const backendDomainLabel = resolveDomainLabel(statusData?.domain, selectedDomainText || resolveDomainLabel(selectedDomainValue, "selected"));
+          setStatus(`Processing ${backendDomainLabel} domain file...`);
+        } catch (error) {
+          domainPollFailureCount += 1;
+          if (domainPollFailureCount >= DOMAIN_MAX_POLL_FAILURES) {
+            clearInterval(domainStatusPollTimer);
+            domainStatusPollTimer = null;
+            domainUploadBtn.disabled = false;
+            const message = error.message || String(error);
+            setDomainProgress(100, `Processing failed: ${message}`, "error", "red");
+            finalMessage.textContent = `Upload failed: ${message}`;
+            finalMessage.classList.add("error");
+            setStatus(`Error: ${message}`, true);
+            renderOutput({ error: message });
+          }
+        }
+      }, 2000);
+    }
+
+    function startLatestStatusWatch(selectedDomainText = "selected", selectedDomainValue = "") {
+      stopLatestStatusWatch();
+
+      latestStatusWatchTimer = setInterval(async () => {
+        try {
+          const statusData = await fetchDomainStatus(null);
+          const backendStatus = (statusData?.status || "processing").toLowerCase();
+          const backendProgress = Number(statusData?.progress ?? 0);
+          const backendStep = statusData?.step || "Processing...";
+
+          if (backendStatus === "completed" || backendStatus === "success" || backendProgress >= 100) {
+            stopLatestStatusWatch();
+            domainUploadBtn.disabled = false;
+            renderCompletedState(statusData, selectedDomainText || resolveDomainLabel(selectedDomainValue, "selected"));
+            return;
+          }
+
+          if (backendStatus === "processing") {
+            setDomainProgress(Math.max(10, backendProgress), backendStep, "processing");
+            const backendDomainLabel = resolveDomainLabel(statusData?.domain, selectedDomainText || resolveDomainLabel(selectedDomainValue, "selected"));
+            setStatus(`Processing ${backendDomainLabel} domain file...`);
+          }
+        } catch {
+          // Ignore watcher errors when there is no recent status.
+        }
+      }, 2000);
+    }
+
+    async function ensureBackendBaseUrl() {
+      if (BASE_URL) {
+        return BASE_URL;
+      }
+
+      if (!backendInitPromise) {
+        backendInitPromise = (async () => {
+          for (const candidate of API_CANDIDATES) {
+            try {
+              const response = await fetch(`${candidate}/health`);
+              if (response.ok) {
+                BASE_URL = `${candidate}/api/v1`;
+                setStatus(`Connected to backend at ${BASE_URL}`);
+                return BASE_URL;
+              }
+            } catch {}
+          }
+
+          throw new Error("Backend is not reachable on ports 8000, 8013, or 8014.");
+        })();
+      }
+
+      return backendInitPromise;
+    }
+
+    function resetBackendDiscovery() {
+      BASE_URL = "";
+      backendInitPromise = null;
+    }
+
+    async function fetchWithBackendRetry(path, options = {}) {
+      const requestPath = path.startsWith("/") ? path : `/${path}`;
+
+      const firstBase = await ensureBackendBaseUrl();
+      try {
+        return await fetch(`${firstBase}${requestPath}`, options);
+      } catch {
+        // Backend may have restarted on a different port; rediscover and retry once.
+        resetBackendDiscovery();
+        const secondBase = await ensureBackendBaseUrl();
+        return fetch(`${secondBase}${requestPath}`, options);
+      }
+    }
+
+    async function callApi(path, options = {}) {
+      setStatus("Loading...");
+      try {
+        const response = await fetchWithBackendRetry(path, options);
+        const text = await response.text();
+
+        let data = null;
+        if (text && text.trim()) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = { raw: text };
+          }
+        }
+
+        if (!response.ok) {
+          const message = data?.detail || `Request failed with status ${response.status}`;
+          throw new Error(message);
+        }
+
+        renderOutput(data);
+        setStatus("Request completed successfully.");
+        return data;
+      } catch (error) {
+        renderOutput({ error: String(error.message || error) });
+        setStatus(`Error: ${error.message || error}`, true);
+        return null;
+      }
+    }
+
+    async function uploadFile() {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        setStatus("Please select a PDF, DOCX, or TXT file.", true);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      uploadBtn.disabled = true;
+      await callApi("/upload", {
+        method: "POST",
+        body: formData,
+      });
+      uploadBtn.disabled = false;
+    }
+
+    async function fetchLatestLegalData() {
+      fetchBtn.disabled = true;
+      await callApi("/fetch-now");
+      fetchBtn.disabled = false;
+    }
+
+    async function viewUserDocuments() {
+      userDocsBtn.disabled = true;
+      await callApi("/debug/user-documents");
+      userDocsBtn.disabled = false;
+    }
+
+    async function viewExternalDocuments() {
+      externalDocsBtn.disabled = true;
+      await callApi("/debug/external-documents");
+      externalDocsBtn.disabled = false;
+    }
+
+    async function downloadFile(path, defaultFilename, buttonRef) {
+      buttonRef.disabled = true;
+      setStatus("Preparing export...");
+
+      try {
+        const response = await fetchWithBackendRetry(path);
+        const contentType = response.headers.get("content-type") || "";
+
+        if (!response.ok) {
+          let message = `Request failed with status ${response.status}`;
+          try {
+            const errorData = await response.json();
+            message = errorData?.detail || message;
+          } catch {}
+          throw new Error(message);
+        }
+
+        if (contentType.includes("application/json")) {
+          const data = await response.json();
+          renderOutput(data || { message: "No response data." });
+          setStatus(data?.message || "No file available for download.", true);
+          return;
+        }
+
+        const blob = await response.blob();
+        if (!blob || blob.size === 0) {
+          throw new Error("Empty file received from server.");
+        }
+
+        const disposition = response.headers.get("Content-Disposition") || "";
+        const filenameMatch = disposition.match(/filename=([^;]+)/i);
+        const filename = filenameMatch
+          ? filenameMatch[1].trim().replace(/^"|"$/g, "")
+          : defaultFilename;
+
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(url);
+
+        renderOutput({ message: `Downloaded ${filename}` });
+        setStatus("Download completed successfully.");
+      } catch (error) {
+        const message = error.message || String(error);
+        renderOutput({ error: message });
+        setStatus(`Error: ${message}`, true);
+        alert(`Download failed: ${message}`);
+      } finally {
+        buttonRef.disabled = false;
+      }
+    }
+
+    async function downloadUserExcel() {
+      await downloadFile("/export/user?format=excel", "user_export.xlsx", userExcelBtn);
+    }
+
+    async function downloadUserPDF() {
+      await downloadFile("/export/user?format=pdf", "user_export.pdf", userPdfBtn);
+    }
+
+    async function downloadExternalExcel() {
+      await downloadFile("/export/external?format=excel", "external_export.xlsx", externalExcelBtn);
+    }
+
+    async function downloadExternalPDF() {
+      await downloadFile("/export/external?format=pdf", "external_export.pdf", externalPdfBtn);
+    }
+
+    async function uploadDomainData() {
+      const domain = (domainSelect.value || "").trim();
+      const selectedDomainText = domainSelect.selectedOptions?.[0]?.text || resolveDomainLabel(domain, "selected");
+      const file = domainFileInput.files && domainFileInput.files[0];
+
+      if (!domain) {
+        setStatus("Please select a domain.", true);
+        alert("Please select a domain.");
+        return;
+      }
+
+      if (!file) {
+        setStatus("Please select a domain file to upload.", true);
+        alert("Please select a domain file.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      resetDomainProgress();
+      domainUploadBtn.disabled = true;
+      stopLatestStatusWatch();
+      setStatus(`Uploading file to ${selectedDomainText} domain...`);
+      setDomainProgress(5, `Uploading file to ${selectedDomainText} domain...`, "processing");
+      try {
+        const response = await fetchWithBackendRetry(`/domain/upload?domain=${encodeURIComponent(domain)}`, {
+          method: "POST",
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.message || data?.detail || "Server error");
+        }
+
+        if (data?.status === "error") {
+          throw new Error(data?.message || "Domain upload failed.");
+        }
+
+        const fileHash = data?.file_hash || data?.hash;
+        renderOutput(data);
+
+        if (data?.status === "completed" || data?.status === "success") {
+          setDomainProgress(
+            100,
+            `File uploaded and preprocessing completed successfully in ${selectedDomainText} domain`,
+            "completed",
+            "green",
+          );
+          finalMessage.textContent = `File uploaded and preprocessing completed successfully in ${selectedDomainText} domain.`;
+          finalMessage.classList.remove("error");
+          setStatus(`File uploaded and preprocessing completed successfully in ${selectedDomainText} domain.`);
+          domainUploadBtn.disabled = false;
+          return;
+        }
+
+        if (!fileHash) {
+          throw new Error("Upload accepted but file hash is missing.");
+        }
+
+        setStatus(`Upload accepted for ${selectedDomainText} domain. Processing in background...`);
+        setDomainProgress(10, `Processing ${selectedDomainText} domain...`, "processing");
+        finalMessage.textContent = "";
+        finalMessage.classList.remove("error");
+        startDomainStatusPolling(fileHash, selectedDomainText, domain);
+        startLatestStatusWatch(selectedDomainText, domain);
+      } catch (error) {
+        console.error(error);
+        const message = error.message || String(error);
+        renderOutput({ error: message });
+        setStatus(`Error: ${message}`, true);
+        setDomainProgress(100, "Error", "error");
+        finalMessage.textContent = `Upload failed: ${message}`;
+        finalMessage.classList.add("error");
+        domainUploadBtn.disabled = false;
+      }
+    }
+
+    async function viewDomainFiles() {
+      const domain = (domainSelect.value || "").trim();
+      const selectedDomainText = domainSelect.selectedOptions?.[0]?.text || resolveDomainLabel(domain, "selected");
+      if (!domain) {
+        setStatus("Please select a domain.", true);
+        alert("Please select a domain.");
+        return;
+      }
+
+      domainListBtn.disabled = true;
+      await callApi(`/domain/list?domain=${encodeURIComponent(domain)}`);
+      setStatus(`Loaded files for ${selectedDomainText} domain.`);
+      domainListBtn.disabled = false;
+    }
+
+    uploadBtn.addEventListener("click", uploadFile);
+    fetchBtn.addEventListener("click", fetchLatestLegalData);
+    userDocsBtn.addEventListener("click", viewUserDocuments);
+    externalDocsBtn.addEventListener("click", viewExternalDocuments);
+    userExcelBtn.addEventListener("click", downloadUserExcel);
+    userPdfBtn.addEventListener("click", downloadUserPDF);
+    externalExcelBtn.addEventListener("click", downloadExternalExcel);
+    externalPdfBtn.addEventListener("click", downloadExternalPDF);
+    domainUploadBtn.addEventListener("click", uploadDomainData);
+    domainListBtn.addEventListener("click", viewDomainFiles);
+
+    ensureBackendBaseUrl().catch((error) => {
+      setStatus(`Error: ${error.message || error}`, true);
+    });
+
+    // Keep watching backend state so frontend can still show completion even if upload was triggered elsewhere.
+    startLatestStatusWatch(domainSelect.selectedOptions?.[0]?.text || "selected", domainSelect.value || "");
+  </script>
+</body>
+</html>

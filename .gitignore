@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+
+backend/data/domain_documents/*/processed/*.json
+backend/data/domain_documents/*/raw/*domain_test*.txt

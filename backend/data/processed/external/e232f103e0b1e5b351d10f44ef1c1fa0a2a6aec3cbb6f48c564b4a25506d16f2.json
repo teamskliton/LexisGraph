@@ -1,0 +1,57 @@
+{
+  "source": "external",
+  "source_type": "barandbench",
+  "title": "Delhi High Court seeks response from Hardeep Puri's daughter on plea to lift blocking of articles linking her to Jeffrey Epstein",
+  "url": "https://www.barandbench.com/news/delhi-high-court-seeks-response-from-hardeep-puris-daughter-on-plea-to-lift-blocking-of-articles-linking-her-to-jeffrey-epstein",
+  "date": "2026-04-23T13:00:40.393Z",
+  "priority": "medium",
+  "raw_text": "The Delhi High Court on Thursday issued notice to Union Minister Hardeep Puri’s daughter Himayani Puri in RTI activist Kunal Shukla's plea to lift an earlier injunction by which articles linking her to child sex offender Jeffrey Epstein were blocked [ Himayani Puri V Kunal Shukla ]. Follow Us Copyright © 2021 Bar and Bench. All Rights Reserved Powered by Quintype",
+  "clauses": [
+    {
+      "text": "The Delhi High Court on Thursday issued notice to Union Minister Hardeep Puri s daughter Himayani Puri in RTI activist Kunal Shukla's plea to lift an earlier injunction by which articles linking her to child sex offender Jeffrey Epstein were blocked [ Himayani Puri V Kunal Shukla ].",
+      "type": "general",
+      "entities": [
+        "Thursday",
+        "Union",
+        "Hardeep Puri",
+        "Himayani Puri",
+        "Kunal Shukla's",
+        "Jeffrey Epstein",
+        "Himayani Puri V Kunal Shukla",
+        "2021",
+        "Bench"
+      ]
+    },
+    {
+      "text": "Follow Us Copyright 2021 Bar and Bench.",
+      "type": "general",
+      "entities": [
+        "Thursday",
+        "Union",
+        "Hardeep Puri",
+        "Himayani Puri",
+        "Kunal Shukla's",
+        "Jeffrey Epstein",
+        "Himayani Puri V Kunal Shukla",
+        "2021",
+        "Bench"
+      ]
+    },
+    {
+      "text": "All Rights Reserved Powered by Quintype",
+      "type": "general",
+      "entities": [
+        "Thursday",
+        "Union",
+        "Hardeep Puri",
+        "Himayani Puri",
+        "Kunal Shukla's",
+        "Jeffrey Epstein",
+        "Himayani Puri V Kunal Shukla",
+        "2021",
+        "Bench"
+      ]
+    }
+  ],
+  "hash": "e232f103e0b1e5b351d10f44ef1c1fa0a2a6aec3cbb6f48c564b4a25506d16f2"
+}
