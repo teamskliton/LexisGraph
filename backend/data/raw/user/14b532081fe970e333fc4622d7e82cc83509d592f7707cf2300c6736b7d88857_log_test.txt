@@ -1,1 +1,0 @@
-﻿Logging visibility test. The vendor shall protect data. If breached, penalty applies.

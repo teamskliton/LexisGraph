@@ -1,5 +1,4 @@
 from asyncio import TimeoutError as AsyncTimeoutError, to_thread, wait_for
-import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 import json
@@ -33,6 +32,7 @@ def _set_upload_status(file_hash: str, status: str, step: str, progress: int, me
     if message:
         payload["message"] = message
     if extra:
+        payload["extra"] = dict(extra)
         payload.update(extra)
     UPLOAD_STATUS[file_hash] = payload
 
@@ -229,7 +229,13 @@ async def upload_domain_document(
         await _process_domain_upload(file_bytes, file.filename, normalized_domain, file_hash)
 
         status = UPLOAD_STATUS.get(file_hash, {})
-        extra = status.get("extra", {})
+        extra = status.get("extra") if isinstance(status.get("extra"), dict) else {}
+        if not extra:
+            extra = {
+                "clauses_count": status.get("clauses_count", 0),
+                "raw_path": status.get("raw_path", ""),
+                "processed_path": status.get("processed_path", ""),
+            }
 
         return JSONResponse(
             status_code=200,

@@ -5,7 +5,9 @@ import re
 from urllib.parse import urljoin
 
 import requests
+from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
+from urllib3.util.retry import Retry
 
 from app.db.mongo import store_document
 from app.services.preprocessing import preprocess_text, validate_pipeline_output
@@ -34,6 +36,26 @@ PRIORITY_BY_SOURCE = {
     "barandbench": "medium",
     "news": "low",
 }
+_HTTP_SESSION: requests.Session | None = None
+
+
+def _get_http_session() -> requests.Session:
+    global _HTTP_SESSION
+
+    if _HTTP_SESSION is None:
+        session = requests.Session()
+        retry = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        _HTTP_SESSION = session
+
+    return _HTTP_SESSION
 
 
 def _clean_text(value: str | None) -> str:
@@ -198,7 +220,7 @@ def fetch_gazette_data(max_items: int = 10) -> list[dict]:
     """Fetch latest entries from e-Gazette with resilient parsing."""
     logger.info("Fetching gazette data from %s", GAZETTE_LATEST_URL)
 
-    response = requests.get(GAZETTE_LATEST_URL, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+    response = _get_http_session().get(GAZETTE_LATEST_URL, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
     response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -221,7 +243,7 @@ def fetch_gazette_data(max_items: int = 10) -> list[dict]:
 
         content = context_text
         try:
-            detail_response = requests.get(full_url, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+            detail_response = _get_http_session().get(full_url, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
             detail_response.raise_for_status()
             content = _extract_page_text(detail_response.text) or context_text
             date_hint = _extract_date(content) or date_hint
@@ -250,7 +272,7 @@ def fetch_livelaw_data(max_items: int = 10) -> list[dict]:
     """Fetch latest legal articles from LiveLaw."""
     logger.info("Fetching LiveLaw data from %s", LIVELAW_URL)
 
-    response = requests.get(LIVELAW_URL, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+    response = _get_http_session().get(LIVELAW_URL, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
     response.raise_for_status()
 
     article_links = _collect_article_links(LIVELAW_URL, response.text, max_links=max_items * 3)
@@ -261,7 +283,7 @@ def fetch_livelaw_data(max_items: int = 10) -> list[dict]:
             break
 
         try:
-            detail_response = requests.get(link["url"], timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+            detail_response = _get_http_session().get(link["url"], timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
             detail_response.raise_for_status()
             detail_soup = BeautifulSoup(detail_response.text, "html.parser")
             content = _extract_main_content(detail_soup)
@@ -288,7 +310,7 @@ def fetch_barandbench_data(max_items: int = 10) -> list[dict]:
     """Fetch latest legal articles from Bar & Bench."""
     logger.info("Fetching Bar & Bench data from %s", BARANDBENCH_URL)
 
-    response = requests.get(BARANDBENCH_URL, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+    response = _get_http_session().get(BARANDBENCH_URL, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
     response.raise_for_status()
 
     article_links = _collect_article_links(BARANDBENCH_URL, response.text, max_links=max_items * 3)
@@ -299,7 +321,7 @@ def fetch_barandbench_data(max_items: int = 10) -> list[dict]:
             break
 
         try:
-            detail_response = requests.get(link["url"], timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+            detail_response = _get_http_session().get(link["url"], timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
             detail_response.raise_for_status()
             detail_soup = BeautifulSoup(detail_response.text, "html.parser")
             content = _extract_main_content(detail_soup)
@@ -337,7 +359,12 @@ def fetch_news_data(max_items: int = 10) -> list[dict]:
         "pageSize": max_items,
         "apiKey": api_key,
     }
-    response = requests.get(NEWS_API_URL, params=params, timeout=REQUEST_TIMEOUT, headers=DEFAULT_HEADERS)
+    response = _get_http_session().get(
+        NEWS_API_URL,
+        params=params,
+        timeout=REQUEST_TIMEOUT,
+        headers=DEFAULT_HEADERS,
+    )
     response.raise_for_status()
     payload = response.json()
 

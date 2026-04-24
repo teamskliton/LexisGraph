@@ -16,6 +16,24 @@ from app.utils.hash import generate_content_hash
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+
+
+async def _read_limited_upload(file: UploadFile, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail="Uploaded file is too large")
+        chunks.append(chunk)
+
+    return b"".join(chunks)
 
 
 @router.post("/upload")
@@ -25,8 +43,7 @@ async def upload_document(file: UploadFile) -> dict:
         raise HTTPException(status_code=400, detail="Filename is required")
 
     try:
-        logger.info("[UPLOAD] STEP 1: Upload started filename=%s", file.filename)
-        file_bytes = await file.read()
+        file_bytes = await _read_limited_upload(file, _MAX_UPLOAD_SIZE_BYTES)
         if not file_bytes:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
@@ -43,15 +60,13 @@ async def upload_document(file: UploadFile) -> dict:
             "user",
             file_hash,
         )
-        logger.info("[UPLOAD] STEP 2: Raw file saved path=%s hash=%s", saved_path, file_hash)
 
         saved_path_obj = Path(saved_path)
-        if not saved_path_obj.exists() or saved_path_obj.parent != Path("data/raw/user"):
+        expected_raw_parent = Path("data/raw/user").resolve()
+        if not saved_path_obj.exists() or saved_path_obj.parent.resolve() != expected_raw_parent:
             raise RuntimeError("Raw file validation failed")
 
-        logger.info("[UPLOAD] STEP 3: Extracting text filename=%s", file.filename)
         extracted_text = await to_thread(extract_text, file_bytes, file.filename)
-        logger.info("[UPLOAD] STEP 4: Preprocessing started hash=%s", file_hash)
         clauses = await to_thread(preprocess_text, extracted_text)
 
         document_payload = {
@@ -66,9 +81,12 @@ async def upload_document(file: UploadFile) -> dict:
         }
 
         processed_path = await to_thread(save_processed_json, document_payload, file_hash, "user")
-        logger.info("[UPLOAD] STEP 5: JSON saved path=%s", processed_path)
         processed_path_obj = Path(processed_path)
-        if not processed_path_obj.exists() or processed_path_obj.parent != Path("data/processed/user"):
+        expected_processed_parent = Path("data/processed/user").resolve()
+        if (
+            not processed_path_obj.exists()
+            or processed_path_obj.parent.resolve() != expected_processed_parent
+        ):
             raise RuntimeError("Processed file validation failed")
 
         is_valid = validate_pipeline_output({"text": extracted_text, "clauses": clauses})
@@ -83,7 +101,7 @@ async def upload_document(file: UploadFile) -> dict:
             logger.warning("Pipeline validation failed for file=%s hash=%s; skipping DB store", file.filename, file_hash)
 
         logger.info(
-            "[UPLOAD] STEP 6: Process completed raw_path=%s processed_path=%s hash=%s clauses=%s stored_in_db=%s",
+            "Upload processed: raw_path=%s processed_path=%s hash=%s clauses=%s stored_in_db=%s",
             saved_path,
             processed_path,
             file_hash,

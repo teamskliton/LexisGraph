@@ -1,16 +1,8 @@
 from datetime import datetime, timezone
-import logging
 
 from app.db.mongo import get_database
 from app.services.preprocessing import process_document
 from app.utils.hash import generate_content_hash
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
 
 
 def clear_database() -> None:
@@ -112,8 +104,7 @@ def seed_data() -> dict:
 
 
 if __name__ == "__main__":
-    logger.info("[RESET-SEED] STEP 1: Clearing database")
     clear_database()
-    logger.info("[RESET-SEED] STEP 2: Seeding database")
     result = seed_data()
-    logger.info("[RESET-SEED] STEP 3: Database reset and seeded successfully %s", result)
+    print("Database reset and seeded successfully")
+    print(result)

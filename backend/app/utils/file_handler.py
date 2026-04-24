@@ -1,19 +1,16 @@
 from io import BytesIO
 import json
-import logging
 from pathlib import Path
-
+import re
 
 import pdfplumber
 from docx import Document
 
 
-logger = logging.getLogger(__name__)
-
 BASE_DATA_DIR = Path("data/raw")
-
 PROCESSED_DATA_DIR = Path("data/processed")
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
+_ALLOWED_SOURCES = {"user", "external"}
 
 
 class UnsupportedFileTypeError(ValueError):
@@ -35,19 +32,15 @@ def _validate_extension(filename: str) -> str:
 def extract_text(file_bytes: bytes, filename: str) -> str:
     """Extract UTF-8 text from PDF, DOCX, or TXT file bytes."""
     extension = _validate_extension(filename)
-    logger.info("[EXTRACT] Starting text extraction for %s (type: %s)", filename, extension)
 
     if extension == ".txt":
-        logger.info("[EXTRACT] Processing TXT file")
         try:
             text = file_bytes.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
             raise ValueError("TXT file must be UTF-8 encoded") from exc
-        logger.info("[EXTRACT] TXT extraction complete: %s chars", len(text))
         return text.strip()
 
     if extension == ".pdf":
-        logger.info("[EXTRACT] Processing PDF file")
         try:
             with pdfplumber.open(BytesIO(file_bytes)) as pdf:
                 pages = [page.extract_text() or "" for page in pdf.pages]
@@ -56,10 +49,8 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
             raise ValueError("Failed to extract text from PDF") from exc
         if not text:
             raise ValueError("No extractable text found in PDF")
-        logger.info("[EXTRACT] PDF extraction complete: %s pages, %s chars", len(pages), len(text))
         return text
 
-    logger.info("[EXTRACT] Processing DOCX file")
     try:
         document = Document(BytesIO(file_bytes))
         paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs]
@@ -69,9 +60,7 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
 
     if not text:
         raise ValueError("No extractable text found in DOCX")
-    logger.info("[EXTRACT] DOCX extraction complete: %s paragraphs, %s chars", len(paragraphs), len(text))
     return text
-
 
 
 def save_raw_file(
@@ -81,10 +70,15 @@ def save_raw_file(
     file_hash: str | None = None,
 ) -> str:
     """Persist raw file bytes into data/raw/<source>."""
-    source_dir = BASE_DATA_DIR / source
+    normalized_source = (source or "").strip().lower()
+    if normalized_source not in _ALLOWED_SOURCES:
+        raise ValueError("source must be either 'user' or 'external'")
+
+    source_dir = BASE_DATA_DIR / normalized_source
     source_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = Path(filename).name
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename).name)
+    safe_name = re.sub(r"_+", "_", safe_name).strip("._")
     if not safe_name:
         safe_name = "upload.bin"
 
@@ -99,7 +93,11 @@ def save_raw_file(
 
 def file_exists_with_hash(file_hash: str, source: str = "user") -> bool:
     """Check if a file with the same content hash already exists."""
-    source_dir = BASE_DATA_DIR / source
+    normalized_source = (source or "").strip().lower()
+    if normalized_source not in _ALLOWED_SOURCES:
+        raise ValueError("source must be either 'user' or 'external'")
+
+    source_dir = BASE_DATA_DIR / normalized_source
     if not source_dir.exists():
         return False
 
@@ -108,7 +106,11 @@ def file_exists_with_hash(file_hash: str, source: str = "user") -> bool:
 
 def save_processed_json(payload: dict, file_hash: str, source: str = "user") -> str:
     """Persist processed payload to data/processed/<source>/<hash>.json."""
-    source_dir = PROCESSED_DATA_DIR / source
+    normalized_source = (source or "").strip().lower()
+    if normalized_source not in _ALLOWED_SOURCES:
+        raise ValueError("source must be either 'user' or 'external'")
+
+    source_dir = PROCESSED_DATA_DIR / normalized_source
     source_dir.mkdir(parents=True, exist_ok=True)
 
     destination = source_dir / f"{file_hash}.json"
