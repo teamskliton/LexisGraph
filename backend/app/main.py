@@ -1,13 +1,22 @@
 from contextlib import asynccontextmanager
+import sys
+import time
 from fastapi import FastAPI
+
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from app.db.neo4j import close_driver as close_neo4j_driver
+from app.routes.compliance import router as compliance_router
 from app.routes.debug import router as debug_router
 from app.routes.domain import router as domain_router
 from app.routes.export import router as export_router
 from app.routes.fetch import router as fetch_router
+from app.routes.graph import router as graph_router
+from app.routes.neo4j_test import router as neo4j_test_router
+from app.routes.retrieval import router as retrieval_router
 from app.routes.upload import router as upload_router
 from app.services.scraper import fetch_and_process_external_data
 
@@ -18,10 +27,26 @@ _scheduler: BackgroundScheduler | None = None
 
 def configure_logging() -> None:
     """Configure application-wide logging."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    root = logging.getLogger()
+    root.handlers.clear()
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
     )
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        uvicorn_logger = logging.getLogger(name)
+        uvicorn_logger.handlers.clear()
+        uvicorn_logger.propagate = True
+        uvicorn_logger.setLevel(logging.INFO)
+
+    logging.getLogger("app").setLevel(logging.INFO)
+
 
 
 def start_scheduler() -> BackgroundScheduler:
@@ -70,10 +95,18 @@ async def lifespan(_: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("Failed to shutdown scheduler")
 
+    try:
+        close_neo4j_driver()
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to close Neo4j driver")
+
 
 def create_app() -> FastAPI:
     """Application factory for FastAPI app."""
     configure_logging()
+    logger.info("[SYSTEM] Global logging configured at INFO level")
+    logger.info("[SYSTEM] Terminal logging is active — all pipeline steps will be visible")
+
 
     app = FastAPI(
         title="LexisGraph Backend",
@@ -91,11 +124,30 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        started = time.perf_counter()
+        logger.info("[REQUEST] Started %s %s", request.method, request.url.path)
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - started) * 1000
+        logger.info(
+            "[REQUEST] Completed %s %s status=%s duration_ms=%.2f",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+
     app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
     app.include_router(fetch_router, prefix="/api/v1", tags=["fetch"])
     app.include_router(debug_router, prefix="/api/v1", tags=["debug"])
     app.include_router(export_router, prefix="/api/v1", tags=["export"])
     app.include_router(domain_router, prefix="/api/v1", tags=["domain"])
+    app.include_router(graph_router, prefix="/api/v1", tags=["graph"])
+    app.include_router(compliance_router, prefix="/api/v1", tags=["compliance"])
+    app.include_router(retrieval_router, prefix="/api/v1", tags=["retrieval"])
+    app.include_router(neo4j_test_router, prefix="/api/v1", tags=["neo4j"])
 
     @app.get("/health", tags=["system"])
     async def health_check() -> dict[str, str]:

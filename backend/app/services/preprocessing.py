@@ -5,13 +5,16 @@ from threading import Lock
 
 import spacy
 from bs4 import BeautifulSoup
+from sentence_transformers import SentenceTransformer
 from spacy.language import Language
 
 logger = logging.getLogger(__name__)
 
 _SPACY_MODEL_NAME = "en_core_web_sm"
+_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 _NLP: Language | None = None
+_EMBEDDER: SentenceTransformer | None = None
 _MODEL_LOCK = Lock()
 
 _NAVIGATION_TERMS = {
@@ -49,6 +52,16 @@ def _get_nlp() -> Language:
                 if "sentencizer" not in _NLP.pipe_names:
                     _NLP.add_pipe("sentencizer")
     return _NLP
+
+
+def _get_embedder() -> SentenceTransformer:
+    global _EMBEDDER
+    if _EMBEDDER is None:
+        with _MODEL_LOCK:
+            if _EMBEDDER is None:
+                logger.info("Loading sentence-transformers model: %s", _EMBEDDING_MODEL_NAME)
+                _EMBEDDER = SentenceTransformer(_EMBEDDING_MODEL_NAME)
+    return _EMBEDDER
 
 
 def classify_clause(clause_text: str) -> str:
@@ -128,22 +141,25 @@ def clean_text(text: str, lowercase: bool = False) -> str:
 
 
 def preprocess_text(text: str) -> list[dict]:
-    """Preprocess legal text using chunk-based spaCy processing only."""
+    """Preprocess legal text and emit clause metadata plus embeddings."""
+    logger.info("🔥 PREPROCESS FUNCTION CALLED")
     if not text or not text.strip():
         return []
+
+    logger.info("[PREPROCESS] STEP 1: Input received")
 
     cleaned_text = clean_text(text)
     if not cleaned_text:
         return []
 
-    logger.info("[PREPROCESS] Text length: %s", len(cleaned_text))
+    logger.info("[PREPROCESS] STEP 2: Text cleaned length=%s", len(cleaned_text))
     chunks = split_text_into_chunks(cleaned_text)
-    logger.info("[PREPROCESS] Total chunks: %s", len(chunks))
+    logger.info("[PREPROCESS] STEP 3: Chunking complete total_chunks=%s", len(chunks))
 
     nlp = _get_nlp()
     all_clauses: list[dict] = []
     for index, chunk in enumerate(chunks, start=1):
-        logger.info("[PREPROCESS] Processing chunk %s/%s", index, len(chunks))
+        logger.info("[PREPROCESS] STEP 4: Processing chunk %s/%s", index, len(chunks))
 
         doc = nlp(chunk)
         for sent in doc.sents:
@@ -159,7 +175,15 @@ def preprocess_text(text: str) -> list[dict]:
                 }
             )
 
-    logger.info("[PREPROCESS] Total clauses: %s", len(all_clauses))
+    if all_clauses:
+        logger.info("[PREPROCESS] STEP 5: Embedding generation started clauses=%s", len(all_clauses))
+        embedder = _get_embedder()
+        clause_texts = [clause["text"] for clause in all_clauses]
+        vectors = embedder.encode(clause_texts)
+        for index, clause in enumerate(all_clauses):
+            clause["embedding"] = vectors[index].tolist()
+
+    logger.info("[PREPROCESS] STEP 6: Completed total_clauses=%s", len(all_clauses))
     return all_clauses
 
 

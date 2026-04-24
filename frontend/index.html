@@ -741,11 +741,14 @@
       stopLatestStatusWatch();
       setStatus(`Uploading file to ${selectedDomainText} domain...`);
       setDomainProgress(5, `Uploading file to ${selectedDomainText} domain...`, "processing");
+      const uploadPath = `/domain/upload?domain=${encodeURIComponent(domain)}`;
+      console.log("Uploading to:", uploadPath);
       try {
-        const response = await fetchWithBackendRetry(`/domain/upload?domain=${encodeURIComponent(domain)}`, {
+        const response = await fetchWithBackendRetry(uploadPath, {
           method: "POST",
           body: formData,
         });
+
         const data = await response.json();
 
         if (!response.ok) {

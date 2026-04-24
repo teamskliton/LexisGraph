@@ -93,14 +93,17 @@ def _read_basic_metadata(file_path: Path) -> dict:
 
 async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_domain: str, file_hash: str) -> None:
     try:
+        logger.info("[DOMAIN-%s] STEP 1: Processing started hash=%s", normalized_domain, file_hash)
+
         raw_dir, processed_dir = await to_thread(_domain_dirs, normalized_domain)
 
         _set_upload_status(file_hash, "processing", "Saving raw file", 10)
         raw_path = await to_thread(_save_raw_file, raw_dir, file_hash, filename, file_bytes)
         _set_upload_status(file_hash, "processing", "File uploaded", 20)
-        logger.info("[DOMAIN-%s] Raw file saved", normalized_domain)
+        logger.info("[DOMAIN-%s] STEP 2: Raw file saved path=%s", normalized_domain, raw_path)
 
         _set_upload_status(file_hash, "processing", "Extracting text", 30)
+        logger.info("[DOMAIN-%s] STEP 3: Text extraction started", normalized_domain)
         try:
             extracted_text = await wait_for(
                 to_thread(extract_text, file_bytes, filename),
@@ -115,6 +118,7 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
             raise Exception("Text extraction failed")
 
         _set_upload_status(file_hash, "processing", "Text extracted", 35)
+        logger.info("[DOMAIN-%s] STEP 3: Text extraction completed", normalized_domain)
 
         warning_message = None
         if len(extracted_text) > 800000:
@@ -125,6 +129,7 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
         chunks = await to_thread(split_text_into_chunks, extracted_text)
         if not chunks:
             raise Exception("Chunk creation failed")
+        logger.info("[DOMAIN-%s] STEP 4: Chunking completed chunks=%s", normalized_domain, len(chunks))
 
         _set_upload_status(
             file_hash,
@@ -166,7 +171,7 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
             "hash": file_hash,
         }
         processed_path = await to_thread(_save_processed_json, processed_dir, payload)
-        logger.info("[DOMAIN-%s] JSON saved successfully", normalized_domain)
+        logger.info("[DOMAIN-%s] STEP 5: JSON saved path=%s", normalized_domain, processed_path)
 
         _set_upload_status(
             file_hash,
@@ -184,6 +189,7 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
                 "chunk_count": len(chunks),
             },
         )
+        logger.info("[DOMAIN-%s] STEP 6: Process completed hash=%s clauses=%s", normalized_domain, file_hash, len(clauses))
     except Exception as exc:  # noqa: BLE001
         logger.exception("[DOMAIN-%s] Domain upload failed: %s", normalized_domain, exc)
         _set_upload_status(file_hash, "error", "Failed", 100, message=str(exc))
@@ -195,7 +201,9 @@ async def upload_domain_document(
     domain: str | None = Query(default=None),
 ) -> dict:
     try:
-        logger.info("Domain upload started")
+        logger.info("🚀 DOMAIN UPLOAD API HIT")
+        logger.info("[DOMAIN] STEP 1: Upload request received")
+
 
         if not domain or not domain.strip():
             return JSONResponse(status_code=400, content={"status": "error", "message": "Domain is required"})
@@ -215,18 +223,28 @@ async def upload_domain_document(
         file_hash = generate_content_hash(file_bytes)
 
         _set_upload_status(file_hash, "processing", "Upload started", 1)
-        asyncio.create_task(_process_domain_upload(file_bytes, file.filename, normalized_domain, file_hash))
+        logger.info("[DOMAIN] STEP 2: Starting synchronous processing hash=%s", file_hash)
+
+        # Synchronous processing so logs appear in terminal during request
+        await _process_domain_upload(file_bytes, file.filename, normalized_domain, file_hash)
+
+        status = UPLOAD_STATUS.get(file_hash, {})
+        extra = status.get("extra", {})
 
         return JSONResponse(
-            status_code=202,
+            status_code=200,
             content={
-                "status": "processing",
-                "message": "Domain upload accepted. Processing started.",
+                "status": "completed",
+                "message": "Domain upload processed successfully.",
                 "domain": normalized_domain,
                 "title": Path(file.filename).name,
                 "file_hash": file_hash,
+                "clauses_count": extra.get("clauses_count", 0),
+                "raw_path": extra.get("raw_path", ""),
+                "processed_path": extra.get("processed_path", ""),
             },
         )
+
     except Exception as exc:  # noqa: BLE001
         logger.exception("[DOMAIN] Domain upload failed before processing: %s", exc)
         return JSONResponse(

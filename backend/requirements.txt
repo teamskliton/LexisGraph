@@ -1,7 +1,9 @@
 fastapi
 uvicorn
+python-multipart
 pymongo
 spacy
+sentence-transformers
 pdfplumber
 python-docx
 requests
@@ -9,4 +11,7 @@ beautifulsoup4
 apscheduler
 openpyxl
 reportlab
-python-multipart
+neo4j
+numpy
+scikit-learn
+python-dotenv

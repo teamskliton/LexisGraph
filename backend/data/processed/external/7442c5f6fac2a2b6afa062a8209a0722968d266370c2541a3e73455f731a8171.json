@@ -3,7 +3,7 @@
   "source_type": "barandbench",
   "title": "Today's Top Stories",
   "url": "https://www.barandbench.com/collection/top-stories",
-  "date": "2026-04-20T14:23:45.259Z",
+  "date": "2026-04-24T14:53:01.179Z",
   "priority": "medium",
   "raw_text": "Follow Us Copyright © 2021 Bar and Bench. All Rights Reserved Powered by Quintype",
   "clauses": [
@@ -11,18 +11,8 @@
       "text": "Follow Us Copyright 2021 Bar and Bench.",
       "type": "general",
       "entities": [
-        {
-          "text": "2021",
-          "label": "DATE",
-          "start": 20,
-          "end": 24
-        },
-        {
-          "text": "Bench",
-          "label": "ORG",
-          "start": 33,
-          "end": 38
-        }
+        "2021",
+        "Bench"
       ],
       "embedding": [
         -0.10296682268381119,
@@ -414,7 +404,10 @@
     {
       "text": "All Rights Reserved Powered by Quintype",
       "type": "general",
-      "entities": [],
+      "entities": [
+        "2021",
+        "Bench"
+      ],
       "embedding": [
         -0.017072439193725586,
         0.08359979838132858,
