@@ -1,0 +1,51 @@
+{
+  "source": "external",
+  "source_type": "barandbench",
+  "title": "Delhi HC issues notice to Arvind Kejriwal on plea seeking contempt action for publishing videos of Justice Swarana Kanta Sharma's court",
+  "url": "https://www.barandbench.com/news/delhi-hc-issues-notice-to-arvind-kejriwal-on-plea-seeking-contempt-action-for-publishing-videos-of-justice-swarana-kanta-sharmas-court",
+  "date": "2026-04-23T07:59:23.940Z",
+  "priority": "medium",
+  "raw_text": "The Delhi High Court on Thursday ordered social media intermediaries and search engines including Facebook, Google and X to take down/ remove all videos recordings of court proceedings before Justice Swarana Kanta sharma in the excise policy case in which Aam Aadmi Party (AAP) chief Arvind Kejriwal had appeared and argued in person. Follow Us Copyright © 2021 Bar and Bench. All Rights Reserved Powered by Quintype",
+  "clauses": [
+    {
+      "text": "The Delhi High Court on Thursday ordered social media intermediaries and search engines including Facebook, Google and X to take down/ remove all videos recordings of court proceedings before Justice Swarana Kanta sharma in the excise policy case in which Aam Aadmi Party (AAP) chief Arvind Kejriwal had appeared and argued in person.",
+      "type": "general",
+      "entities": [
+        "Thursday",
+        "Facebook, Google",
+        "Swarana Kanta",
+        "Aam Aadmi Party",
+        "Arvind Kejriwal",
+        "2021",
+        "Bench"
+      ]
+    },
+    {
+      "text": "Follow Us Copyright 2021 Bar and Bench.",
+      "type": "general",
+      "entities": [
+        "Thursday",
+        "Facebook, Google",
+        "Swarana Kanta",
+        "Aam Aadmi Party",
+        "Arvind Kejriwal",
+        "2021",
+        "Bench"
+      ]
+    },
+    {
+      "text": "All Rights Reserved Powered by Quintype",
+      "type": "general",
+      "entities": [
+        "Thursday",
+        "Facebook, Google",
+        "Swarana Kanta",
+        "Aam Aadmi Party",
+        "Arvind Kejriwal",
+        "2021",
+        "Bench"
+      ]
+    }
+  ],
+  "hash": "2d700f034c5dfa891676036637fcd1d945e2e2e04fdf47014f5d3d70fa5712da"
+}
