@@ -148,14 +148,21 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
             raise Exception(f"Preprocessing error: {exc}") from exc
         clauses = payload["clauses"]
         mongo_doc_payload = {
-            "source": "external",
+            "source": "domain",
             "source_type": "domain",
             "domain": normalized_domain,
             "title": Path(filename).name,
             "clauses": clauses,
             "hash": file_hash,
         }
-        stored_doc_id = await to_thread(store_document, mongo_doc_payload, "external")
+        logger.info("Saving to MongoDB...")
+        logger.info("Clauses count: %s", len(clauses))
+        try:
+            stored_doc_id = await to_thread(store_document, mongo_doc_payload, "domain")
+        except Exception:  # noqa: BLE001
+            logger.exception("Mongo Insert Failed")
+            raise
+
         if stored_doc_id:
             logger.info("[DOMAIN-%s] STEP 4A: Building graph for document_id=%s", normalized_domain, stored_doc_id)
             await to_thread(build_graph, stored_doc_id)
@@ -228,7 +235,17 @@ async def upload_domain_document(
         await _process_domain_upload(file_bytes, file.filename, normalized_domain, file_hash)
 
         status = UPLOAD_STATUS.get(file_hash, {})
-        extra = status.get("extra", {})
+        if status.get("status") == "error":
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "message": status.get("message", "Domain upload failed"),
+                    "file_hash": file_hash,
+                },
+            )
+
+        extra = status
 
         return JSONResponse(
             status_code=200,
@@ -241,6 +258,8 @@ async def upload_domain_document(
                 "clauses_count": extra.get("clauses_count", 0),
                 "raw_path": extra.get("raw_path", ""),
                 "processed_path": extra.get("processed_path", ""),
+                "stored_in_db": bool(extra.get("stored_in_db", False)),
+                "document_id": extra.get("document_id", ""),
             },
         )
 

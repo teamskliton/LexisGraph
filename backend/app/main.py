@@ -1,9 +1,17 @@
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env FIRST before any other imports that read env vars
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path, override=True)
+
+import os
 from contextlib import asynccontextmanager
 import sys
 import time
-from fastapi import FastAPI
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -29,6 +37,20 @@ logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
 
 
+def _print_env_diagnostic() -> None:
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    neo_uri = os.getenv("NEO4J_URI", "NOT SET")
+    neo_uri_disp = (neo_uri[:35] + "...") if len(neo_uri) > 35 else neo_uri
+    mongo_uri = os.getenv("MONGO_URI", "NOT SET")
+    mongo_disp = (mongo_uri[:30] + "...") if len(mongo_uri) > 30 else mongo_uri
+    print(f"[DIAG] Looking for .env at: {env_path}")
+    print(f"[DIAG] .env exists: {env_path.exists()}")
+    print(f"[DIAG] NEO4J_URI = {neo_uri_disp}")
+    print(f"[DIAG] NEO4J_USER = {os.getenv('NEO4J_USER', 'NOT SET')}")
+    print(f"[DIAG] NEO4J_DATABASE = {os.getenv('NEO4J_DATABASE', 'NOT SET')}")
+    print(f"[DIAG] MONGO_URI = {mongo_disp}")
+
+
 def configure_logging() -> None:
     """Configure application-wide logging."""
     root = logging.getLogger()
@@ -50,7 +72,6 @@ def configure_logging() -> None:
         uvicorn_logger.setLevel(logging.INFO)
 
     logging.getLogger("app").setLevel(logging.INFO)
-
 
 
 def start_scheduler() -> BackgroundScheduler:
@@ -87,6 +108,7 @@ def shutdown_scheduler() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Manage application startup and shutdown resources."""
+    _print_env_diagnostic()
     try:
         get_mongo_client().admin.command("ping")
         logger.info("Startup check: MongoDB connectivity OK")
@@ -133,7 +155,6 @@ def create_app() -> FastAPI:
     configure_logging()
     logger.info("[SYSTEM] Global logging configured at INFO level")
     logger.info("[SYSTEM] Terminal logging is active — all pipeline steps will be visible")
-
 
     app = FastAPI(
         title="LexisGraph Backend",

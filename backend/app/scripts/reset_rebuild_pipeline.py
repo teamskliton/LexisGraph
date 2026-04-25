@@ -117,7 +117,7 @@ def seed_data() -> dict:
 
 def clear_neo4j() -> None:
     """Delete all nodes and relationships from Neo4j."""
-    run_query("MATCH (n) DETACH DELETE n")
+    run_query("MATCH (n) DETACH DELETE n", write=True)
 
 
 def run_pipeline() -> dict:

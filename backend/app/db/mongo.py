@@ -1,7 +1,10 @@
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
+from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
@@ -9,20 +12,54 @@ from pymongo.errors import DuplicateKeyError
 
 logger = logging.getLogger(__name__)
 
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path, override=True)
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB_NAME = "lexisgraph"
 
 _CLIENT: MongoClient | None = None
+
+
+def _get_mongo_uri() -> str:
+    return os.getenv("MONGO_URI", "mongodb://localhost:27017")
+
+
+def _redact_mongo_uri(uri: str) -> str:
+    """Hide credentials before logging URI."""
+    try:
+        parsed = urlsplit(uri)
+        if "@" not in parsed.netloc:
+            return uri
+
+        _, host_part = parsed.netloc.rsplit("@", 1)
+        redacted_netloc = f"***:***@{host_part}"
+        return urlunsplit((parsed.scheme, redacted_netloc, parsed.path, parsed.query, parsed.fragment))
+    except Exception:  # noqa: BLE001
+        return "<invalid-mongo-uri>"
+
+
+def _ensure_collections(db: Database) -> None:
+    """Ensure all expected collections exist for Layer 1 storage."""
+    required_collections = ("user_documents", "external_documents", "domain_documents")
+    existing = set(db.list_collection_names())
+    for collection_name in required_collections:
+        if collection_name not in existing:
+            db.create_collection(collection_name)
+
+    db["user_documents"].create_index("hash", unique=True)
+    db["external_documents"].create_index("hash", unique=True)
+    db["domain_documents"].create_index("hash", unique=True)
 
 
 def get_client() -> MongoClient:
     """Create/reuse MongoDB client for local community server."""
     global _CLIENT
     if _CLIENT is None:
-        _CLIENT = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        mongo_uri = _get_mongo_uri()
+        logger.info("Mongo URI: %s", _redact_mongo_uri(mongo_uri))
+        _CLIENT = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
         _CLIENT.admin.command("ping")
-        logger.info("MongoDB client initialized at %s", MONGO_URI)
+        logger.info("MongoDB client initialized successfully")
     return _CLIENT
 
 
@@ -30,6 +67,7 @@ def get_database() -> Database:
     """Return lexisgraph database handle."""
     client = get_client()
     db = client[MONGO_DB_NAME]
+    _ensure_collections(db)
     logger.info("MongoDB connection initialized for database=%s", MONGO_DB_NAME)
     return db
 
@@ -43,18 +81,26 @@ def close_client() -> None:
         _CLIENT = None
 
 
+def get_user_documents_collection() -> Collection:
+    """Return user_documents collection handle."""
+    return get_database()["user_documents"]
+
+
+def get_external_documents_collection() -> Collection:
+    """Return external_documents collection handle."""
+    return get_database()["external_documents"]
+
+
 def get_collection(source: str) -> Collection:
     """Return source-specific collection handle."""
     db = get_database()
     if source == "user":
-        collection = db["user_documents"]
-        collection.create_index("hash", unique=True)
-        return collection
+        return db["user_documents"]
     if source == "external":
-        collection = db["external_documents"]
-        collection.create_index("hash", unique=True)
-        return collection
-    raise ValueError("source must be either 'user' or 'external'")
+        return db["external_documents"]
+    if source == "domain":
+        return db["domain_documents"]
+    raise ValueError("source must be one of: 'user', 'external', 'domain'")
 
 
 def document_hash_exists(source: str, content_hash: str) -> bool:
@@ -104,12 +150,16 @@ def store_document(data: dict, source: str) -> str | None:
         "date": data.get("date", ""),
         "priority": data.get("priority", ""),
         "clauses": data.get("clauses", []),
+        "embedding": data.get("embedding", []),
         "created_at": datetime.now(timezone.utc),
         "hash": data.get("hash", ""),
     }
 
     try:
+        logger.info("Saving to MongoDB...")
+        logger.info("Clauses count: %s", len(document.get("clauses", [])))
         result = collection.insert_one(document)
+        logger.info("Mongo Insert Success: %s", result.inserted_id)
         return str(result.inserted_id)
     except DuplicateKeyError as exc:
         logger.info(
@@ -118,3 +168,6 @@ def store_document(data: dict, source: str) -> str | None:
             content_hash,
         )
         return None
+    except Exception:  # noqa: BLE001
+        logger.exception("Mongo Insert Failed")
+        raise

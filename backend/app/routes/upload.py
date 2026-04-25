@@ -80,15 +80,27 @@ async def upload_document(file: UploadFile) -> dict:
         doc_id = ""
         stored_in_db = False
         if is_valid:
-            doc_id = await to_thread(store_document, document_payload, "user")
-            stored_in_db = bool(doc_id)
+            logger.info("Saving to MongoDB...")
+            logger.info("Clauses count: %s", len(document_payload.get("clauses", [])))
+            try:
+                doc_id = await to_thread(store_document, document_payload, "user")
+                stored_in_db = bool(doc_id)
+            except Exception:  # noqa: BLE001
+                logger.exception("Mongo Insert Failed")
+                raise
+
             if not stored_in_db:
                 logger.info("Skipping duplicate user document in MongoDB for hash=%s", file_hash)
             else:
                 logger.info("[UPLOAD] STEP 6A: Building graph for document_id=%s", doc_id)
                 await to_thread(build_graph, doc_id)
         else:
-            logger.warning("Pipeline validation failed for file=%s hash=%s; skipping DB store", file.filename, file_hash)
+            logger.warning(
+                "Pipeline validation failed for file=%s hash=%s; skipping DB store; clauses_count=%s",
+                file.filename,
+                file_hash,
+                len(processed_document.get("clauses", [])),
+            )
 
         logger.info(
             "[UPLOAD] STEP 6: Process completed raw_path=%s processed_path=%s hash=%s clauses=%s stored_in_db=%s",
