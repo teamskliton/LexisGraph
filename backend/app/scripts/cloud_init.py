@@ -51,7 +51,7 @@ def clear_mongo() -> None:
 
 
 def clear_neo4j() -> None:
-    run_query("MATCH (n) DETACH DELETE n")
+    run_query("MATCH (n) DETACH DELETE n", write=True)
 
 
 def seed_data() -> None:

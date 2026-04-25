@@ -20,7 +20,10 @@ async def build_graph_endpoint() -> dict:
         }
     except Exception as exc:  # noqa: BLE001
         logger.exception("Graph build failed")
-        raise HTTPException(status_code=500, detail="Graph build failed") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"Graph build failed: {exc}",
+        ) from exc
 
 
 @router.post("/build-similarity")

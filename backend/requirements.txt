@@ -14,4 +14,4 @@ reportlab
 neo4j
 numpy
 scikit-learn
-python-dotenv
+python-dotenv>=1.0.0
