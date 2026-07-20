@@ -15,37 +15,39 @@ LexisGraph addresses this by combining NLP, embeddings, and graph analytics to c
 ## 3. End-to-End Architecture
 
 ### Layer 1: Ingestion and Preprocessing
-- Inputs: user uploads, external legal/news/gazette sources, domain-specific uploads.
+- Inputs: User policy uploads (`.pdf`, `.docx`, `.txt`), domain-specific legal uploads.
 - Processing:
 	- text extraction from files/pages,
-	- text cleaning and noise removal,
+	- text cleaning and noise removal (preserving section numbers, dates, and legal thresholds),
 	- clause extraction using spaCy sentence flow + legal filters,
+	- grammatical dependency structure parsing (`nsubj`, `ROOT`, `dobj`/`pobj`),
 	- embedding generation using `all-MiniLM-L6-v2`.
 - Outputs:
 	- raw artifacts in `backend/data/raw/...`,
 	- processed JSON in `backend/data/processed/...`,
-	- document records in MongoDB (`user_documents`, `external_documents`).
+	- document records in MongoDB (`user_documents`, `external_documents`, `domain_documents`).
 
 ### Layer 2: Graph Construction and Linking
 - Reads processed clauses from MongoDB.
 - Builds/merges `Document` and `Clause` nodes in Neo4j.
 - Creates `HAS_CLAUSE` edges.
-- Creates semantic `SIMILAR_TO` edges between clauses using cosine similarity.
+- Creates semantic `SIMILAR_TO` edges between clauses using cosine similarity (configurable cap, default up to 500 clauses).
 
 ### Layer 3: Retrieval and Compliance Analysis
 - Retrieval:
 	- gets top vector matches from clause embeddings,
 	- expands with graph neighbors from Neo4j (`SIMILAR_TO`).
 - Compliance:
-	- compares user clauses to external clauses,
-	- combines vector and graph scores,
-	- labels each clause as `compliant` or `gap`.
+	- compares user policy clauses to reference legal clauses,
+	- combines vector and graph scores (`0.8 * vector + 0.2 * graph`),
+	- labels each clause as `compliant`, `partial`, or `gap`,
+	- generates natural language legal compliance reasoning summaries via LLM integration.
 
 ## 4. Current Technical Reality (Important)
-- Backend Layer 1/2/3 pipeline is operational.
-- OpenRouter key connectivity is validated from environment.
-- Current Layer 3 compliance response is algorithmic (vector + graph scores).
-- OpenRouter is currently available but not yet wired into compliance endpoint response text generation.
+- Backend Layer 1, Layer 2, and Layer 3 pipelines are fully operational.
+- Layer 1 preserves all legal numbers, section citations, and dates while performing spaCy dependency tree structure parsing.
+- Layer 2 graph similarity building has expanded limits (500 clauses) for comprehensive graph linking.
+- Layer 3 compliance check incorporates LLM natural language legal reasoning (`reasoning_summary`) per clause.
 
 ## 5. Full Directory Structure (System Directory)
 

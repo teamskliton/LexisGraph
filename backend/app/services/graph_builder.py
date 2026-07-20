@@ -16,7 +16,7 @@ from app.db.neo4j import run_query
 logger = logging.getLogger(__name__)
 
 _COLLECTIONS = ("user_documents", "external_documents", "domain_documents")
-_SIMILARITY_MAX_CLAUSES = 20
+_SIMILARITY_MAX_CLAUSES = 500
 _CLAUSE_TEXT_MAX = 2000
 
 
