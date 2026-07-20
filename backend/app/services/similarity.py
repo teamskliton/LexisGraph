@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def build_similarity_graph(
     similarity_threshold: float = 0.75,
     top_k: int = 3,
-    max_clauses: int = 20,
+    max_clauses: int = 500,
 ) -> dict:
     """Build semantic similarity links between clause nodes in Neo4j."""
     logger.info(

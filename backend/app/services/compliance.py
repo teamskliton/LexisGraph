@@ -4,17 +4,23 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from app.db.neo4j import run_query
 from app.services.graph_builder import generate_clause_id
+from app.services.llm_reasoning import generate_compliance_reasoning
 from app.services.retrieval import _collect_clauses
 
 logger = logging.getLogger(__name__)
 
 _SIMILARITY_THRESHOLD = 0.65
+_PARTIAL_THRESHOLD = 0.45
 _VECTOR_WEIGHT = 0.8
 _GRAPH_WEIGHT = 0.2
 
 
-def _collect_clause_embeddings(collection_name: str) -> list[dict]:
-    return _collect_clauses((collection_name,))
+def _collect_user_clauses() -> list[dict]:
+    return _collect_clauses(("user_documents",))
+
+
+def _collect_reference_clauses() -> list[dict]:
+    return _collect_clauses(("external_documents", "domain_documents"))
 
 
 def _best_graph_neighbor_score(clause_text: str) -> float:
@@ -37,10 +43,11 @@ def _best_graph_neighbor_score(clause_text: str) -> float:
     score = rows[0].get("score")
     return float(score) if isinstance(score, (int, float)) else 0.0
 
+
 def detect_compliance_gaps() -> list[dict]:
-    """Detect policy compliance using direct embedding similarity and graph context."""
-    user_clauses = _collect_clause_embeddings("user_documents")
-    external_clauses = _collect_clause_embeddings("external_documents")
+    """Detect policy compliance using direct embedding similarity, graph context, and LLM legal reasoning."""
+    user_clauses = _collect_user_clauses()
+    external_clauses = _collect_reference_clauses()
 
     if not user_clauses:
         logger.info("[COMPLIANCE] Gap detection complete clauses=0")
@@ -53,10 +60,19 @@ def detect_compliance_gaps() -> list[dict]:
                 "status": "gap",
                 "confidence": 0.0,
                 "matched_clause": None,
+                "vector_score": 0.0,
+                "graph_score": 0.0,
+                "reasoning_summary": generate_compliance_reasoning(
+                    policy_clause=item["text"],
+                    matched_clause=None,
+                    status="gap",
+                    vector_score=0.0,
+                    graph_score=0.0,
+                ),
             }
             for item in user_clauses
         ]
-        logger.info("[COMPLIANCE] Gap detection complete clauses=%s", len(results))
+        logger.info("[COMPLIANCE] Gap detection complete (no external clauses) clauses=%s", len(results))
         return results
 
     results_by_clause: list[dict] = []
@@ -83,7 +99,24 @@ def detect_compliance_gaps() -> list[dict]:
 
         graph_score = _best_graph_neighbor_score(user_text)
         combined_score = (_VECTOR_WEIGHT * best_score) + (_GRAPH_WEIGHT * graph_score)
-        status = "compliant" if combined_score >= _SIMILARITY_THRESHOLD else "gap"
+
+        if combined_score >= _SIMILARITY_THRESHOLD:
+            status = "compliant"
+        elif combined_score >= _PARTIAL_THRESHOLD:
+            status = "partial"
+        else:
+            status = "gap"
+
+        v_score = round(best_score, 4)
+        g_score = round(graph_score, 4)
+
+        reasoning = generate_compliance_reasoning(
+            policy_clause=user_text,
+            matched_clause=best_match,
+            status=status,
+            vector_score=v_score,
+            graph_score=g_score,
+        )
 
         results_by_clause.append(
             {
@@ -91,8 +124,9 @@ def detect_compliance_gaps() -> list[dict]:
                 "status": status,
                 "confidence": round(combined_score, 4),
                 "matched_clause": best_match,
-                "vector_score": round(best_score, 4),
-                "graph_score": round(graph_score, 4),
+                "vector_score": v_score,
+                "graph_score": g_score,
+                "reasoning_summary": reasoning,
             }
         )
 
