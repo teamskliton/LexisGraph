@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
+import { Clock, Search, Sparkles } from 'lucide-react';
 
 import { retrieveQuery } from '../api/endpoints';
 import Card from '../components/ui/Card';
@@ -11,7 +13,7 @@ import { truncate } from '../utils/formatters';
 const examples = [
   'data privacy obligations',
   'employee termination policy',
-  'GDPR compliance requirements'
+  'GDPR compliance requirements',
 ];
 
 const HISTORY_KEY = 'lexisgraph-search-history';
@@ -25,6 +27,7 @@ function loadHistory() {
 }
 
 export default function Retrieval() {
+  const [searchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [history, setHistory] = useState(loadHistory);
 
@@ -37,66 +40,109 @@ export default function Retrieval() {
       const updated = [q, ...history.filter((item) => item !== q)].slice(0, 10);
       setHistory(updated);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
-    }
+    },
   });
 
-  const payload = retrievalMutation.data || {};
-  const primary = payload.top_match || payload.primary_match || payload;
-  const related = payload.related_clauses || payload.related || [];
+  useEffect(() => {
+    const incoming = searchParams.get('q');
+    if (!incoming || incoming === query) return;
+    setQuery(incoming);
+    retrievalMutation.mutate(incoming);
+  }, [searchParams]);
 
+  const payload = retrievalMutation.data || {};
+  const results = Array.isArray(payload.results) ? payload.results : [];
+  const primary = results[0] || null;
+  const related = Array.isArray(primary?.related_clauses) ? primary.related_clauses : [];
   const canSearch = query.trim().length >= 3;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-      <div className="space-y-4">
-        <Card>
-          <h3 className="text-2xl font-semibold">Semantic Retrieval</h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search legal obligation, policy requirement, or regulation clause"
-              className="min-h-11 flex-1 rounded-full border border-borderColor bg-bgSecondary px-4"
-            />
-            <Button disabled={!canSearch} onClick={() => retrievalMutation.mutate(query)} loading={retrievalMutation.isPending}>
-              Search
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="space-y-5">
+        <Card className="p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="data-label">GraphRAG retrieval</p>
+              <h2 className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">Semantic Retrieval</h2>
+              <p className="mt-2 max-w-2xl text-sm text-[var(--text-secondary)]">
+                Search across processed policy and regulation clauses using the existing retrieval endpoint.
+              </p>
+            </div>
+            <Badge value={retrievalMutation.isPending ? 'Searching' : 'Ready'} tone={retrievalMutation.isPending ? 'warning' : 'success'} />
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 md:flex-row">
+            <label className="flex min-w-0 flex-1 items-center gap-3 rounded-[20px] border border-[var(--border-default)] bg-white px-5 shadow-sm transition focus-within:border-[var(--border-accent)] focus-within:shadow-[0_0_0_4px_var(--accent-blue-glow)]">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center text-[var(--text-muted)]">
+                <Search size={18} />
+              </span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && canSearch) retrievalMutation.mutate(query);
+                }}
+                placeholder="Search legal obligation, policy requirement, or regulation clause"
+                className="h-16 min-w-0 flex-1 border-0 bg-transparent pr-1 text-lg text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
+              />
+            </label>
+            <Button className="h-16 rounded-[20px] px-6 text-base" disabled={!canSearch} onClick={() => retrievalMutation.mutate(query)} loading={retrievalMutation.isPending}>
+              <Sparkles size={16} /> Search
             </Button>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {examples.map((ex) => (
-              <button key={ex} onClick={() => setQuery(ex)} className="rounded-full border border-borderColor px-3 py-1 text-xs text-textSecondary">
-                {ex}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {examples.map((example) => (
+              <button
+                key={example}
+                type="button"
+                onClick={() => setQuery(example)}
+                className="rounded-full border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-accent)] hover:text-[var(--text-primary)]"
+              >
+                {example}
               </button>
             ))}
           </div>
         </Card>
 
-        {primary?.text || primary?.clause ? (
-          <Card>
-            <div className="mb-2 flex items-center justify-between">
-              <h4 className="text-lg font-semibold">Top Match</h4>
+        {primary?.query_match ? (
+          <Card className="p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="data-label">Top result</p>
+                <h3 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">Closest Clause Match</h3>
+              </div>
               <Badge value="Top Match" tone="success" />
             </div>
-            <p className="text-sm">{primary.text || primary.clause}</p>
-            <div className="mt-3 space-y-1">
-              <p className="text-xs text-textMuted">Similarity score</p>
-              <ProgressBar value={(primary.similarity || primary.score || 0) * 100} color="var(--accent-primary)" />
+            <p className="rounded-2xl border border-[var(--border-default)] bg-[var(--bg-card-hover)] p-4 text-sm leading-7 text-[var(--text-primary)]">
+              {primary.query_match}
+            </p>
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                <span>Similarity score</span>
+                <span>{Math.round(Number(primary.similarity_score || 0) * 100)}%</span>
+              </div>
+              <ProgressBar value={Number(primary.similarity_score || 0) * 100} color="var(--accent-blue)" />
             </div>
           </Card>
         ) : (
-          <Card className="text-center text-textSecondary">
-            <p>Run a semantic search to view top match and related clauses.</p>
+          <Card className="grid min-h-[220px] place-items-center text-center text-[var(--text-secondary)]">
+            <div>
+              <Search className="mx-auto mb-3 text-[var(--text-muted)]" size={30} />
+              <p className="font-semibold text-[var(--text-primary)]">No retrieval run yet</p>
+              <p className="mt-1 text-sm">Run a semantic search to view the top match and related clauses.</p>
+            </div>
           </Card>
         )}
 
         {!!related.length && (
-          <Card>
-            <h4 className="text-lg font-semibold">Related Clauses</h4>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {related.map((item, idx) => (
-                <article key={`${idx}-${item.text || item.clause}`} className="rounded-lg border border-borderColor p-3 text-sm">
-                  <p>{truncate(item.text || item.clause || '-', 140)}</p>
-                  <p className="mt-2 text-xs text-textMuted">SIMILAR_TO | Score {(item.similarity || item.score || 0).toFixed(3)}</p>
+          <Card className="p-6">
+            <h3 className="text-xl font-semibold text-[var(--text-primary)]">Related Clauses</h3>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {related.map((item, index) => (
+                <article key={`${index}-${item}`} className="rounded-2xl border border-[var(--border-default)] bg-white p-4 text-sm leading-6">
+                  <p>{truncate(item || '-', 160)}</p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">SIMILAR_TO neighbor</p>
                 </article>
               ))}
             </div>
@@ -104,17 +150,28 @@ export default function Retrieval() {
         )}
       </div>
 
-      <Card>
-        <h4 className="text-lg font-semibold">Search History</h4>
-        <ul className="mt-3 space-y-2">
-          {history.map((item) => (
-            <li key={item}>
-              <button onClick={() => { setQuery(item); retrievalMutation.mutate(item); }} className="w-full rounded-lg border border-borderColor px-3 py-2 text-left text-sm hover:bg-bgSecondary">
-                {item}
-              </button>
-            </li>
-          ))}
-        </ul>
+      <Card className="h-fit p-6">
+        <div className="flex items-center gap-2">
+          <Clock size={18} className="text-[var(--text-muted)]" />
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Search History</h3>
+        </div>
+        <div className="mt-4 space-y-2">
+          {history.length ? history.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => {
+                setQuery(item);
+                retrievalMutation.mutate(item);
+              }}
+              className="w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2.5 text-left text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-accent)] hover:bg-[var(--bg-card-hover)] hover:text-[var(--text-primary)]"
+            >
+              {item}
+            </button>
+          )) : (
+            <p className="text-sm text-[var(--text-muted)]">Previous semantic searches will appear here.</p>
+          )}
+        </div>
       </Card>
     </div>
   );

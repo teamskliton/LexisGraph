@@ -4,17 +4,14 @@ export const ThemeContext = createContext(null);
 
 const STORAGE_KEY = 'lexisgraph-theme';
 
-const getSystemMode = () =>
-  window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem(STORAGE_KEY) || 'system');
-  const resolvedTheme = theme === 'system' ? getSystemMode() : theme;
+  const [theme, setTheme] = useState('light');
+  const resolvedTheme = 'light';
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle('dark', resolvedTheme === 'dark');
-    localStorage.setItem(STORAGE_KEY, theme);
+    root.classList.add('light');
+    localStorage.setItem(STORAGE_KEY, 'light');
   }, [theme, resolvedTheme]);
 
   const value = useMemo(() => ({ theme, resolvedTheme, setTheme }), [theme, resolvedTheme]);

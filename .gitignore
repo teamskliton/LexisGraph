@@ -16,6 +16,7 @@ backend/.env
 venv/
 ENV/
 env/
+backend/.venv/
 
 # Testing & Coverage
 .pytest_cache/
@@ -38,15 +39,17 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+.agents/
+external data/
 
-# Data & Ingestion Outputs (preserving structure via .gitkeep)
+# Data & Ingestion Outputs
 backend/data/raw/*
 !backend/data/raw/.gitkeep
 backend/data/processed/*
 !backend/data/processed/.gitkeep
 backend/data/domain_documents/*/processed/*.json
-backend/data/domain_documents/*/raw/*domain_test*.txt
-backend/data/domain_documents/*/raw/
+backend/data/domain_documents/*/raw/*
+!backend/data/domain_documents/*/raw/.gitkeep
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*

@@ -2,19 +2,18 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env FIRST before any other imports that read env vars
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=_env_path, override=True)
 
 import os
 from contextlib import asynccontextmanager
+import logging
 import sys
 import time
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-import logging
-from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db.mongo import close_client as close_mongo_client
 from app.db.mongo import get_client as get_mongo_client
@@ -29,9 +28,9 @@ from app.routes.graph import router as graph_router
 from app.routes.neo4j_test import router as neo4j_test_router
 from app.routes.retrieval import router as retrieval_router
 from app.routes.upload import router as upload_router
+from app.services.health import get_system_health
 from app.services.retrieval import is_model_loaded, preload_model
 from app.services.scraper import fetch_and_process_external_data
-
 
 logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
@@ -52,15 +51,12 @@ def _print_env_diagnostic() -> None:
 
 
 def configure_logging() -> None:
-    """Configure application-wide logging."""
     root = logging.getLogger()
     root.handlers.clear()
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.INFO)
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     handler.setFormatter(formatter)
     root.addHandler(handler)
     root.setLevel(logging.INFO)
@@ -74,8 +70,17 @@ def configure_logging() -> None:
     logging.getLogger("app").setLevel(logging.INFO)
 
 
+def _resolve_cors_origins() -> list[str]:
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    configured = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
+    if configured:
+        return [item.strip() for item in configured.split(",") if item.strip()]
+    if app_env == "production":
+        return ["http://localhost:5173", "http://127.0.0.1:5173"]
+    return ["*"]
+
+
 def start_scheduler() -> BackgroundScheduler:
-    """Create and start scheduler for periodic external data ingestion."""
     global _scheduler
     if _scheduler is not None and _scheduler.running:
         return _scheduler
@@ -97,7 +102,6 @@ def start_scheduler() -> BackgroundScheduler:
 
 
 def shutdown_scheduler() -> None:
-    """Shutdown scheduler gracefully on app exit."""
     global _scheduler
     if _scheduler is not None and _scheduler.running:
         _scheduler.shutdown(wait=False)
@@ -107,7 +111,6 @@ def shutdown_scheduler() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Manage application startup and shutdown resources."""
     _print_env_diagnostic()
     try:
         get_mongo_client().admin.command("ping")
@@ -151,10 +154,9 @@ async def lifespan(_: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """Application factory for FastAPI app."""
     configure_logging()
     logger.info("[SYSTEM] Global logging configured at INFO level")
-    logger.info("[SYSTEM] Terminal logging is active — all pipeline steps will be visible")
+    logger.info("[SYSTEM] Terminal logging is active - all pipeline steps will be visible")
 
     app = FastAPI(
         title="LexisGraph Backend",
@@ -163,10 +165,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Allow browser clients (including local file:// frontend) to call APIs.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_resolve_cors_origins(),
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -198,8 +199,8 @@ def create_app() -> FastAPI:
     app.include_router(neo4j_test_router, prefix="/api/v1", tags=["neo4j"])
 
     @app.get("/health", tags=["system"])
-    async def health_check() -> dict[str, str]:
-        return {"status": "ok"}
+    async def health_check() -> dict:
+        return get_system_health()
 
     return app
 

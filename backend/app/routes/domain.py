@@ -207,7 +207,7 @@ async def upload_domain_document(
     domain: str | None = Query(default=None),
 ) -> dict:
     try:
-        logger.info("🚀 DOMAIN UPLOAD API HIT")
+        logger.info("[DOMAIN] Upload API hit")
         logger.info("[DOMAIN] STEP 1: Upload request received")
 
 
