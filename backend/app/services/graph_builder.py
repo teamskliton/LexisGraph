@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 
 import numpy as np
 from bson import ObjectId
@@ -16,8 +17,10 @@ from app.db.neo4j import run_query
 logger = logging.getLogger(__name__)
 
 _COLLECTIONS = ("user_documents", "external_documents", "domain_documents")
-_SIMILARITY_MAX_CLAUSES = 500
+_SIMILARITY_MAX_CLAUSES = max(2, int(os.getenv("GRAPH_SIMILARITY_MAX_CLAUSES", "120")))
 _CLAUSE_TEXT_MAX = 2000
+_DEFAULT_SIMILARITY_THRESHOLD = float(os.getenv("GRAPH_SIMILARITY_THRESHOLD", "0.75"))
+_DEFAULT_SIMILARITY_TOP_K = max(1, int(os.getenv("GRAPH_SIMILARITY_TOP_K", "3")))
 
 
 def diagnose_graph_inputs():
@@ -127,9 +130,7 @@ def _test_write_persistence() -> bool:
         logger.info("[PERSIST TEST] Neo4j writes ARE persisting correctly")
         return True
 
-    logger.error(
-        "[PERSIST TEST] Neo4j writes are NOT persisting — session/transaction issue",
-    )
+    logger.error("[PERSIST TEST] Neo4j writes are NOT persisting - session/transaction issue")
     return False
 
 
@@ -235,7 +236,7 @@ def build_graph(document_id: str | None = None) -> dict:
     """Build a duplicate-safe graph from MongoDB processed documents."""
     diagnose_graph_inputs()
     logger.info("[GRAPH] Graph building started")
-    logger.info("🌐 GRAPH BUILD STARTED")
+    logger.info("[GRAPH] Graph build started")
     logger.info("[GRAPH] STEP 1: Graph build started")
     _ensure_constraints()
     _verify_neo4j_state("_ensure_constraints")
@@ -392,8 +393,8 @@ def _filter_common_dimension_clauses(clauses: list[dict]) -> list[dict]:
 
 
 def create_similarity_edges(
-    similarity_threshold: float = 0.75,
-    top_k: int = 3,
+    similarity_threshold: float = _DEFAULT_SIMILARITY_THRESHOLD,
+    top_k: int = _DEFAULT_SIMILARITY_TOP_K,
     max_clauses: int = _SIMILARITY_MAX_CLAUSES,
 ) -> dict:
     """Create SIMILAR_TO edges between semantically close clause nodes."""

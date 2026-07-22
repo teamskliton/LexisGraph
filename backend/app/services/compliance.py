@@ -45,57 +45,59 @@ def _best_graph_neighbor_score(clause_text: str) -> float:
 
 
 def detect_compliance_gaps() -> list[dict]:
-    """Detect policy compliance using direct embedding similarity, graph context, and LLM legal reasoning."""
+    """Detect policy compliance using direct embedding similarity, graph context, and optional LLM reasoning."""
     user_clauses = _collect_user_clauses()
-    external_clauses = _collect_reference_clauses()
+    reference_clauses = _collect_reference_clauses()
 
     if not user_clauses:
         logger.info("[COMPLIANCE] Gap detection complete clauses=0")
         return []
 
-    if not external_clauses:
-        results = [
-            {
-                "policy_clause": item["text"],
-                "status": "gap",
-                "confidence": 0.0,
-                "matched_clause": None,
-                "vector_score": 0.0,
-                "graph_score": 0.0,
-                "reasoning_summary": generate_compliance_reasoning(
-                    policy_clause=item["text"],
-                    matched_clause=None,
-                    status="gap",
-                    vector_score=0.0,
-                    graph_score=0.0,
-                ),
-            }
-            for item in user_clauses
-        ]
-        logger.info("[COMPLIANCE] Gap detection complete (no external clauses) clauses=%s", len(results))
+    if not reference_clauses:
+        results = []
+        for item in user_clauses:
+            reasoning = generate_compliance_reasoning(
+                policy_clause=item["text"],
+                matched_clause=None,
+                status="gap",
+                vector_score=0.0,
+                graph_score=0.0,
+            )
+            results.append(
+                {
+                    "policy_clause": item["text"],
+                    "status": "gap",
+                    "confidence": 0.0,
+                    "matched_clause": None,
+                    "vector_score": 0.0,
+                    "graph_score": 0.0,
+                    "reasoning_summary": reasoning,
+                }
+            )
+        logger.info("[COMPLIANCE] Gap detection complete (no reference clauses) clauses=%s", len(results))
         return results
 
     results_by_clause: list[dict] = []
-    external_by_dim: dict[int, list[dict]] = {}
-    for external_clause in external_clauses:
-        dimension = len(external_clause["embedding"])
-        external_by_dim.setdefault(dimension, []).append(external_clause)
+    reference_by_dim: dict[int, list[dict]] = {}
+    for reference_clause in reference_clauses:
+        dimension = len(reference_clause["embedding"])
+        reference_by_dim.setdefault(dimension, []).append(reference_clause)
 
     for user_clause in user_clauses:
         user_text = user_clause["text"]
         user_embedding = user_clause["embedding"]
-        candidate_externals = external_by_dim.get(len(user_embedding), [])
+        candidate_references = reference_by_dim.get(len(user_embedding), [])
 
         best_score = 0.0
         best_match = None
 
-        for external_clause in candidate_externals:
-            external_embedding = external_clause["embedding"]
-            score = float(cosine_similarity([user_embedding], [external_embedding])[0][0])
+        for reference_clause in candidate_references:
+            reference_embedding = reference_clause["embedding"]
+            score = float(cosine_similarity([user_embedding], [reference_embedding])[0][0])
 
             if score > best_score:
                 best_score = score
-                best_match = external_clause["text"]
+                best_match = reference_clause["text"]
 
         graph_score = _best_graph_neighbor_score(user_text)
         combined_score = (_VECTOR_WEIGHT * best_score) + (_GRAPH_WEIGHT * graph_score)
@@ -107,26 +109,27 @@ def detect_compliance_gaps() -> list[dict]:
         else:
             status = "gap"
 
-        v_score = round(best_score, 4)
-        g_score = round(graph_score, 4)
+        vector_score = round(best_score, 4)
+        graph_score = round(graph_score, 4)
+        confidence = round(combined_score, 4)
 
-        reasoning = generate_compliance_reasoning(
+        reasoning_summary = generate_compliance_reasoning(
             policy_clause=user_text,
             matched_clause=best_match,
             status=status,
-            vector_score=v_score,
-            graph_score=g_score,
+            vector_score=vector_score,
+            graph_score=graph_score,
         )
 
         results_by_clause.append(
             {
                 "policy_clause": user_text,
                 "status": status,
-                "confidence": round(combined_score, 4),
+                "confidence": confidence,
                 "matched_clause": best_match,
-                "vector_score": v_score,
-                "graph_score": g_score,
-                "reasoning_summary": reasoning,
+                "vector_score": vector_score,
+                "graph_score": graph_score,
+                "reasoning_summary": reasoning_summary,
             }
         )
 

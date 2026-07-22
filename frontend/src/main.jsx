@@ -31,7 +31,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 borderRadius: '12px',
                 background: 'var(--bg-card)',
                 color: 'var(--text-primary)',
-                border: '1px solid var(--border)'
+                border: '1px solid var(--border-default)'
               }
             }}
           />

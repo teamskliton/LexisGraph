@@ -5,21 +5,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        bgPrimary: 'var(--bg-primary)',
-        bgSecondary: 'var(--bg-secondary)',
+        bgPrimary: 'var(--bg-base)',
+        bgSecondary: 'var(--bg-surface)',
         bgCard: 'var(--bg-card)',
         textPrimary: 'var(--text-primary)',
         textSecondary: 'var(--text-secondary)',
         textMuted: 'var(--text-muted)',
-        accentPrimary: 'var(--accent-primary)',
-        accentSecondary: 'var(--accent-secondary)',
-        accentDanger: 'var(--accent-danger)',
+        accentPrimary: 'var(--accent-blue)',
+        accentSecondary: 'var(--accent-teal)',
+        accentDanger: 'var(--accent-gap)',
         accentWarning: 'var(--accent-warning)',
-        accentGraph: 'var(--accent-graph)',
-        borderColor: 'var(--border)'
+        accentGraph: 'var(--accent-graph-node)',
+        borderColor: 'var(--border-default)'
       },
       boxShadow: {
-        card: '0 12px 28px var(--shadow)'
+        card: 'var(--shadow-card)'
       },
       borderRadius: {
         card: '12px'

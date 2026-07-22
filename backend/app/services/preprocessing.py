@@ -57,7 +57,7 @@ def _get_nlp() -> Language:
         with _MODEL_LOCK:
             if _NLP is None:
                 logger.info("Loading spaCy model: %s", _SPACY_MODEL_NAME)
-                _NLP = spacy.load(_SPACY_MODEL_NAME)
+                _NLP = spacy.load(_SPACY_MODEL_NAME, disable=["parser"])
                 _NLP.max_length = 2_000_000
                 if "sentencizer" not in _NLP.pipe_names:
                     _NLP.add_pipe("sentencizer")
@@ -88,7 +88,7 @@ def clean_text(text: str, lowercase: bool = False) -> str:
     - Remove HTML tags
     - Remove obvious navigation fragments
     - Remove repeated header/footer-like lines
-    - Normalize whitespace and special characters (preserving numbers and legal symbols)
+    - Normalize whitespace and special characters
     """
     if not text or not text.strip():
         return ""
@@ -132,10 +132,12 @@ def clean_text(text: str, lowercase: bool = False) -> str:
 
     cleaned = "\n".join(filtered_lines)
 
-    # Normalize unusual symbols but preserve legal punctuation, numbers, and symbols.
+    # Normalize unusual symbols but preserve legal punctuation.
     cleaned = cleaned.replace("\u00a0", " ")
     cleaned = re.sub(r"[^\w\s\.,;:()\[\]\-/'\"%$]", " ", cleaned)
     cleaned = re.sub(r"\n+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\b\d+\b", "", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = cleaned.strip()
 
@@ -170,12 +172,6 @@ def is_legal_clause(text: str) -> bool:
         "if",
         "where",
         "subject to",
-        "section",
-        "act",
-        "rule",
-        "regulation",
-        "accordance",
-        "compliance",
     ]
     return any(word in value for word in keywords)
 
@@ -202,36 +198,7 @@ def _extract_clause_entities(nlp: Language, clause_text: str) -> list[str]:
     return entities
 
 
-def extract_structure(text: str, nlp: Language | None = None) -> tuple[str | None, str | None, str | None]:
-    """Extract grammatical subject (nsubj), action (ROOT verb), and object (dobj/pobj/attr) via spaCy dependency parsing."""
-    if not text or not text.strip():
-        return None, None, None
-
-    try:
-        nlp_model = nlp or _get_nlp()
-        doc = nlp_model(text)
-        subject_parts: list[str] = []
-        action_parts: list[str] = []
-        object_parts: list[str] = []
-
-        for token in doc:
-            if "subj" in token.dep_:
-                subject_parts.append(token.text)
-            elif token.pos_ in ("VERB", "AUX") and (token.dep_ == "ROOT" or not action_parts):
-                action_parts.append(token.text)
-            elif token.dep_ in ("dobj", "pobj", "attr", "acomp", "prep") or "obj" in token.dep_:
-                object_parts.append(token.text)
-
-        subject = " ".join(subject_parts) if subject_parts else None
-        action = " ".join(action_parts) if action_parts else None
-        obj = " ".join(object_parts) if object_parts else None
-
-        if subject or action or obj:
-            return subject, action, obj
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("Dependency parsing fallback triggered: %s", exc)
-
-    # Fallback to word splitting if parser returns empty components
+def extract_structure(text: str) -> tuple[str | None, str | None, str | None]:
     words = text.split()
     subject = words[0] if len(words) > 0 else None
     action = words[1] if len(words) > 1 else None
@@ -241,16 +208,20 @@ def extract_structure(text: str, nlp: Language | None = None) -> tuple[str | Non
 
 def preprocess_text(text: str, max_clauses: int = _DEFAULT_MAX_CLAUSES) -> list[dict]:
     """Preprocess legal text and emit clause metadata plus embeddings."""
-    logger.info("⚡ ===== PREPROCESS PIPELINE STARTED =====")
+    logger.info("� ===== PREPROCESS PIPELINE STARTED =====")
+    logger.info("�🔥 PREPROCESS FUNCTION CALLED")
     if not text or not text.strip():
         return []
 
     logger.info("[PREPROCESS] Input length: %s characters", len(text))
+    logger.info("[PREPROCESS] STEP 1: Input received")
 
     cleaned_text = clean_text(text)
     if not cleaned_text:
         return []
 
+    logger.info("[PREPROCESS] Cleaned text length: %s", len(cleaned_text))
+    logger.info("[PREPROCESS] STEP 2: Text cleaned length=%s", len(cleaned_text))
     nlp = _get_nlp()
     all_clauses: list[dict] = []
     clause_texts_for_embedding: list[str] = []
@@ -261,7 +232,12 @@ def preprocess_text(text: str, max_clauses: int = _DEFAULT_MAX_CLAUSES) -> list[
     duplicates_skipped = 0
 
     chunks = split_text_into_chunks(cleaned_text)
+    logger.info("[PREPROCESS] Total chunks created: %s", len(chunks))
+    logger.info("[PREPROCESS] STEP 3: Chunking complete total_chunks=%s", len(chunks))
     for index, chunk in enumerate(chunks, start=1):
+        logger.info("🔹 Processing chunk %s/%s", index, len(chunks))
+        clauses_before = len(all_clauses)
+        logger.info("[PREPROCESS] STEP 4: Processing chunk %s/%s", index, len(chunks))
         doc = nlp(chunk)
         for sent in doc.sents:
             total_extracted += 1
@@ -280,11 +256,10 @@ def preprocess_text(text: str, max_clauses: int = _DEFAULT_MAX_CLAUSES) -> list[
             seen_clause_hashes.add(clause_key)
 
             valid_clauses += 1
-            subject, action, obj = extract_structure(clause_text, nlp=nlp)
+            subject, action, obj = extract_structure(clause_text)
             all_clauses.append(
                 {
                     "id": f"C{len(all_clauses) + 1}",
-                    "clause_id": clause_key,
                     "text": clause_text,
                     "type": classify_clause(clause_text),
                     "subject": subject,
@@ -295,22 +270,43 @@ def preprocess_text(text: str, max_clauses: int = _DEFAULT_MAX_CLAUSES) -> list[
             )
             clause_texts_for_embedding.append(clause_text)
             if len(all_clauses) >= max_clauses:
+                logger.info("[PREPROCESS] Clause cap reached max_clauses=%s", max_clauses)
                 break
+        clauses_after = len(all_clauses)
+        logger.info("   → Extracted %s clauses from this chunk", clauses_after - clauses_before)
+        progress = int((index / len(chunks)) * 100) if chunks else 100
+        logger.info("📈 Progress: %s%%", progress)
         if len(all_clauses) >= max_clauses:
             break
 
     if all_clauses:
+        logger.info("⚡ Generating embeddings...")
+        logger.info("[PREPROCESS] STEP 5: Embedding generation started clauses=%s", len(all_clauses))
         embedder = get_embedding_model()
         vectors = embedder.encode(clause_texts_for_embedding)
         for index, clause in enumerate(all_clauses):
             clause["embedding"] = vectors[index].tolist()
+        logger.info("✅ Embeddings generated successfully")
 
     logger.info(
-        "[PREPROCESS] Completed: total=%s valid=%s final=%s",
+        "[PREPROCESS] STEP 6: Completed total_extracted=%s valid_clauses=%s filtered_out=%s duplicates_skipped=%s final_stored=%s",
         total_extracted,
         valid_clauses,
+        filtered_out,
+        duplicates_skipped,
         len(all_clauses),
     )
+    logger.info("[PREPROCESS] Raw clauses: %s", total_extracted)
+    logger.info("[PREPROCESS] After filtering: %s", valid_clauses)
+    logger.info("[PREPROCESS] Removed noise: %s", filtered_out)
+    logger.info("Total clauses extracted: %s", total_extracted)
+    logger.info("Valid clauses: %s", valid_clauses)
+    logger.info("Final stored: %s", len(all_clauses))
+    final_clauses = all_clauses
+    logger.info("🎉 ===== PREPROCESS COMPLETED =====")
+    logger.info("📊 Final clauses stored: %s", len(final_clauses))
+    logger.info("📉 Reduction: %s → %s", total_extracted, len(final_clauses))
+    logger.info("📁 JSON saved successfully and ready for Layer 2")
     return all_clauses
 
 

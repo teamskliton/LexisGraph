@@ -16,6 +16,12 @@ export default class ErrorBoundary extends React.Component {
     console.error('Page error', err);
   }
 
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false });
+    }
+  }
+
   render() {
     if (this.state.hasError) {
       return (
