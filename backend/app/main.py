@@ -35,6 +35,7 @@ from app.routes.graph import router as graph_router
 from app.routes.neo4j_test import router as neo4j_test_router
 from app.routes.retrieval import router as retrieval_router
 from app.routes.upload import router as upload_router
+from app.routes.organizations import router as organizations_router
 from app.services.health import get_system_health
 from app.services.retrieval import is_model_loaded, preload_model
 from app.services.scraper import fetch_and_process_external_data
@@ -251,6 +252,7 @@ def create_app() -> FastAPI:
     app.include_router(compliance_router, prefix="/api/v1", tags=["compliance"])
     app.include_router(retrieval_router, prefix="/api/v1", tags=["retrieval"])
     app.include_router(neo4j_test_router, prefix="/api/v1", tags=["neo4j"])
+    app.include_router(organizations_router)
 
     @app.get("/", tags=["system"])
     async def root():
