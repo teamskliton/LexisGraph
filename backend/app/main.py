@@ -19,6 +19,13 @@ from app.db.mongo import close_client as close_mongo_client
 from app.db.mongo import get_client as get_mongo_client
 from app.db.neo4j import close_driver as close_neo4j_driver
 from app.db.neo4j import test_connection as test_neo4j_connection
+from app.db.postgres import close_engine as close_postgres_engine
+from app.db.postgres import test_connection as test_postgres_connection
+from app.db.qdrant import close_client as close_qdrant_client
+from app.db.qdrant import test_connection as test_qdrant_connection
+from app.db.redis_client import close_client as close_redis_client
+from app.db.redis_client import test_connection as test_redis_connection
+from app.routes.auth import router as auth_router
 from app.routes.compliance import router as compliance_router
 from app.routes.debug import router as debug_router
 from app.routes.domain import router as domain_router
@@ -112,18 +119,49 @@ def shutdown_scheduler() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _print_env_diagnostic()
+
+    # ── MongoDB (existing) ────────────────────────────────────────────────────
     try:
         get_mongo_client().admin.command("ping")
         logger.info("Startup check: MongoDB connectivity OK")
     except Exception:  # noqa: BLE001
         logger.exception("Startup check: MongoDB connectivity FAILED")
 
+    # ── Neo4j (existing) ──────────────────────────────────────────────────────
     try:
         test_neo4j_connection()
         logger.info("Startup check: Neo4j connectivity OK")
     except Exception:  # noqa: BLE001
         logger.exception("Startup check: Neo4j connectivity FAILED")
 
+    # ── PostgreSQL (new) ──────────────────────────────────────────────────────
+    try:
+        if test_postgres_connection():
+            logger.info("Startup check: PostgreSQL connectivity OK")
+        else:
+            logger.warning("Startup check: PostgreSQL connectivity FAILED")
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup check: PostgreSQL connectivity FAILED")
+
+    # ── Qdrant (new) ──────────────────────────────────────────────────────────
+    try:
+        if test_qdrant_connection():
+            logger.info("Startup check: Qdrant connectivity OK")
+        else:
+            logger.warning("Startup check: Qdrant connectivity FAILED")
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup check: Qdrant connectivity FAILED")
+
+    # ── Redis (new) ───────────────────────────────────────────────────────────
+    try:
+        if test_redis_connection():
+            logger.info("Startup check: Redis connectivity OK")
+        else:
+            logger.warning("Startup check: Redis connectivity FAILED")
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup check: Redis connectivity FAILED")
+
+    # ── Embedding model ───────────────────────────────────────────────────────
     try:
         preload_model()
         logger.info("Startup check: embedding model loaded=%s", is_model_loaded())
@@ -151,6 +189,21 @@ async def lifespan(_: FastAPI):
         close_mongo_client()
     except Exception:  # noqa: BLE001
         logger.exception("Failed to close MongoDB client")
+
+    try:
+        close_postgres_engine()
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to dispose PostgreSQL engine")
+
+    try:
+        close_qdrant_client()
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to close Qdrant client")
+
+    try:
+        close_redis_client()
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to close Redis client")
 
 
 def create_app() -> FastAPI:
@@ -188,6 +241,7 @@ def create_app() -> FastAPI:
         )
         return response
 
+    app.include_router(auth_router, tags=["auth"])
     app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
     app.include_router(fetch_router, prefix="/api/v1", tags=["fetch"])
     app.include_router(debug_router, prefix="/api/v1", tags=["debug"])
@@ -197,6 +251,17 @@ def create_app() -> FastAPI:
     app.include_router(compliance_router, prefix="/api/v1", tags=["compliance"])
     app.include_router(retrieval_router, prefix="/api/v1", tags=["retrieval"])
     app.include_router(neo4j_test_router, prefix="/api/v1", tags=["neo4j"])
+
+    @app.get("/", tags=["system"])
+    async def root():
+        return {
+        "name": "LexisGraph Backend",
+        "version": "0.1.0",
+        "status": "running",
+        "docs": "/docs",
+        "health": "/health",
+        "api": "/api/v1"
+    }
 
     @app.get("/health", tags=["system"])
     async def health_check() -> dict:
