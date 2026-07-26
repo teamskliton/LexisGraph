@@ -65,6 +65,59 @@ class UserResponse(UserBase):
 
 
 # ---------------------------------------------------------------------------
+# Organization schemas
+# ---------------------------------------------------------------------------
+
+
+class OrganizationBase(BaseModel):
+    """Shared fields for Organization create/update schemas."""
+
+    name: str = Field(..., min_length=1, max_length=150, description="Organization name")
+    description: str | None = Field(None, max_length=500, description="Organization description")
+    industry: str | None = Field(None, max_length=100, description="Industry the organization operates in")
+    website: str | None = Field(None, max_length=255, description="Organization website URL")
+    logo_url: str | None = Field(None, max_length=500, description="URL to the organization logo")
+
+
+class OrganizationCreate(OrganizationBase):
+    """
+    Payload for creating a new organization.
+
+    ``created_by`` is set from the authenticated user, not provided in the payload.
+    """
+
+
+class OrganizationUpdate(BaseModel):
+    """
+    Partial payload for updating an organization.
+
+    All fields are optional — only provided fields are updated.
+    """
+
+    name: str | None = Field(None, min_length=1, max_length=150, description="Organization name")
+    description: str | None = Field(None, max_length=500, description="Organization description")
+    industry: str | None = Field(None, max_length=100, description="Industry the organization operates in")
+    website: str | None = Field(None, max_length=255, description="Organization website URL")
+    logo_url: str | None = Field(None, max_length=500, description="URL to the organization logo")
+
+
+class OrganizationResponse(OrganizationBase):
+    """
+    Public organization representation returned by the API.
+
+    ``from_attributes=True`` enables direct conversion from SQLAlchemy model instances.
+    Excludes internal SQLAlchemy fields.
+    """
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: uuid.UUID = Field(..., description="Server-generated UUID4")
+    created_by: uuid.UUID = Field(..., description="UUID of the user who created this organization")
+    created_at: datetime = Field(..., description="UTC timestamp of creation")
+    updated_at: datetime = Field(..., description="UTC timestamp of last update")
+
+
+# ---------------------------------------------------------------------------
 # JWT / token schemas
 # ---------------------------------------------------------------------------
 

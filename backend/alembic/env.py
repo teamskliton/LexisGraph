@@ -49,7 +49,7 @@ config.set_main_option("sqlalchemy.url", DATABASE_URL)
 # ----------------------------------------------------------------------
 # Import all models so autogenerate can inspect their schemas
 # ----------------------------------------------------------------------
-from app.db.models import User  # noqa: F402
+import app.db.models  # noqa: F402
 
 # ----------------------------------------------------------------------
 # Target metadata — used by ``autogenerate`` to detect model changes
