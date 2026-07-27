@@ -13,27 +13,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function OrganizationsPage() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchOrganizations = async () => {
-    try {
-      setIsLoading(true);
-      const data = await organizationsService.getOrganizations();
-      setOrganizations(data);
-    } catch (error) {
-      console.error("Failed to fetch organizations:", error);
-      toast.error("Failed to load organizations. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchOrganizations();
+    // Initial load: isLoading already defaults to true, so we only setState
+    // after the async work completes (avoids synchronous setState in effect).
+    let active = true;
+    (async () => {
+      try {
+        const data = await organizationsService.getOrganizations();
+        if (active) setOrganizations(data);
+      } catch (error) {
+        console.error("Failed to fetch organizations:", error);
+        toast.error("Failed to load organizations. Please try again.");
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleCreateNew = () => {
@@ -127,7 +130,7 @@ export default function OrganizationsPage() {
           </div>
           <h2 className="text-2xl font-semibold tracking-tight mb-2">No organizations found</h2>
           <p className="text-muted-foreground max-w-[500px] mb-8">
-            You don't belong to any organizations yet. Create your first organization to start managing your resources.
+            You have no organizations yet. Create your first organization to start managing your resources.
           </p>
           <Button onClick={handleCreateNew} size="lg">
             <Plus className="mr-2 h-4 w-4" />

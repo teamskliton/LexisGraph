@@ -18,6 +18,12 @@ ENV/
 env/
 backend/.venv/
 
+# Uploaded document files (local storage) — keep dir, ignore contents
+backend/storage/uploads/regulations/*
+backend/storage/uploads/policies/*
+!backend/storage/uploads/regulations/.gitkeep
+!backend/storage/uploads/policies/.gitkeep
+
 # Testing & Coverage
 .pytest_cache/
 .coverage

@@ -9,7 +9,7 @@ import { loginSchema, LoginInput } from "@/services/auth-service";
 import { useAuth } from "@/context/auth-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Eye, EyeOff, ShieldCheck, Scale, Network, ArrowRight, Loader2 } from "lucide-react";
 

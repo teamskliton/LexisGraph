@@ -34,10 +34,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const profile = await authService.getCurrentUser();
           setUser(profile);
-        } catch (error) {
-          console.error("Failed to load user profile", error);
-          // Token might be expired or invalid, clear it
-          removeToken();
+        } catch (error: unknown) {
+          // Expected when there is no valid session yet (no token) or the
+          // token has expired — the axios 401 interceptor already cleared
+          // the stale token, so we just reset state here without the loud
+          // AxiosError dump in the console.
+          const status = (error as { response?: { status?: number } })?.response
+            ?.status;
+          if (status !== 401) {
+            console.error("Failed to load user profile", error);
+          }
           setTokenState(null);
           setUser(null);
         }
@@ -59,8 +65,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       toast.success("Successfully logged in!");
       router.push("/dashboard");
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || "Invalid credentials. Please try again.";
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      const errorMsg = axiosError.response?.data?.detail || "Invalid credentials. Please try again.";
       toast.error(errorMsg);
       throw error;
     } finally {
@@ -72,12 +79,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       // Remove confirm_password before sending to API
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { confirm_password, ...registerPayload } = data;
       await authService.register(registerPayload);
       toast.success("Registration successful! You can now log in.");
       router.push("/login");
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || "Registration failed. Please try again.";
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      const errorMsg = axiosError.response?.data?.detail || "Registration failed. Please try again.";
       toast.error(errorMsg);
       throw error;
     } finally {

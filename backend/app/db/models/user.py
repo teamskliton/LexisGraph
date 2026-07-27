@@ -107,5 +107,13 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    # Relationship to documents uploaded by this user.
+    documents: Mapped[list["Document"]] = relationship(
+        "Document",
+        back_populates="uploader",
+        lazy="select",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, username={self.username!r})>"

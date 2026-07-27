@@ -12,6 +12,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -36,6 +37,7 @@ export function OrganizationCard({
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
             {organization.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={organization.logo_url}
                 alt={organization.name}
@@ -63,21 +65,23 @@ export function OrganizationCard({
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+            <DropdownMenuGroup>
+    <DropdownMenuLabel>Actions</DropdownMenuLabel>
 
-            <DropdownMenuSeparator />
+    <DropdownMenuSeparator />
 
-            <DropdownMenuItem onClick={() => onEdit(organization)}>
-              Edit Organization
-            </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => onEdit(organization)}>
+                      Edit Organization
+                </DropdownMenuItem>
 
             <DropdownMenuItem
-              variant="destructive"
-              onClick={() => onDelete(organization.id)}
-            >
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
+                  variant="destructive"
+                  onClick={() => onDelete(organization.id)}
+                  >
+                      Delete
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+</DropdownMenuContent>
         </DropdownMenu>
       </CardHeader>
 

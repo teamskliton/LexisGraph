@@ -28,6 +28,7 @@ from app.db.redis_client import test_connection as test_redis_connection
 from app.routes.auth import router as auth_router
 from app.routes.compliance import router as compliance_router
 from app.routes.debug import router as debug_router
+from app.routes.documents import router as documents_router
 from app.routes.domain import router as domain_router
 from app.routes.export import router as export_router
 from app.routes.fetch import router as fetch_router
@@ -243,16 +244,9 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(auth_router, tags=["auth"])
-    app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
-    app.include_router(fetch_router, prefix="/api/v1", tags=["fetch"])
-    app.include_router(debug_router, prefix="/api/v1", tags=["debug"])
-    app.include_router(export_router, prefix="/api/v1", tags=["export"])
-    app.include_router(domain_router, prefix="/api/v1", tags=["domain"])
-    app.include_router(graph_router, prefix="/api/v1", tags=["graph"])
-    app.include_router(compliance_router, prefix="/api/v1", tags=["compliance"])
-    app.include_router(retrieval_router, prefix="/api/v1", tags=["retrieval"])
-    app.include_router(neo4j_test_router, prefix="/api/v1", tags=["neo4j"])
     app.include_router(organizations_router)
+    app.include_router(documents_router, tags=["documents"])
+    app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
 
     @app.get("/", tags=["system"])
     async def root():

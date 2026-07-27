@@ -105,5 +105,13 @@ class Organization(Base):
         lazy="select",
     )
 
+    # Relationship to documents belonging to this organization.
+    documents: Mapped[list["Document"]] = relationship(
+        "Document",
+        back_populates="organization",
+        lazy="select",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         return f"<Organization(id={self.id}, name={self.name!r})>"
