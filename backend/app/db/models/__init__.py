@@ -6,9 +6,10 @@ Import models here to make them available for Alembic autogenerate.
 
 Usage
 -----
-    from app.db.models import User, Organization
+    from app.db.models import User, Organization, Document
 """
 from app.db.models.user import User
 from app.db.models.organization import Organization
+from app.db.models.document import Document, DocumentType, ProcessingStatus
 
-__all__ = ["User", "Organization"]
+__all__ = ["User", "Organization", "Document", "DocumentType", "ProcessingStatus"]

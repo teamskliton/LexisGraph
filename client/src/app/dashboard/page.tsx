@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -20,6 +21,7 @@ import {
 
 function DashboardContent() {
   const { user, logout } = useAuth();
+  const router = useRouter();
 
   return (
     <div className="min-h-screen bg-background">
@@ -188,7 +190,10 @@ function DashboardContent() {
               <CardDescription>Select a workspace tool to begin analyzing documents</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="border border-border/50 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all p-4 rounded-xl space-y-2 cursor-pointer group">
+              <div
+                onClick={() => router.push("/upload")}
+                className="border border-border/50 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all p-4 rounded-xl space-y-2 cursor-pointer group"
+              >
                 <div className="h-9 w-9 rounded-lg bg-indigo-500/10 text-indigo-500 group-hover:bg-indigo-500/20 transition-all flex items-center justify-center">
                   <FileText className="h-4 w-4" />
                 </div>

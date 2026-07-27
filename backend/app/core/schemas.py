@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -144,3 +145,79 @@ class TokenPayload(BaseModel):
     exp: datetime | None = Field(default=None, description="Expiration timestamp")
     iat: datetime | None = Field(default=None, description="Issued-at timestamp")
     type: str | None = Field(default=None, description="Token type (e.g. ``access``)")
+
+
+# ---------------------------------------------------------------------------
+# Document schemas
+# ---------------------------------------------------------------------------
+
+
+class DocumentType(str, Enum):
+    """Document type classification."""
+
+    REGULATION = "REGULATION"
+    POLICY = "POLICY"
+
+
+class ProcessingStatus(str, Enum):
+    """Document processing status."""
+
+    UPLOADED = "UPLOADED"
+    PROCESSING = "PROCESSING"
+    PROCESSED = "PROCESSED"
+    FAILED = "FAILED"
+
+
+class DocumentBase(BaseModel):
+    """Shared fields for Document schemas."""
+
+    original_filename: str = Field(..., description="Original name of the uploaded file")
+    stored_filename: str = Field(..., description="Server-generated storage name")
+    file_path: str = Field(..., description="Full path to the stored file")
+    file_size: int = Field(..., description="Size of the file in bytes")
+    mime_type: str = Field(..., description="MIME type of the file")
+    checksum: str = Field(..., description="SHA-256 checksum of the file")
+    document_type: DocumentType = Field(..., description="Document type: REGULATION or POLICY")
+
+
+class DocumentResponse(DocumentBase):
+    """
+    Document response returned by the API.
+
+    ``from_attributes=True`` enables direct conversion from SQLAlchemy model instances.
+    """
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: uuid.UUID = Field(..., description="Server-generated UUID4")
+    organization_id: uuid.UUID = Field(..., description="Organization this document belongs to")
+    uploaded_by: uuid.UUID = Field(..., description="UUID of the user who uploaded this document")
+    processing_status: ProcessingStatus = Field(
+        ..., description="Processing status: UPLOADED, PROCESSING, PROCESSED, FAILED"
+    )
+    progress: int = Field(default=0, description="Processing progress percentage (0-100)")
+    current_step: str | None = Field(default=None, description="Active pipeline step label")
+    processing_started_at: datetime | None = Field(default=None, description="UTC timestamp when processing started")
+    processed_at: datetime | None = Field(default=None, description="UTC timestamp of terminal state")
+    error_message: str | None = Field(default=None, description="Error message if processing failed")
+    created_at: datetime = Field(..., description="UTC timestamp of upload")
+    updated_at: datetime = Field(..., description="UTC timestamp of last update")
+
+
+class DocumentStatusResponse(BaseModel):
+    """
+    Slim status-only response for ``GET /documents/{id}/status``.
+
+    Exposes the fields needed by the client to render a progress indicator
+    without returning the full document payload.
+    """
+
+    model_config = ConfigDict(from_attributes=False)
+
+    document_id: uuid.UUID = Field(..., description="UUID of the document")
+    status: ProcessingStatus = Field(..., description="Current processing status")
+    progress: int = Field(..., description="Processing progress percentage (0-100)")
+    current_step: str | None = Field(default=None, description="Active pipeline step label")
+    error_message: str | None = Field(default=None, description="Error message if status is FAILED")
+    processing_started_at: datetime | None = Field(default=None, description="UTC timestamp when processing started")
+    processed_at: datetime | None = Field(default=None, description="UTC timestamp of terminal state")
