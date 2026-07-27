@@ -48,13 +48,13 @@ def _build_prompt(
 
 
 def _openrouter_model_candidates() -> list[str]:
-    configured = _env("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+    configured = _env("OPENROUTER_MODEL", "openrouter/auto")
     candidates = [
         configured,
-        "meta-llama/llama-3.1-8b-instruct:free",
+        "openrouter/auto",
+        "meta-llama/llama-3.1-8b-instruct",
         "google/gemini-2.0-flash-001",
         "openai/gpt-4o-mini",
-        "openai/gpt-4o",
     ]
     deduped: list[str] = []
     for model in candidates:
@@ -132,9 +132,12 @@ def _gemini_reasoning(prompt: str) -> str | None:
         return None
 
     candidate_models = [
-        _env("GEMINI_MODEL", "gemini-1.5-flash"),
+        _env("GEMINI_MODEL", "gemini-flash-latest"),
+        "gemini-flash-latest",
+        "gemma-4-26b-a4b-it",
+        "gemma-4-31b-it",
+        "gemini-2.0-flash-lite",
         "gemini-2.0-flash",
-        "gemini-1.5-pro",
     ]
     timeout_seconds = float(_env("GEMINI_TIMEOUT_SECONDS", "10") or "10")
 

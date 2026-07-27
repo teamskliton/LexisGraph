@@ -189,6 +189,7 @@ def _store_in_qdrant(processed: dict, document: Document) -> int:
         document_id=str(document.id),
         title=processed.get("title", document.original_filename),
         domain=processed.get("domain", _DEFAULT_DOMAIN),
+        organization_id=str(document.organization_id),
     )
     logger.info(
         "Qdrant store complete: document_id=%s points=%s",
