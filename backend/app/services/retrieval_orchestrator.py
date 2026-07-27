@@ -97,23 +97,25 @@ def _retrieve_from_qdrant(
         )
 
     try:
-        results = client.search(
+        response = client.query_points(
             collection_name=COLLECTION_USER,
-            query_vector=query_vector,
+            query=query_vector,
             query_filter=query_filter,
             limit=top_k,
         )
+        results = response.points
     except Exception as exc:
         logger.warning(
-            "Qdrant search with organization_id filter failed or collection empty: %s. Falling back to unfiltered search.",
+            "Qdrant query_points with organization_id filter failed or collection empty: %s. Falling back to unfiltered search.",
             exc,
         )
         try:
-            results = client.search(
+            response = client.query_points(
                 collection_name=COLLECTION_USER,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=top_k,
             )
+            results = response.points
         except Exception:
             logger.exception("Qdrant vector search failed completely.")
             return []

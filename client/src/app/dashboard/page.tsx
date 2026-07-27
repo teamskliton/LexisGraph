@@ -191,22 +191,25 @@ function DashboardContent() {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div
-                onClick={() => router.push("/upload")}
+                onClick={() => router.push("/chat")}
                 className="border border-border/50 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all p-4 rounded-xl space-y-2 cursor-pointer group"
               >
                 <div className="h-9 w-9 rounded-lg bg-indigo-500/10 text-indigo-500 group-hover:bg-indigo-500/20 transition-all flex items-center justify-center">
-                  <FileText className="h-4 w-4" />
+                  <Activity className="h-4 w-4" />
                 </div>
-                <h4 className="text-sm font-semibold text-foreground">Compliance Auditor</h4>
-                <p className="text-xs text-muted-foreground">Upload corporate guidelines and cross-match against legal benchmarks.</p>
+                <h4 className="text-sm font-semibold text-foreground">AI Chat Assistant</h4>
+                <p className="text-xs text-muted-foreground">Interactive legal RAG chat powered by Qdrant vectors and Neo4j graph relations.</p>
               </div>
 
-              <div className="border border-border/50 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all p-4 rounded-xl space-y-2 cursor-pointer group">
+              <div
+                onClick={() => router.push("/upload")}
+                className="border border-border/50 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all p-4 rounded-xl space-y-2 cursor-pointer group"
+              >
                 <div className="h-9 w-9 rounded-lg bg-violet-500/10 text-violet-500 group-hover:bg-violet-500/20 transition-all flex items-center justify-center">
-                  <GitBranch className="h-4 w-4" />
+                  <FileText className="h-4 w-4" />
                 </div>
-                <h4 className="text-sm font-semibold text-foreground">Knowledge Explorer</h4>
-                <p className="text-xs text-muted-foreground">Query compliance graphs and interact with Neo4j relational networks.</p>
+                <h4 className="text-sm font-semibold text-foreground">Document Upload</h4>
+                <p className="text-xs text-muted-foreground">Upload corporate guidelines and cross-match against legal benchmarks.</p>
               </div>
             </CardContent>
           </Card>

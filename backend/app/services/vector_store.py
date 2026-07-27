@@ -59,6 +59,7 @@ def _clause_to_point(
     document_id: str,
     title: str,
     domain: str,
+    organization_id: str | None = None,
 ) -> PointStruct | None:
     """Convert a preprocessed clause dict to a Qdrant PointStruct.
 
@@ -74,17 +75,21 @@ def _clause_to_point(
     # MD5 is 32 hex chars — exactly what uuid.UUID(hex=...) expects.
     point_uuid = str(uuid.UUID(clause_id))
 
+    payload = {
+        "clause_id": clause_id,
+        "document_id": document_id,
+        "text": text[:_TEXT_SNIPPET_MAX],
+        "type": str(clause.get("type") or "general"),
+        "title": title,
+        "domain": domain,
+    }
+    if organization_id:
+        payload["organization_id"] = str(organization_id)
+
     return PointStruct(
         id=point_uuid,
         vector=embedding,
-        payload={
-            "clause_id": clause_id,
-            "document_id": document_id,
-            "text": text[:_TEXT_SNIPPET_MAX],
-            "type": str(clause.get("type") or "general"),
-            "title": title,
-            "domain": domain,
-        },
+        payload=payload,
     )
 
 
@@ -94,6 +99,7 @@ def store_clauses_in_qdrant(
     document_id: str,
     title: str,
     domain: str,
+    organization_id: str | None = None,
     collection: str = COLLECTION_USER,
     batch_size: int = 64,
 ) -> int:
@@ -108,6 +114,8 @@ def store_clauses_in_qdrant(
         PostgreSQL UUID string of the parent document (stored as payload).
     title, domain:
         Document metadata stored in the point payload.
+    organization_id:
+        PostgreSQL UUID string of the parent organization.
     collection:
         Qdrant collection name (default: ``user_clauses``).
     batch_size:
@@ -123,7 +131,7 @@ def store_clauses_in_qdrant(
 
     points: list[PointStruct] = []
     for clause in clauses:
-        point = _clause_to_point(clause, document_id, title, domain)
+        point = _clause_to_point(clause, document_id, title, domain, organization_id)
         if point is not None:
             points.append(point)
 
