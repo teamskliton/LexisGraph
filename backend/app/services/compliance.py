@@ -24,24 +24,28 @@ def _collect_reference_clauses() -> list[dict]:
 
 
 def _best_graph_neighbor_score(clause_text: str) -> float:
+    """Check if the clause has structural graph context (parent document, neighbors).
+
+    Returns 1.0 if the clause has structural context in the graph, 0.0 otherwise.
+    Neo4j is NEVER used for semantic similarity (no SIMILAR_TO).
+    """
     clause_id = generate_clause_id(clause_text)
     query = """
-    MATCH (c:Clause {id: $id})-[r:SIMILAR_TO]->(n:Clause)
-    RETURN r.score AS score
-    ORDER BY r.score DESC
+    MATCH (d:Document)-[:HAS_CLAUSE]->(c:Clause {id: $id})
+    RETURN count(d) AS doc_count
     LIMIT 1
     """
     try:
         rows = run_query(query, {"id": clause_id})
     except Exception:  # noqa: BLE001
-        logger.warning("Skipping graph similarity for clause_id=%s due to Neo4j query failure", clause_id)
+        logger.warning("Skipping graph context check for clause_id=%s due to Neo4j query failure", clause_id)
         return 0.0
 
     if not rows:
         return 0.0
 
-    score = rows[0].get("score")
-    return float(score) if isinstance(score, (int, float)) else 0.0
+    doc_count = rows[0].get("doc_count", 0)
+    return 1.0 if doc_count > 0 else 0.0
 
 
 def detect_compliance_gaps() -> list[dict]:

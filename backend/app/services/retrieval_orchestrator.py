@@ -138,15 +138,20 @@ def _retrieve_from_qdrant(
 
 
 def _retrieve_graph_neighbors(clause_ids: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
-    """Retrieve graph-connected neighbor clauses and parent Document nodes from Neo4j."""
+    """Retrieve graph-connected neighbor clauses and parent Document nodes from Neo4j.
+
+    Uses ONLY structural relationships (HAS_CLAUSE, BELONGS_TO).
+    Neo4j is NEVER used for semantic similarity (no SIMILAR_TO).
+    """
     if not clause_ids:
         return {}
 
     query = """
     UNWIND $clause_ids AS cid
     MATCH (c:Clause {id: cid})
-    OPTIONAL MATCH (c)-[r:SIMILAR_TO]-(n:Clause)
     OPTIONAL MATCH (d:Document)-[:HAS_CLAUSE]->(c)
+    OPTIONAL MATCH (d)-[:HAS_CLAUSE]->(n:Clause)
+    WHERE n.id <> cid
     RETURN 
         c.id AS seed_id,
         d.id AS doc_id,
@@ -154,9 +159,8 @@ def _retrieve_graph_neighbors(clause_ids: Sequence[str]) -> dict[str, list[dict[
         collect(DISTINCT {
             id: n.id,
             text: n.text,
-            score: r.score,
             type: n.type
-        }) AS neighbors
+        })[0..5] AS neighbors
     """
     records = run_query(query, {"clause_ids": list(clause_ids)})
     
