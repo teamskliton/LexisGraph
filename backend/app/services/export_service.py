@@ -110,3 +110,178 @@ def export_to_pdf(data: list[dict]) -> BytesIO:
     document.build(elements)
     output.seek(0)
     return output
+
+
+def export_compliance_report_pdf(report_dict: dict) -> BytesIO:
+    """
+    Generate a comprehensive PDF export for a compliance report.
+    Includes: Organization, Documents Analyzed, Compliance Score, Risk Level,
+    Summary, Clause Analysis, Recommendations, Citations, and Timestamp.
+    """
+    import json
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "DocTitle",
+        parent=styles["Title"],
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor("#1e1b4b"),
+        alignment=0,
+    )
+    h2_style = ParagraphStyle(
+        "DocH2",
+        parent=styles["Heading2"],
+        fontSize=13,
+        leading=16,
+        textColor=colors.HexColor("#312e81"),
+        spaceBefore=10,
+        spaceAfter=6,
+    )
+    body_style = ParagraphStyle(
+        "DocBody",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor("#1f2937"),
+    )
+    cell_style = ParagraphStyle(
+        "DocCell",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=11,
+        textColor=colors.HexColor("#374151"),
+    )
+    cell_bold_style = ParagraphStyle(
+        "DocCellBold",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=11,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#111827"),
+    )
+
+    elements = []
+
+    # Title
+    elements.append(Paragraph("LexisGraph Compliance Audit Report", title_style))
+    elements.append(Spacer(1, 4))
+
+    # Metadata Bar: Report ID, Timestamp
+    report_id = str(report_dict.get("id", "N/A"))
+    created_at = str(report_dict.get("created_at", "N/A"))
+    meta_text = f"Report ID: {report_id} | Timestamp: {created_at}"
+    elements.append(Paragraph(meta_text, ParagraphStyle("Meta", parent=body_style, fontSize=8, textColor=colors.HexColor("#6b7280"))))
+    elements.append(Spacer(1, 10))
+
+    # Section 1: Overview & Metadata Table
+    org_name = str(report_dict.get("organization_name", report_dict.get("organization_id", "N/A")))
+    reg_name = str(report_dict.get("regulation_document_name", report_dict.get("regulation_document_id", "N/A")))
+    policy_name = str(report_dict.get("policy_document_name", report_dict.get("policy_document_id", "N/A")))
+    score = report_dict.get("overall_score")
+    score_str = f"{score:.1f}%" if isinstance(score, (int, float)) else "N/A"
+
+    meta_table_data = [
+        [Paragraph("Organization", cell_bold_style), Paragraph(org_name, cell_style)],
+        [Paragraph("Regulation Document", cell_bold_style), Paragraph(reg_name, cell_style)],
+        [Paragraph("Policy Document", cell_bold_style), Paragraph(policy_name, cell_style)],
+        [Paragraph("Compliance Score", cell_bold_style), Paragraph(score_str, cell_bold_style)],
+        [Paragraph("Status", cell_bold_style), Paragraph(str(report_dict.get("status", "COMPLETED")), cell_style)],
+    ]
+    meta_table = Table(meta_table_data, colWidths=[130, 390])
+    meta_table.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ("PADDING", (0, 0), (-1, -1), 5),
+        ])
+    )
+    elements.append(meta_table)
+    elements.append(Spacer(1, 12))
+
+    # Section 2: Executive Summary
+    details = report_dict.get("details") or {}
+    if isinstance(details, str):
+        try:
+            details = json.loads(details)
+        except Exception:
+            details = {}
+
+    summary_text = report_dict.get("summary") or details.get("summary") or "No executive summary provided."
+    elements.append(Paragraph("Executive Summary", h2_style))
+    elements.append(Paragraph(summary_text, body_style))
+    elements.append(Spacer(1, 12))
+
+    # Section 3: Clause-by-Clause Analysis Table
+    clauses = details.get("evaluated_clauses") or []
+    if clauses:
+        elements.append(Paragraph("Clause-by-Clause Evaluation", h2_style))
+        clause_table_data = [
+            [
+                Paragraph("Status", cell_bold_style),
+                Paragraph("Regulation Requirement", cell_bold_style),
+                Paragraph("Matched Policy Clause", cell_bold_style),
+                Paragraph("Score", cell_bold_style),
+            ]
+        ]
+        for c in clauses:
+            status_val = str(c.get("status", "N/A"))
+            reg_text = str(c.get("regulation_text", ""))
+            pol_text = str(c.get("matched_policy_text", "") or "No policy match")
+            sim_score = c.get("similarity_score", 0.0)
+            sim_str = f"{float(sim_score) * 100:.0f}%"
+
+            clause_table_data.append([
+                Paragraph(status_val, cell_style),
+                Paragraph(reg_text, cell_style),
+                Paragraph(pol_text, cell_style),
+                Paragraph(sim_str, cell_style),
+            ])
+
+        clause_table = Table(clause_table_data, colWidths=[80, 200, 200, 40])
+        clause_table.setStyle(
+            TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e7ff")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("PADDING", (0, 0), (-1, -1), 4),
+            ])
+        )
+        elements.append(clause_table)
+        elements.append(Spacer(1, 12))
+
+    # Section 4: Actionable Recommendations
+    recommendations = details.get("recommendations") or []
+    if recommendations:
+        elements.append(Paragraph("Recommendations", h2_style))
+        for i, rec in enumerate(recommendations, start=1):
+            elements.append(Paragraph(f"{i}. {rec}", body_style))
+            elements.append(Spacer(1, 3))
+        elements.append(Spacer(1, 10))
+
+    # Section 5: Citations & Disclaimers
+    elements.append(Paragraph("Citations & Disclaimers", h2_style))
+    citation_text = (
+        f"This compliance report was automatically generated by LexisGraph GraphRAG Engine on {created_at}. "
+        f"Sources: Regulation Document ({reg_name}), Policy Document ({policy_name}). "
+        f"All evaluations are derived from semantic vector embeddings and graph node relationships."
+    )
+    elements.append(Paragraph(citation_text, ParagraphStyle("Cite", parent=body_style, fontSize=8, textColor=colors.HexColor("#4b5563"))))
+
+    doc.build(elements)
+    output.seek(0)
+    return output
+

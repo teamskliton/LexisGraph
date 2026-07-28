@@ -178,54 +178,34 @@ class ApiContractsTest(unittest.TestCase):
     def test_upload_route_returns_processed_payload(self):
         app = FastAPI()
         app.include_router(upload_router, prefix="/api/v1")
-        processed_document = {
-            "domain": "IT",
-            "title": "policy.pdf",
-            "clauses": [{"text": "Clause 1", "type": "obligation", "embedding": [0.1, 0.2]}],
-        }
         raw_path = Path("data/raw/user/hash-123_policy.pdf")
-        processed_path = Path("data/processed/user/hash-123.json")
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        processed_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _save_raw_file(*_args, **_kwargs):
+            raw_path.parent.mkdir(parents=True, exist_ok=True)
             raw_path.write_bytes(b"raw")
             return str(raw_path)
 
-        def _save_processed_json(*_args, **_kwargs):
-            processed_path.write_text("{}", encoding="utf-8")
-            return str(processed_path)
-
         with patch("app.routes.upload.generate_content_hash", return_value="hash-123"), \
              patch("app.routes.upload.file_exists_with_hash", return_value=False), \
-             patch("app.routes.upload.save_raw_file", side_effect=_save_raw_file), \
-             patch("app.routes.upload.extract_text", return_value="Clause 1"), \
-             patch("app.routes.upload.build_processed_document", return_value=processed_document), \
-             patch("app.routes.upload.save_processed_json", side_effect=_save_processed_json), \
-             patch("app.routes.upload.validate_pipeline_output", return_value=True), \
-             patch("app.routes.upload.store_document", return_value="doc-123"), \
-             patch("app.routes.upload.build_graph", return_value={"documents_processed": 1}):
+             patch("app.routes.upload.save_raw_file", side_effect=_save_raw_file):
             with TestClient(app) as client:
                 response = client.post(
                     "/api/v1/upload",
                     files={"file": ("policy.pdf", b"sample policy text", "application/pdf")},
                 )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         self.assertEqual(
             response.json(),
             {
-                "message": "File uploaded and processed.",
+                "message": "File accepted. Processing has been started in the background.",
+                "processing_status": "accepted",
                 "path": str(raw_path),
-                "processed_path": str(processed_path),
-                "document_id": "doc-123",
-                "stored_in_db": True,
                 "hash": "hash-123",
-                "clauses_count": 1,
-                "domain": "IT",
-                "title": "policy.pdf",
+                "filename": "policy.pdf",
             },
         )
+
 
 
 if __name__ == "__main__":

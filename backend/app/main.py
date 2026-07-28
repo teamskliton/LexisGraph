@@ -27,7 +27,8 @@ from app.db.redis_client import close_client as close_redis_client
 from app.db.redis_client import test_connection as test_redis_connection
 from app.routes.auth import router as auth_router
 from app.routes.chat import router as chat_router
-from app.routes.compliance import router as compliance_router
+from app.routes.compliance import router as legacy_compliance_router
+from app.compliance.routes import router as compliance_router
 from app.routes.debug import router as debug_router
 from app.routes.documents import router as documents_router
 from app.routes.domain import router as domain_router
@@ -248,7 +249,11 @@ def create_app() -> FastAPI:
     app.include_router(organizations_router)
     app.include_router(documents_router, tags=["documents"])
     app.include_router(chat_router)
+    app.include_router(compliance_router)
+    app.include_router(compliance_router, prefix="/api/v1")
+    app.include_router(legacy_compliance_router, prefix="/api/v1")
     app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
+
 
     @app.get("/", tags=["system"])
     async def root():

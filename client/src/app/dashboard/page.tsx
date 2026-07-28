@@ -191,6 +191,17 @@ function DashboardContent() {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div
+                onClick={() => router.push("/compliance")}
+                className="border border-border/50 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all p-4 rounded-xl space-y-2 cursor-pointer group"
+              >
+                <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500/20 transition-all flex items-center justify-center">
+                  <ShieldAlert className="h-4 w-4" />
+                </div>
+                <h4 className="text-sm font-semibold text-foreground">Compliance Audit & Gaps</h4>
+                <p className="text-xs text-muted-foreground">Run automated clause-by-clause compliance gap analysis between regulation and policy files.</p>
+              </div>
+
+              <div
                 onClick={() => router.push("/chat")}
                 className="border border-border/50 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all p-4 rounded-xl space-y-2 cursor-pointer group"
               >
@@ -211,6 +222,7 @@ function DashboardContent() {
                 <h4 className="text-sm font-semibold text-foreground">Document Upload</h4>
                 <p className="text-xs text-muted-foreground">Upload corporate guidelines and cross-match against legal benchmarks.</p>
               </div>
+
             </CardContent>
           </Card>
         </div>

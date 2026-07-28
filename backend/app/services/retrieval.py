@@ -102,11 +102,14 @@ def retrieve_relevant_clauses(query: str) -> list[dict]:
         score = float(similarity_scores[index])
         clause_id = clause["clause_id"]
 
+        # Structural neighbor lookup: clauses sharing the same parent Document
+        # Neo4j is NEVER used for semantic similarity (no SIMILAR_TO)
         neighbors = run_query(
             """
-            MATCH (c:Clause {id: $id})-[r:SIMILAR_TO]->(n:Clause)
+            MATCH (d:Document)-[:HAS_CLAUSE]->(c:Clause {id: $id})
+            MATCH (d)-[:HAS_CLAUSE]->(n:Clause)
+            WHERE n.id <> $id
             RETURN n.text AS text
-            ORDER BY r.score DESC
             LIMIT 3
             """,
             {"id": clause_id},
