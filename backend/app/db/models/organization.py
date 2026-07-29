@@ -113,5 +113,13 @@ class Organization(Base):
         cascade="all, delete-orphan",
     )
 
+    # Relationship to compliance reports created for this organization.
+    compliance_reports: Mapped[list["ComplianceReport"]] = relationship(
+        "ComplianceReport",
+        back_populates="organization",
+        lazy="select",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         return f"<Organization(id={self.id}, name={self.name!r})>"
