@@ -88,6 +88,7 @@ def analyze_compliance_report(
         )
 
     # 4. Create ComplianceReport record in PROCESSING status
+    logger.info("Creating report... organization_id=%s reg_doc=%s policy_doc=%s", data.organization_id, data.regulation_document_id, data.policy_document_id)
     report = ComplianceReport(
         organization_id=data.organization_id,
         regulation_document_id=data.regulation_document_id,
@@ -96,8 +97,15 @@ def analyze_compliance_report(
         created_by=user_id,
     )
     db.add(report)
-    db.commit()
-    db.refresh(report)
+    try:
+        db.commit()
+        db.refresh(report)
+    except Exception:
+        db.rollback()
+        logger.error("Failed creating report... organization_id=%s", data.organization_id)
+        raise
+
+    logger.info("Creating report... report_id=%s created successfully", report.id)
 
     # 5. Enqueue background task
     try:
@@ -149,9 +157,16 @@ def get_compliance_report_by_id(
         "regulation_document_id": report.regulation_document_id,
         "policy_document_id": report.policy_document_id,
         "overall_score": report.overall_score,
+        "total_clauses": report.total_clauses,
+        "compliant_clauses": report.compliant_clauses,
+        "partial_clauses": report.partial_clauses,
+        "non_compliant_clauses": report.non_compliant_clauses,
         "status": report.status,
+        "report_status": report.report_status,
         "summary": report.summary,
+        "recommendations": report.recommendations,
         "details": details_payload,
+        "processing_time_seconds": report.processing_time_seconds,
         "created_by": report.created_by,
         "created_at": report.created_at,
         "updated_at": report.updated_at,

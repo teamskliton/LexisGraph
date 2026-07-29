@@ -184,8 +184,8 @@ def retrieve_clauses_for_document(doc: Document) -> list[dict[str, Any]]:
 def _search_policy_clauses_in_qdrant(
     regulation_embedding: list[float],
     policy_document_id: str,
-    *,
     top_k: int = _QDRANT_TOP_K,
+    all_policy_clauses: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Search Qdrant for Top-K policy clauses matching a regulation clause embedding.
@@ -195,6 +195,7 @@ def _search_policy_clauses_in_qdrant(
 
     Returns list of dicts with: clause_id, text, score, type
     """
+    results: list[dict[str, Any]] = []
     try:
         client = get_qdrant_client()
         query_filter = Filter(
@@ -213,7 +214,6 @@ def _search_policy_clauses_in_qdrant(
             limit=top_k,
         )
 
-        results: list[dict[str, Any]] = []
         for hit in response.points:
             payload = hit.payload or {}
             text = str(payload.get("text") or "").strip()
@@ -229,14 +229,40 @@ def _search_policy_clauses_in_qdrant(
             "[COMPLIANCE] Qdrant search: policy_doc=%s hits=%s",
             policy_document_id, len(results),
         )
-        return results
 
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Qdrant policy clause search failed for policy_doc=%s: %s",
             policy_document_id, exc,
         )
-        return []
+
+    if not results and all_policy_clauses:
+        def _cosine_sim(v1: list[float], v2: list[float]) -> float:
+            dot = sum(a * b for a, b in zip(v1, v2))
+            mag1 = sum(a * a for a in v1) ** 0.5
+            mag2 = sum(b * b for b in v2) ** 0.5
+            return (dot / (mag1 * mag2)) if (mag1 > 0 and mag2 > 0) else 0.0
+
+        for pclause in all_policy_clauses:
+            p_emb = pclause.get("embedding")
+            if p_emb and isinstance(p_emb, list) and len(p_emb) == len(regulation_embedding):
+                sim = _cosine_sim(regulation_embedding, p_emb)
+                if sim >= _MIN_VECTOR_SCORE:
+                    results.append({
+                        "clause_id": pclause.get("clause_id", str(uuid.uuid4())),
+                        "text": pclause["text"],
+                        "score": float(sim),
+                        "type": str(pclause.get("type") or "general"),
+                    })
+        results.sort(key=lambda x: x["score"], reverse=True)
+        results = results[:top_k]
+
+    return results
+
+
+def _get_graph_similarity_score(reg_clause: str, pol_clause: str) -> float:
+    """Return graph similarity score between two clauses."""
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -462,7 +488,9 @@ def _parse_batch_llm_response(
         cleaned = re.sub(r"^```(?:json)?\s*", "", llm_response.strip(), flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
         raw_list = json.loads(cleaned)
-        if not isinstance(raw_list, list):
+        if isinstance(raw_list, dict):
+            raw_list = [raw_list]
+        elif not isinstance(raw_list, list):
             return None
     except Exception:  # noqa: BLE001
         return None
@@ -592,6 +620,35 @@ def evaluate_batch_compliance_with_llm(
     return [r for r in results if r is not None]  # type: ignore[misc]
 
 
+def evaluate_clause_compliance_with_llm(
+    regulation_clause: str,
+    matched_policy_clause: str | None = None,
+    similarity_score: float = 0.0,
+    matched_policy_clauses: list[dict[str, Any]] | None = None,
+    structural_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Evaluate a single regulation clause against matched policy clause(s) using LLM.
+    Provides backwards compatibility for single-clause evaluation.
+    """
+    if matched_policy_clauses is None:
+        matched_policy_clauses = []
+        if matched_policy_clause:
+            matched_policy_clauses.append({
+                "text": matched_policy_clause,
+                "score": similarity_score,
+            })
+
+    batch_item = {
+        "index": 1,
+        "regulation_clause": regulation_clause,
+        "matched_policy_clauses": matched_policy_clauses,
+        "structural_context": structural_context or {},
+    }
+    results = evaluate_batch_compliance_with_llm([batch_item])
+    return results[0] if results else _heuristic_fallback(regulation_clause, matched_policy_clauses)
+
+
 # ---------------------------------------------------------------------------
 # Main Compliance Analysis Engine — Hybrid GraphRAG Pipeline (Batched LLM)
 # ---------------------------------------------------------------------------
@@ -693,6 +750,9 @@ def analyze_compliance_engine(
     # Phase 1: Retrieval — Qdrant vector search + Neo4j structural context
     #          This is per-clause but fast (indexed searches, no LLM calls).
     # -----------------------------------------------------------------------
+    # Retrieve all policy clauses (used as in-memory fallback if Qdrant is empty/mocked)
+    all_policy_clauses = retrieve_clauses_for_document(policy_document)
+
     retrieval_items: list[dict[str, Any]] = []
 
     for clause_idx, reg_item in enumerate(reg_clauses):
@@ -707,6 +767,7 @@ def analyze_compliance_engine(
                 regulation_embedding=reg_emb,
                 policy_document_id=policy_doc_id_str,
                 top_k=_QDRANT_TOP_K,
+                all_policy_clauses=all_policy_clauses,
             )
 
         # Neo4j: structural context for the best policy match
@@ -863,14 +924,25 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
     Load a ComplianceReport from PostgreSQL, run full Hybrid GraphRAG compliance
     engine analysis, and persist results back to the database.
     """
+    import time
+    from datetime import datetime, timezone
     from app.compliance.models import ComplianceReport, ComplianceReportStatus
+
+    logger.info("Updating report... report_id=%s status=PROCESSING", report_id)
 
     report = db.get(ComplianceReport, report_id)
     if not report:
         raise ValueError(f"ComplianceReport {report_id} not found")
 
     report.status = ComplianceReportStatus.PROCESSING
-    db.commit()
+    report.updated_at = datetime.now(timezone.utc)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    start_time = time.perf_counter()
 
     try:
         org = report.organization
@@ -879,16 +951,40 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
 
         result = analyze_compliance_engine(org, reg_doc, policy_doc)
 
+        elapsed_seconds = time.perf_counter() - start_time
+
         report.overall_score = result.get("overall_score")
-        report.summary = json.dumps(result)
+        report.total_clauses = result.get("total_regulation_clauses", 0)
+        report.compliant_clauses = result.get("compliant_count", 0)
+        report.partial_clauses = result.get("partially_compliant_count", 0)
+        report.non_compliant_clauses = result.get("non_compliant_count", 0)
+        report.summary = result.get("summary") or "Analysis completed successfully."
+        report.recommendations = result.get("recommendations", [])
+        report.processing_time_seconds = round(elapsed_seconds, 2)
         report.status = ComplianceReportStatus.COMPLETED
+        report.updated_at = datetime.now(timezone.utc)
+
         db.commit()
         db.refresh(report)
 
+        logger.info(
+            "Report completed... report_id=%s status=COMPLETED score=%s time=%.2fs",
+            report_id,
+            report.overall_score,
+            elapsed_seconds,
+        )
         return result
     except Exception as exc:
-        logger.exception("Compliance analysis execution failed for report_id=%s", report_id)
-        report.status = ComplianceReportStatus.FAILED
-        report.summary = json.dumps({"error": str(exc)})
-        db.commit()
+        db.rollback()
+        logger.error("Report failed... report_id=%s status=FAILED error=%s", report_id, exc)
+        try:
+            failed_report = db.get(ComplianceReport, report_id)
+            if failed_report:
+                failed_report.status = ComplianceReportStatus.FAILED
+                failed_report.summary = str(exc)
+                failed_report.updated_at = datetime.now(timezone.utc)
+                db.commit()
+        except Exception as rollback_exc:
+            db.rollback()
+            logger.error("Failed setting FAILED status for report_id=%s: %s", report_id, rollback_exc)
         raise
