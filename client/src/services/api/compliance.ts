@@ -4,7 +4,8 @@ export type ComplianceReportStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "F
 
 export interface ComplianceAnalyzeRequest {
   organization_id: string;
-  regulation_document_id: string;
+  regulation_id?: string;
+  regulation_document_id?: string;
   policy_document_id: string;
 }
 
@@ -74,7 +75,14 @@ export interface ComplianceReport {
 
 export const complianceService = {
   analyzeCompliance: async (data: ComplianceAnalyzeRequest): Promise<ComplianceAnalyzeResponse> => {
-    const response = await api.post("/compliance/analyze", data);
+    const regId = data.regulation_id || data.regulation_document_id || "";
+    const payload = {
+      organization_id: data.organization_id,
+      regulation_id: regId,
+      regulation_document_id: regId,
+      policy_document_id: data.policy_document_id,
+    };
+    const response = await api.post("/compliance/analyze", payload);
     return response.data;
   },
 

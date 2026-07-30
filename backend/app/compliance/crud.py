@@ -23,7 +23,7 @@ def create_compliance_report(
     """
     report = ComplianceReport(
         organization_id=report_in.organization_id,
-        regulation_document_id=report_in.regulation_document_id,
+        regulation_id=report_in.regulation_id,
         policy_document_id=report_in.policy_document_id,
         status=ComplianceReportStatus.PENDING,
         created_by=user_id,

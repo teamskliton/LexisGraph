@@ -380,7 +380,7 @@ function ComplianceReportDetailContent() {
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-extrabold tracking-tight">Compliance Audit Report</h1>
               <Badge variant="outline" className="border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10">
-                Report #{report.id.slice(0, 8)}
+                Report #{report?.id ? report.id.slice(0, 8) : "N/A"}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">

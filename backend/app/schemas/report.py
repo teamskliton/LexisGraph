@@ -37,7 +37,7 @@ class ReportItemResponse(BaseModel):
 
     id: uuid.UUID
     organization_id: uuid.UUID
-    regulation_document_id: uuid.UUID
+    regulation_id: uuid.UUID
     policy_document_id: uuid.UUID
     overall_score: Optional[float] = None
     report_status: ComplianceReportStatus
@@ -61,7 +61,7 @@ class ReportDetailResponse(BaseModel):
 
     id: uuid.UUID
     organization_id: uuid.UUID
-    regulation_document_id: uuid.UUID
+    regulation_id: uuid.UUID
     policy_document_id: uuid.UUID
     overall_score: Optional[float] = None
     summary: Optional[str] = None

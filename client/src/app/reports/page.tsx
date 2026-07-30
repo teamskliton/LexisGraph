@@ -1,22 +1,22 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/context/auth-context";
 import { reportService } from "@/services/reportService";
 import { organizationsService, Organization } from "@/services/api/organizations";
+import { api } from "@/services/api";
 import { ReportItemResponse } from "@/types/report";
-import { ReportFilters, FilterState } from "@/components/reports/ReportFilters";
-import { ReportsTable, ReportsTableSkeleton } from "@/components/reports/ReportsTable";
+import { ReportFilters, FilterState, OrganizationOption, RegulationOption } from "@/components/reports/ReportFilters";
+import { ReportsTable } from "@/components/reports/ReportsTable";
 import { ReportCard } from "@/components/reports/ReportCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Layers,
   LogOut,
-  ArrowLeft,
   RefreshCw,
   AlertTriangle,
   ChevronLeft,
@@ -31,9 +31,14 @@ import { toast } from "sonner";
 const PAGE_SIZE = 10;
 
 const DEFAULT_FILTERS: FilterState = {
+  organizationId: "ALL",
+  regulationId: "ALL",
   status: "ALL",
-  orgSearch: "",
-  idSearch: "",
+  riskLevel: "ALL",
+  startDate: "",
+  endDate: "",
+  reportId: "",
+  policyName: "",
   sortOrder: "newest",
 };
 
@@ -52,21 +57,32 @@ function ReportsPageContent() {
   // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
+  // Dropdown filter options
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [regulations, setRegulations] = useState<RegulationOption[]>([]);
+
   // Organization map for displaying organization names
   const [orgMap, setOrgMap] = useState<Map<string, string>>(new Map());
 
-  // ---------- Load Organizations ----------
+  // ---------- Load Organizations & Regulations for Dropdowns ----------
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const orgs: Organization[] = await organizationsService.getOrganizations();
+        const [orgs, regsRes] = await Promise.all([
+          organizationsService.getOrganizations(),
+          api.get("/documents/regulations").catch(() => ({ data: [] })),
+        ]);
         if (!active) return;
+
+        setOrganizations(orgs || []);
+        setRegulations(regsRes.data || []);
+
         const map = new Map<string, string>();
-        orgs.forEach((o) => map.set(o.id, o.name));
+        (orgs || []).forEach((o: Organization) => map.set(o.id, o.name));
         setOrgMap(map);
       } catch (err) {
-        console.error("Failed to fetch organizations for name mapping:", err);
+        console.error("Failed to fetch filter options:", err);
       }
     })();
     return () => {
@@ -74,7 +90,7 @@ function ReportsPageContent() {
     };
   }, []);
 
-  // ---------- Fetch Reports ----------
+  // ---------- Backend Fetch Reports ----------
   const fetchReports = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -82,7 +98,15 @@ function ReportsPageContent() {
       const response = await reportService.getReports({
         page,
         page_size: PAGE_SIZE,
-        status: filters.status,
+        organization_id: filters.organizationId !== "ALL" ? filters.organizationId : undefined,
+        regulation_id: filters.regulationId !== "ALL" ? filters.regulationId : undefined,
+        status: filters.status !== "ALL" ? filters.status : undefined,
+        risk_level: filters.riskLevel !== "ALL" ? filters.riskLevel : undefined,
+        start_date: filters.startDate ? new Date(filters.startDate).toISOString() : undefined,
+        end_date: filters.endDate ? new Date(filters.endDate + "T23:59:59").toISOString() : undefined,
+        report_id: filters.reportId.trim() || undefined,
+        policy_name: filters.policyName.trim() || undefined,
+        sort_by: filters.sortOrder,
       });
 
       setReports(response.items || []);
@@ -99,44 +123,14 @@ function ReportsPageContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, filters.status]);
+  }, [page, filters]);
 
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
 
-  // ---------- Client-side Filter & Sort Overlay ----------
-  const processedReports = useMemo(() => {
-    let result = [...reports];
-
-    // Filter by Organization search
-    if (filters.orgSearch.trim()) {
-      const q = filters.orgSearch.trim().toLowerCase();
-      result = result.filter((item) => {
-        const orgName = (orgMap.get(item.organization_id) || "").toLowerCase();
-        const orgId = item.organization_id.toLowerCase();
-        return orgName.includes(q) || orgId.includes(q);
-      });
-    }
-
-    // Filter by Report ID search
-    if (filters.idSearch.trim()) {
-      const q = filters.idSearch.trim().toLowerCase();
-      result = result.filter((item) => item.id.toLowerCase().includes(q));
-    }
-
-    // Sort by Created Date
-    result.sort((a, b) => {
-      const timeA = new Date(a.created_at || 0).getTime();
-      const timeB = new Date(b.created_at || 0).getTime();
-      return filters.sortOrder === "newest" ? timeB - timeA : timeA - timeB;
-    });
-
-    return result;
-  }, [reports, filters.orgSearch, filters.idSearch, filters.sortOrder, orgMap]);
-
   // Pagination bounds calculation
-  const totalPages = Math.max(1, Math.ceil((totalItems || processedReports.length) / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
 
   const handleFilterChange = (updated: Partial<FilterState>) => {
     setFilters((prev) => ({ ...prev, ...updated }));
@@ -178,22 +172,13 @@ function ReportsPageContent() {
         </div>
       </header>
 
-      {/* ── Main Content Area ── */}
-      <main className="flex-1 p-6 md:p-10 max-w-7xl w-full mx-auto space-y-6">
+      {/* ── Main Content Container ── */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
         {/* Page Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push("/dashboard")}
-              className="mb-2 -ml-2 flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Button>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/25 flex items-center justify-center shrink-0">
                 <FileCheck className="h-5 w-5" />
               </div>
               <div>
@@ -240,9 +225,11 @@ function ReportsPageContent() {
           </div>
         </div>
 
-        {/* Filters section */}
+        {/* Filters section (Backend Driven) */}
         <ReportFilters
           filters={filters}
+          organizations={organizations}
+          regulations={regulations}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
           disabled={isLoading}
@@ -275,7 +262,7 @@ function ReportsPageContent() {
           <>
             {viewMode === "table" ? (
               <ReportsTable
-                reports={processedReports}
+                reports={reports}
                 orgMap={orgMap}
                 isLoading={isLoading}
                 onViewReport={handleViewReport}
@@ -291,7 +278,7 @@ function ReportsPageContent() {
                   </div>
                 ))}
               </div>
-            ) : processedReports.length === 0 ? (
+            ) : reports.length === 0 ? (
               <ReportsTable
                 reports={[]}
                 orgMap={orgMap}
@@ -300,7 +287,7 @@ function ReportsPageContent() {
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {processedReports.map((report) => (
+                {reports.map((report) => (
                   <ReportCard
                     key={report.id}
                     report={report}
@@ -312,14 +299,12 @@ function ReportsPageContent() {
             )}
 
             {/* Pagination Controls */}
-            {!isLoading && (totalItems > 0 || processedReports.length > 0) && (
+            {!isLoading && totalItems > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
                 <p className="text-xs text-muted-foreground">
                   Page <span className="font-medium text-foreground">{page}</span> of{" "}
                   <span className="font-medium text-foreground">{totalPages}</span>
-                  {totalItems > 0 && (
-                    <span className="ml-1">({totalItems} total reports)</span>
-                  )}
+                  <span className="ml-1">({totalItems} total reports)</span>
                 </p>
 
                 <div className="flex items-center gap-2">
@@ -328,7 +313,7 @@ function ReportsPageContent() {
                     size="sm"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1 || isLoading}
-                    className="gap-1 text-xs h-8"
+                    className="gap-1 text-xs h-8 cursor-pointer"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     <span>Previous</span>
@@ -339,7 +324,7 @@ function ReportsPageContent() {
                     size="sm"
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages || isLoading}
-                    className="gap-1 text-xs h-8"
+                    className="gap-1 text-xs h-8 cursor-pointer"
                   >
                     <span>Next</span>
                     <ChevronRight className="h-4 w-4" />

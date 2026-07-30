@@ -117,43 +117,51 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
           </TableHeader>
           <TableBody>
             {reports.map((report) => {
-              const orgName =
-                orgMap.get(report.organization_id) ||
-                `Org: ${report.organization_id.substring(0, 8)}...`;
+              const reportId = report?.id || "";
+              const orgId = report?.organization_id || "";
+              const regId = report?.regulation_document_id || (report as any)?.regulation_id || "";
+              const polId = report?.policy_document_id || "";
+              const status = report?.report_status || (report as any)?.status || "PENDING";
 
-              const formattedDate = report.created_at
+              const orgName =
+                orgMap.get(orgId) ||
+                (orgId ? `Org: ${orgId.substring(0, 8)}...` : "N/A");
+
+              const formattedDate = report?.created_at
                 ? format(new Date(report.created_at), "MMM d, yyyy")
                 : "—";
 
               const processingTime =
-                report.processing_time_seconds !== null &&
-                report.processing_time_seconds !== undefined
+                report?.processing_time_seconds !== null &&
+                report?.processing_time_seconds !== undefined
                   ? `${report.processing_time_seconds.toFixed(1)}s`
                   : "—";
 
               return (
                 <TableRow
-                  key={report.id}
+                  key={reportId}
                   className="hover:bg-muted/30 transition-colors"
                 >
                   {/* Report ID */}
                   <TableCell className="font-mono text-xs">
                     <div className="flex items-center gap-1.5 group">
                       <FileCheck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span title={report.id} className="font-medium text-foreground">
-                        {report.id.substring(0, 8)}...
+                      <span title={reportId} className="font-medium text-foreground">
+                        {reportId ? `${reportId.substring(0, 8)}...` : "N/A"}
                       </span>
-                      <button
-                        onClick={(e) => handleCopyId(report.id, e)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 rounded"
-                        title="Copy full Report ID"
-                      >
-                        {copiedId === report.id ? (
-                          <Check className="h-3 w-3 text-emerald-500" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </button>
+                      {reportId && (
+                        <button
+                          onClick={(e) => handleCopyId(reportId, e)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 rounded"
+                          title="Copy full Report ID"
+                        >
+                          {copiedId === reportId ? (
+                            <Check className="h-3 w-3 text-emerald-500" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </button>
+                      )}
                     </div>
                   </TableCell>
 
@@ -166,15 +174,15 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
 
                   {/* Regulation */}
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    <span title={report.regulation_document_id}>
-                      {report.regulation_document_id.substring(0, 8)}...
+                    <span title={regId}>
+                      {regId ? `${regId.substring(0, 8)}...` : "N/A"}
                     </span>
                   </TableCell>
 
                   {/* Policy */}
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    <span title={report.policy_document_id}>
-                      {report.policy_document_id.substring(0, 8)}...
+                    <span title={polId}>
+                      {polId ? `${polId.substring(0, 8)}...` : "N/A"}
                     </span>
                   </TableCell>
 
@@ -185,7 +193,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
 
                   {/* Status */}
                   <TableCell>
-                    <ReportStatusBadge status={report.report_status} />
+                    <ReportStatusBadge status={status} />
                   </TableCell>
 
                   {/* Processing Time */}
@@ -203,7 +211,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onViewReport(report.id)}
+                      onClick={() => onViewReport(reportId)}
                       className="gap-1.5 h-8 font-medium cursor-pointer text-xs"
                     >
                       <Eye className="h-3.5 w-3.5" />

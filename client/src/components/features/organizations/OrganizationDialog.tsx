@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Building2 } from "lucide-react";
 
-import { Organization, OrganizationCreate, OrganizationUpdate } from "../../../services/api/organizations";
+import { Organization, OrganizationCreate, OrganizationUpdate } from "@/services/api/organizations";
 import {
   Dialog,
   DialogContent,

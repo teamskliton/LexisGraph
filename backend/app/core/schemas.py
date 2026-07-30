@@ -224,6 +224,58 @@ class DocumentStatusResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Regulation schemas
+# ---------------------------------------------------------------------------
+
+class RegulationBase(BaseModel):
+    """Shared fields for Regulation schemas."""
+
+    title: str = Field(..., description="Title of the regulation")
+    act_name: str | None = Field(default=None, description="Name of the act")
+    version: str | None = Field(default=None, description="Version of the regulation")
+    jurisdiction: str | None = Field(default=None, description="Jurisdiction")
+    document_hash: str = Field(..., description="SHA-256 checksum of the file")
+    is_global: bool = Field(default=True, description="Whether this regulation is global")
+    original_filename: str = Field(..., description="Original name of the uploaded file")
+    stored_filename: str = Field(..., description="Server-generated storage name")
+    file_path: str = Field(..., description="Full path to the stored file")
+    file_size: int = Field(..., description="Size of the file in bytes")
+    mime_type: str = Field(..., description="MIME type of the file")
+
+
+class RegulationResponse(RegulationBase):
+    """Regulation response returned by the API."""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: uuid.UUID = Field(..., description="Server-generated UUID4")
+    uploaded_by: uuid.UUID = Field(..., description="UUID of the user who uploaded this document")
+    processing_status: ProcessingStatus = Field(
+        ..., description="Processing status: UPLOADED, PROCESSING, PROCESSED, FAILED"
+    )
+    progress: int = Field(default=0, description="Processing progress percentage (0-100)")
+    current_step: str | None = Field(default=None, description="Active pipeline step label")
+    processing_started_at: datetime | None = Field(default=None, description="UTC timestamp when processing started")
+    processed_at: datetime | None = Field(default=None, description="UTC timestamp of terminal state")
+    error_message: str | None = Field(default=None, description="Error message if processing failed")
+    created_at: datetime = Field(..., description="UTC timestamp of upload")
+    updated_at: datetime = Field(..., description="UTC timestamp of last update")
+
+
+class RegulationStatusResponse(BaseModel):
+    """Slim status-only response for Regulation."""
+
+    model_config = ConfigDict(from_attributes=False)
+
+    id: uuid.UUID = Field(..., description="UUID of the regulation")
+    status: ProcessingStatus = Field(..., description="Current processing status")
+    progress: int = Field(..., description="Processing progress percentage (0-100)")
+    current_step: str | None = Field(default=None, description="Active pipeline step label")
+    error_message: str | None = Field(default=None, description="Error message if status is FAILED")
+    processing_started_at: datetime | None = Field(default=None, description="UTC timestamp when processing started")
+    processed_at: datetime | None = Field(default=None, description="UTC timestamp of terminal state")
+
+# ---------------------------------------------------------------------------
 # Chat schemas
 # ---------------------------------------------------------------------------
 

@@ -20,13 +20,19 @@ export const ReportCard: React.FC<ReportCardProps> = ({
   orgName,
   onViewReport,
 }) => {
-  const formattedDate = report.created_at
+  const reportId = report?.id || "";
+  const orgId = report?.organization_id || "";
+  const regId = report?.regulation_document_id || (report as any)?.regulation_id || "";
+  const polId = report?.policy_document_id || "";
+  const status = report?.report_status || (report as any)?.status || "PENDING";
+
+  const formattedDate = report?.created_at
     ? format(new Date(report.created_at), "MMM d, yyyy • HH:mm")
     : "N/A";
 
   const processingTime =
-    report.processing_time_seconds !== null &&
-    report.processing_time_seconds !== undefined
+    report?.processing_time_seconds !== null &&
+    report?.processing_time_seconds !== undefined
       ? `${report.processing_time_seconds.toFixed(1)}s`
       : "N/A";
 
@@ -37,12 +43,12 @@ export const ReportCard: React.FC<ReportCardProps> = ({
           <div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
               <FileCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span title={report.id} className="truncate max-w-[180px]">
-                ID: {report.id}
+              <span title={reportId} className="truncate max-w-[180px]">
+                ID: {reportId ? `${reportId.substring(0, 8)}...` : "N/A"}
               </span>
             </div>
           </div>
-          <ReportStatusBadge status={report.report_status} />
+          <ReportStatusBadge status={status} />
         </div>
       </CardHeader>
 
@@ -52,10 +58,10 @@ export const ReportCard: React.FC<ReportCardProps> = ({
           <div className="flex items-center gap-2 text-muted-foreground">
             <Building2 className="h-4 w-4 shrink-0" />
             <span className="font-medium text-foreground truncate max-w-[160px]">
-              {orgName || `Org: ${report.organization_id.substring(0, 8)}...`}
+              {orgName || (orgId ? `Org: ${orgId.substring(0, 8)}...` : "N/A")}
             </span>
           </div>
-          <ReportScoreBadge score={report.overall_score} />
+          <ReportScoreBadge score={report?.overall_score} />
         </div>
 
         {/* Regulation & Policy */}
@@ -65,8 +71,8 @@ export const ReportCard: React.FC<ReportCardProps> = ({
               <FileText className="h-3.5 w-3.5 text-indigo-500" />
               Regulation:
             </span>
-            <span className="font-mono text-foreground truncate max-w-[150px]" title={report.regulation_document_id}>
-              {report.regulation_document_id.substring(0, 8)}...
+            <span className="font-mono text-foreground truncate max-w-[150px]" title={regId}>
+              {regId ? `${regId.substring(0, 8)}...` : "N/A"}
             </span>
           </div>
           <div className="flex items-center justify-between">
@@ -74,8 +80,8 @@ export const ReportCard: React.FC<ReportCardProps> = ({
               <FileText className="h-3.5 w-3.5 text-emerald-500" />
               Policy:
             </span>
-            <span className="font-mono text-foreground truncate max-w-[150px]" title={report.policy_document_id}>
-              {report.policy_document_id.substring(0, 8)}...
+            <span className="font-mono text-foreground truncate max-w-[150px]" title={polId}>
+              {polId ? `${polId.substring(0, 8)}...` : "N/A"}
             </span>
           </div>
         </div>
@@ -95,7 +101,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
 
       <CardFooter className="p-4 pt-0">
         <Button
-          onClick={() => onViewReport(report.id)}
+          onClick={() => onViewReport(reportId)}
           className="w-full gap-2 cursor-pointer"
           size="sm"
         >

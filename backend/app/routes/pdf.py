@@ -6,10 +6,14 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user
+from app.db.models import User
 from app.db.session import get_db
+from app.services.activity_service import log_activity
 from app.services.pdf_report_service import generate_compliance_report_pdf
 from app.services.report_service import (
     ReportNotFoundError,
@@ -31,6 +35,7 @@ def download_report_pdf(
     report_id: uuid.UUID,
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
+    current_user: Optional[User] = Depends(get_current_user),
 ) -> Response:
     """
     Export an existing compliance report as an A4 PDF document.
@@ -62,7 +67,19 @@ def download_report_pdf(
             detail="Failed to generate PDF report document.",
         )
 
-    # 3. Return downloadable PDF response
+    # 3. Log Activity
+    user_id = current_user.id if current_user else report.created_by
+    log_activity(
+        db,
+        user_id=user_id,
+        event_type="PDF_DOWNLOADED",
+        title="Downloaded PDF Report",
+        description=f"Exported compliance report document '{report_id}'",
+        icon_type="download",
+        extra_data={"report_id": str(report_id)},
+    )
+
+    # 4. Return downloadable PDF response
     filename = f"LexisGraph_Compliance_Report_{report_id}.pdf"
     return Response(
         content=pdf_bytes,

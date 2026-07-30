@@ -41,7 +41,7 @@ def analyze_compliance(
     Initiate compliance analysis between a regulation document and a policy document.
 
     - **organization_id**: UUID of the organization
-    - **regulation_document_id**: UUID of the regulation document
+    - **regulation_id**: UUID of the regulation document
     - **policy_document_id**: UUID of the policy document
 
     Requires JWT authentication. Only the organization owner can execute analysis.
@@ -141,6 +141,17 @@ def export_compliance_report_pdf_endpoint(
     report_dict = service.get_compliance_report_by_id(db, report_id, current_user.id)
     pdf_bytes = export_compliance_report_pdf(report_dict)
     filename = f"compliance_report_{str(report_id)[:8]}.pdf"
+
+    from app.services.activity_service import log_activity
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="PDF_DOWNLOADED",
+        title="Downloaded PDF Report",
+        description=f"Exported compliance report '{filename}'",
+        icon_type="download",
+        extra_data={"report_id": str(report_id)},
+    )
 
     return StreamingResponse(
         pdf_bytes,

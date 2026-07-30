@@ -6,6 +6,8 @@ Never calls LLM or recomputes compliance logic.
 from __future__ import annotations
 
 import io
+import json
+import html
 import logging
 from datetime import datetime
 from typing import Any, List, Dict, Optional
@@ -152,7 +154,8 @@ def generate_compliance_report_pdf(report: Any) -> bytes:
     # -------------------------------------------------------------------------
     report_id_str = str(getattr(report, "id", "N/A"))
     org_id_str = str(getattr(report, "organization_id", "N/A"))
-    reg_id_str = str(getattr(report, "regulation_document_id", "N/A"))
+    # Model column is regulation_id; regulation_document_id is a frontend alias
+    reg_id_str = str(getattr(report, "regulation_id", None) or getattr(report, "regulation_document_id", "N/A"))
     pol_id_str = str(getattr(report, "policy_document_id", "N/A"))
 
     created_at_val = getattr(report, "created_at", None)
@@ -267,7 +270,15 @@ def generate_compliance_report_pdf(report: Any) -> bytes:
     # Section 3: Executive Summary
     # -------------------------------------------------------------------------
     story.append(Paragraph("Executive Summary", section_heading))
-    summary_text = getattr(report, "summary", None) or "No executive summary available for this report."
+    summary_raw = getattr(report, "summary", None) or "No executive summary available for this report."
+    # report.summary now stores full result JSON — extract the readable text from it
+    if summary_raw and summary_raw.strip().startswith("{"):
+        try:
+            summary_json = json.loads(summary_raw)
+            summary_raw = summary_json.get("summary") or summary_raw
+        except Exception:
+            pass
+    summary_text = html.escape(str(summary_raw)[:3000])
 
     summary_card_data = [[Paragraph(summary_text, body_style)]]
     summary_table = Table(summary_card_data, colWidths=[520])
@@ -361,7 +372,7 @@ def generate_compliance_report_pdf(report: Any) -> bytes:
         rec_table_rows.append(
             [
                 Paragraph(f"<b>{idx}.</b>", ParagraphStyle("RecNum", parent=table_header_style, textColor=colors.HexColor("#4f46e5"))),
-                Paragraph(rec_text, body_style),
+                Paragraph(html.escape(str(rec_text)[:600]), body_style),
             ]
         )
 

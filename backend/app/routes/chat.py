@@ -79,6 +79,18 @@ def chat_endpoint(
         payload.question,
     )
 
+    from app.services.activity_service import log_activity
+    snippet = payload.question[:40] + "..." if len(payload.question) > 40 else payload.question
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="AI_CHAT_STARTED",
+        title="AI Chat Session",
+        description=f"Asked LexisGraph AI: '{snippet}'",
+        icon_type="chat",
+        extra_data={"organization_id": str(payload.organization_id)},
+    )
+
     # 3. Retrieve hybrid context
     context = retrieve_context(
         organization_id=payload.organization_id,

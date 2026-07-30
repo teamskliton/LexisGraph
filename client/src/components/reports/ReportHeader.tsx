@@ -35,16 +35,27 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
 }) => {
   const [copied, setCopied] = React.useState(false);
 
+  const reportId = report?.id || "";
+  const orgId = report?.organization_id || "";
+  const regId = report?.regulation_document_id || (report as any)?.regulation_id || "";
+  const polId = report?.policy_document_id || "";
+  const status = report?.report_status || (report as any)?.status || "PENDING";
+
   const handleCopyId = () => {
-    navigator.clipboard.writeText(report.id);
+    if (!reportId) return;
+    navigator.clipboard.writeText(reportId);
     setCopied(true);
     toast.success("Report ID copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const formattedDate = report.created_at
+  const formattedDate = report?.created_at
     ? format(new Date(report.created_at), "MMMM d, yyyy • HH:mm:ss")
     : "N/A";
+
+  const shortOrgId = orgId ? `${orgId.substring(0, 8)}...` : "N/A";
+  const shortRegId = regId ? `${regId.substring(0, 6)}...` : "N/A";
+  const shortPolId = polId ? `${polId.substring(0, 6)}...` : "N/A";
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-6 shadow-sm space-y-4">
@@ -70,7 +81,7 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          <ReportStatusBadge status={report.report_status} className="text-sm px-3 py-1" />
+          <ReportStatusBadge status={status} className="text-sm px-3 py-1" />
 
           {onDownloadPdf && (
             <Button
@@ -98,20 +109,22 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
             Report ID
           </span>
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-xs font-semibold text-foreground truncate max-w-[160px]" title={report.id}>
-              {report.id}
+            <span className="font-mono text-xs font-semibold text-foreground truncate max-w-[160px]" title={reportId}>
+              {reportId || "N/A"}
             </span>
-            <button
-              onClick={handleCopyId}
-              className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
-              title="Copy Report ID"
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-emerald-500" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
+            {reportId && (
+              <button
+                onClick={handleCopyId}
+                className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
+                title="Copy Report ID"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -121,8 +134,8 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
             <Building2 className="h-3.5 w-3.5 text-primary" />
             Organization
           </span>
-          <p className="text-sm font-semibold text-foreground truncate" title={orgName || report.organization_id}>
-            {orgName || `${report.organization_id.substring(0, 8)}...`}
+          <p className="text-sm font-semibold text-foreground truncate" title={orgName || orgId || "N/A"}>
+            {orgName || shortOrgId}
           </p>
         </div>
 
@@ -132,8 +145,8 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
             <FileText className="h-3.5 w-3.5 text-indigo-500" />
             Regulation / Policy
           </span>
-          <p className="text-xs font-mono text-foreground truncate" title={`Reg: ${report.regulation_document_id} | Policy: ${report.policy_document_id}`}>
-            Reg: {report.regulation_document_id.substring(0, 6)}... / Pol: {report.policy_document_id.substring(0, 6)}...
+          <p className="text-xs font-mono text-foreground truncate" title={`Reg: ${regId || "N/A"} | Policy: ${polId || "N/A"}`}>
+            Reg: {shortRegId} / Pol: {shortPolId}
           </p>
         </div>
 

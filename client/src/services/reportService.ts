@@ -12,14 +12,28 @@ export const reportService = {
   getReports: async (params?: {
     page?: number;
     page_size?: number;
+    organization_id?: string;
+    regulation_id?: string;
     status?: string;
+    risk_level?: string;
+    start_date?: string;
+    end_date?: string;
+    report_id?: string;
+    policy_name?: string;
+    sort_by?: string;
   }): Promise<ReportPaginatedResponse> => {
     const queryParams: Record<string, string | number> = {};
     if (params?.page) queryParams.page = params.page;
     if (params?.page_size) queryParams.page_size = params.page_size;
-    if (params?.status && params.status !== "ALL") {
-      queryParams.status = params.status;
-    }
+    if (params?.organization_id && params.organization_id !== "ALL") queryParams.organization_id = params.organization_id;
+    if (params?.regulation_id && params.regulation_id !== "ALL") queryParams.regulation_id = params.regulation_id;
+    if (params?.status && params.status !== "ALL") queryParams.status = params.status;
+    if (params?.risk_level && params.risk_level !== "ALL") queryParams.risk_level = params.risk_level;
+    if (params?.start_date) queryParams.start_date = params.start_date;
+    if (params?.end_date) queryParams.end_date = params.end_date;
+    if (params?.report_id) queryParams.report_id = params.report_id;
+    if (params?.policy_name) queryParams.policy_name = params.policy_name;
+    if (params?.sort_by) queryParams.sort_by = params.sort_by;
 
     const response = await api.get<ReportPaginatedResponse>("/reports", {
       params: queryParams,
