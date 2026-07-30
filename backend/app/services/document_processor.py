@@ -30,7 +30,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Document, ProcessingStatus
+from app.db.models import Document, ProcessingStatus, Regulation
 from app.services.graph_builder import build_graph
 from app.services.preprocessing import build_processed_document
 from app.services.vector_store import store_clauses_in_qdrant
@@ -64,7 +64,7 @@ def _truncate_error(message: str) -> str:
     return message[: _ERROR_MESSAGE_MAX_LENGTH - 3] + "..."
 
 
-def _mark_processing_started(db: Session, document: Document) -> None:
+def _mark_processing_started(db: Session, document: Document | Regulation) -> None:
     document.processing_status = ProcessingStatus.PROCESSING
     document.processing_started_at = _utcnow()
     document.processed_at = None
@@ -80,7 +80,7 @@ def _mark_processing_started(db: Session, document: Document) -> None:
     )
 
 
-def _mark_processed(db: Session, document: Document) -> None:
+def _mark_processed(db: Session, document: Document | Regulation) -> None:
     document.processing_status = ProcessingStatus.PROCESSED
     document.processed_at = _utcnow()
     document.error_message = None
@@ -90,7 +90,7 @@ def _mark_processed(db: Session, document: Document) -> None:
     logger.info("Processing complete: document_id=%s status=PROCESSED", document.id)
 
 
-def _mark_failed(db: Session, document: Document, *, error_message: str) -> None:
+def _mark_failed(db: Session, document: Document | Regulation, *, error_message: str) -> None:
     document.processing_status = ProcessingStatus.FAILED
     document.processed_at = _utcnow()
     document.error_message = _truncate_error(error_message)
@@ -105,7 +105,7 @@ def _mark_failed(db: Session, document: Document, *, error_message: str) -> None
 
 def _update_progress(
     db: Session,
-    document: Document,
+    document: Document | Regulation,
     *,
     progress: int,
     current_step: str,
@@ -125,7 +125,7 @@ def _update_progress(
 # Pipeline stages
 # ---------------------------------------------------------------------------
 
-def _load_pdf_text(document: Document) -> tuple[bytes, str]:
+def _load_pdf_text(document: Document | Regulation) -> tuple[bytes, str]:
     """Read stored PDF and extract plain text.
 
     Raises DocumentProcessingError if the file is missing or unreadable.
@@ -160,7 +160,7 @@ def _load_pdf_text(document: Document) -> tuple[bytes, str]:
     return file_bytes, extracted_text
 
 
-def _run_preprocessing(extracted_text: str, document: Document) -> dict:
+def _run_preprocessing(extracted_text: str, document: Document | Regulation) -> dict:
     """Run clause extraction + embedding on the extracted text."""
     logger.info(
         "Preprocessing started: document_id=%s chars=%s",
@@ -181,7 +181,7 @@ def _run_preprocessing(extracted_text: str, document: Document) -> dict:
     return processed
 
 
-def _store_in_qdrant(processed: dict, document: Document) -> int:
+def _store_in_qdrant(processed: dict, document: Document | Regulation) -> int:
     """Upsert clause embeddings into Qdrant. Returns number of points stored."""
     clauses = processed.get("clauses") or []
     count = store_clauses_in_qdrant(
@@ -189,7 +189,7 @@ def _store_in_qdrant(processed: dict, document: Document) -> int:
         document_id=str(document.id),
         title=processed.get("title", document.original_filename),
         domain=processed.get("domain", _DEFAULT_DOMAIN),
-        organization_id=str(document.organization_id),
+        organization_id=str(document.organization_id) if hasattr(document, "organization_id") else None,
     )
     logger.info(
         "Qdrant store complete: document_id=%s points=%s",
@@ -199,7 +199,7 @@ def _store_in_qdrant(processed: dict, document: Document) -> int:
     return count
 
 
-def _build_neo4j_graph(processed: dict, document: Document) -> dict:
+def _build_neo4j_graph(processed: dict, document: Document | Regulation) -> dict:
     """Build Document + Clause nodes and HAS_CLAUSE edges in Neo4j."""
     result = build_graph(
         processed,
@@ -214,7 +214,7 @@ def _build_neo4j_graph(processed: dict, document: Document) -> dict:
     return result
 
 
-def _record_failure(db: Session, document: Document, exc: BaseException) -> None:
+def _record_failure(db: Session, document: Document | Regulation, exc: BaseException) -> None:
     """Log traceback and persist FAILED status."""
     type_name = type(exc).__name__
     message = f"{type_name}: {exc}"
@@ -326,3 +326,91 @@ def process_document(
     finally:
         if owns_session and db is not None:
             db.close()
+
+
+def process_regulation(
+    regulation_id: UUID | str,
+    *,
+    db: Session | None = None,
+) -> Regulation:
+    """Process a single uploaded regulation end-to-end.
+
+    Pipeline (all stages write progress checkpoints to PostgreSQL):
+
+        Stage 1  →  Extract text from PDF                progress=25
+        Stage 2  →  Preprocess + embed clauses           progress=60
+        Stage 3  →  Store embeddings in Qdrant           progress=80
+        Stage 4  →  Build Neo4j graph (nodes + edges)    progress=95
+        Final    →  Mark PROCESSED                       progress=100
+
+    Parameters
+    ----------
+    regulation_id:
+        PostgreSQL UUID of the regulation to process.
+    db:
+        Optional SQLAlchemy session. If omitted a fresh session is created
+        and closed here; when provided the caller owns the session lifecycle.
+
+    Returns
+    -------
+    Regulation
+        The refreshed regulation row with its final processing state.
+    """
+    owns_session = db is None
+    if owns_session:
+        from app.db.session import get_session
+        db = get_session()
+
+    try:
+        regulation = db.get(Regulation, regulation_id)
+        if regulation is None:
+            raise DocumentProcessingError(f"Regulation not found: {regulation_id}")
+
+        logger.info(
+            "Orchestrator invoked: regulation_id=%s current_status=%s",
+            regulation.id,
+            regulation.processing_status,
+        )
+
+        # ── PROCESSING transition ──────────────────────────────────────────
+        _mark_processing_started(db, regulation)   # progress=5
+
+        try:
+            # Stage 1: extract text
+            _, extracted_text = _load_pdf_text(regulation)
+            _update_progress(db, regulation, progress=25, current_step="Extracting text")
+
+            # Stage 2: preprocessing + embeddings
+            processed = _run_preprocessing(extracted_text, regulation)
+            _update_progress(db, regulation, progress=60, current_step="Generating Embeddings")
+
+            clauses = processed.get("clauses") or []
+            if not clauses:
+                raise DocumentProcessingError(
+                    "Preprocessing produced no valid clauses; aborting."
+                )
+
+            # Stage 3: store embeddings in Qdrant
+            _store_in_qdrant(processed, regulation)
+            _update_progress(db, regulation, progress=80, current_step="Storing embeddings")
+
+            # Stage 4: build Neo4j graph
+            _build_neo4j_graph(processed, regulation)
+            _update_progress(db, regulation, progress=95, current_step="Building knowledge graph")
+
+        except DocumentProcessingError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            _record_failure(db, regulation, exc)
+            db.refresh(regulation)
+            return regulation
+
+        # ── PROCESSED transition ──────────────────────────────────────────
+        _mark_processed(db, regulation)
+        db.refresh(regulation)
+        return regulation
+
+    finally:
+        if owns_session and db is not None:
+            db.close()
+

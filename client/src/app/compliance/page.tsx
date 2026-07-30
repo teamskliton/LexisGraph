@@ -243,6 +243,7 @@ function CompliancePageContent() {
     try {
       const res = await complianceService.analyzeCompliance({
         organization_id: selectedOrgId,
+        regulation_id: selectedRegId,
         regulation_document_id: selectedRegId,
         policy_document_id: selectedPolicyId,
       });

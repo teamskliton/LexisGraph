@@ -34,11 +34,22 @@ export interface ReportsOverTimeItem {
   count: number;
 }
 
-export interface TopOrganizationItem {
+export interface OrgScoreAnalyticsItem {
   id: string;
   name: string;
   avg_score: number;
   report_count: number;
+}
+
+export type TopOrganizationItem = OrgScoreAnalyticsItem;
+
+export interface RecentReportItem {
+  id: string;
+  name: string;
+  organization_name: string;
+  compliance_score: number | null;
+  created_at: string;
+  status: string;
 }
 
 export interface DashboardStatsResponse {
@@ -47,5 +58,6 @@ export interface DashboardStatsResponse {
   score_distribution: ScoreDistribution;
   risk_breakdown: RiskBreakdown;
   reports_over_time: ReportsOverTimeItem[];
-  top_organizations: TopOrganizationItem[];
+  org_scores: OrgScoreAnalyticsItem[];
+  recent_reports: RecentReportItem[];
 }

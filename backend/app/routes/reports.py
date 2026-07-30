@@ -28,6 +28,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
+from datetime import datetime
+from app.core.dependencies import get_current_user
+from app.db.models import User
+
+
 @router.get(
     "",
     response_model=ReportPaginatedResponse,
@@ -42,21 +47,37 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 def list_reports(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+    organization_id: Optional[uuid.UUID] = Query(None, description="Filter by Organization ID"),
+    regulation_id: Optional[uuid.UUID] = Query(None, description="Filter by Regulation ID"),
     status: Optional[ComplianceReportStatus] = Query(None, description="Optional report status filter"),
+    risk_level: Optional[str] = Query(None, description="Filter by Risk Level (LOW, MEDIUM, HIGH, CRITICAL)"),
+    start_date: Optional[datetime] = Query(None, description="Filter by created_at >= start_date"),
+    end_date: Optional[datetime] = Query(None, description="Filter by created_at <= end_date"),
+    report_id: Optional[str] = Query(None, description="Search by Report ID substring"),
+    policy_name: Optional[str] = Query(None, description="Search by Policy Document Name substring"),
+    sort_by: Optional[str] = Query("newest", description="Sort order: newest, oldest, highest_score, lowest_score"),
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
+    current_user: Optional[User] = Depends(get_current_user),
 ) -> ReportPaginatedResponse:
     """
-    List reports ordered by `created_at` DESC.
-
-    Supports pagination (`page`, `page_size`) and filtering by `status`
-    (`COMPLETED`, `FAILED`, `PROCESSING`, `PENDING`).
+    List reports with comprehensive server-side filtering, sorting, and pagination.
     """
+    user_id = current_user.id if current_user else None
     items, total = service.list_reports(
         db,
         page=page,
         page_size=page_size,
+        organization_id=organization_id,
+        regulation_id=regulation_id,
         status_filter=status,
+        risk_level=risk_level,
+        start_date=start_date,
+        end_date=end_date,
+        report_id_query=report_id,
+        policy_name_query=policy_name,
+        sort_by=sort_by,
+        user_id=user_id,
     )
     return ReportPaginatedResponse(
         total=total,

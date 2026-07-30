@@ -13,10 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
-from app.core.schemas import DocumentResponse, DocumentStatusResponse
-from app.db.models import Document, DocumentType as DBDocumentType, Organization, ProcessingStatus, User
+from app.core.schemas import DocumentResponse, DocumentStatusResponse, RegulationResponse
+from app.db.models import Document, DocumentType as DBDocumentType, Organization, ProcessingStatus, User, Regulation
 from app.db.session import get_db
-from app.services.document_processor import process_document
+from app.services.document_processor import process_document, process_regulation
+from app.services.activity_service import log_activity
+from typing import Union
 from app.services.storage import store_document, StorageError, InvalidMimeTypeError, FileTooLargeError
 
 logger = logging.getLogger(__name__)
@@ -66,7 +68,7 @@ def _validate_organization_ownership(
 
 @router.post(
     "/upload",
-    response_model=DocumentResponse,
+    response_model=Union[DocumentResponse, RegulationResponse],
     status_code=status.HTTP_201_CREATED,
     summary="Upload a document",
 )
@@ -75,20 +77,15 @@ def upload_document(
     organization_id: uuid.UUID = Form(..., description="UUID of the organization to upload to"),
     document_type: str = Form(..., description="Document type: REGULATION or POLICY"),
     file: UploadFile = File(..., description="PDF file to upload"),
+    version: Optional[str] = Form(None, description="Regulation version (e.g. 2019, 2023, 2026)"),
+    act_name: Optional[str] = Form(None, description="Act name for regulation"),
+    jurisdiction: Optional[str] = Form(None, description="Jurisdiction"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Document:
+) -> Union[Document, Regulation]:
     """
-    Upload a document to an organization.
-
-    - **organization_id**: UUID of the organization to upload the document to
-    - **document_type**: Either "REGULATION" or "POLICY"
-    - **file**: PDF file (max 50 MB)
-
-    The authenticated user must own the organization.
-
-    The file is validated (PDF only, max 50 MB), stored locally, and metadata
-    is saved to PostgreSQL with processing_status set to UPLOADED.
+    Upload a document to an organization or global regulation library.
+    Supports regulation versioning without overwriting previous versions.
     """
     # Validate document type
     if document_type not in (DBDocumentType.REGULATION.value, DBDocumentType.POLICY.value):
@@ -113,13 +110,69 @@ def upload_document(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=str(e),
         )
-    except StorageError as e:
+    except Exception as e:
+        logger.exception("Unexpected error storing file: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Storage error: {str(e)}",
         )
 
-    # Create document record
+    if document_type == DBDocumentType.REGULATION.value:
+        # Check if global regulation exists with exact same hash
+        existing_reg = db.query(Regulation).filter(Regulation.document_hash == stored_metadata.checksum).first()
+        if existing_reg:
+            logger.info("Global regulation already exists: hash=%s (version=%s)", stored_metadata.checksum, existing_reg.version)
+            # We can delete the duplicate stored file since we won't use it
+            try:
+                Path(stored_metadata.path).unlink(missing_ok=True)
+            except OSError:
+                pass
+            return existing_reg
+        
+        # Infer default act_name and version if missing
+        reg_act = act_name or (file.filename.rsplit('.', 1)[0] if file.filename else "Regulation")
+        reg_ver = version or "1.0"
+        reg_juris = jurisdiction or "Global"
+        reg_title = f"{reg_act} (v{reg_ver})" if version else (file.filename or "Regulation")
+
+        # Create new regulation version (preserving existing regulation versions)
+        regulation = Regulation(
+            title=reg_title,
+            act_name=reg_act,
+            version=reg_ver,
+            jurisdiction=reg_juris,
+            document_hash=stored_metadata.checksum,
+            uploaded_by=current_user.id,
+            original_filename=stored_metadata.original_filename,
+            stored_filename=stored_metadata.stored_filename,
+            file_path=stored_metadata.path,
+            file_size=stored_metadata.size,
+            mime_type=stored_metadata.mime_type,
+            processing_status=ProcessingStatus.UPLOADED,
+        )
+        db.add(regulation)
+        db.commit()
+        db.refresh(regulation)
+        
+        try:
+            background_tasks.add_task(process_regulation, regulation.id)
+            logger.info("Enqueued background processing for regulation: id=%s", regulation.id)
+        except Exception:
+            logger.exception("Failed to enqueue background processing for regulation: id=%s", regulation.id)
+            
+        log_activity(
+            db,
+            user_id=current_user.id,
+            event_type="REGULATION_UPLOADED",
+            title="Uploaded Regulation",
+            description=f"Uploaded global regulation '{regulation.original_filename}'",
+            icon_type="file",
+            extra_data={"regulation_id": str(regulation.id)},
+        )
+
+        return regulation
+
+    # Otherwise it's a POLICY document
     document = Document(
         organization_id=organization_id,
         uploaded_by=current_user.id,
@@ -137,14 +190,6 @@ def upload_document(
     db.commit()
     db.refresh(document)
 
-    # Enqueue the heavy AI pipeline (text extraction → preprocessing +
-    # embedding → Mongo bridge → graph build) to run AFTER the response is
-    # sent, so the upload request never blocks on spaCy/Neo4j.
-    #
-    # The orchestrator is invoked with only the document id (not the ORM
-    # object) so it re-loads the row in a fresh, self-owned DB session — the
-    # request-scoped `db` is closed by `get_db()` once this request ends and
-    # must not be touched by the background task.
     try:
         background_tasks.add_task(process_document, document.id)
         logger.info(
@@ -165,12 +210,22 @@ def upload_document(
         current_user.id,
     )
 
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="POLICY_UPLOADED",
+        title="Uploaded Policy",
+        description=f"Uploaded file '{document.original_filename}'",
+        icon_type="file",
+        extra_data={"document_id": str(document.id), "organization_id": str(organization_id)},
+    )
+
     return document
 
 
 @router.get(
     "/",
-    response_model=list[DocumentResponse],
+    response_model=list[Union[DocumentResponse, RegulationResponse]],
     summary="List documents in an organization",
 )
 def list_documents(
@@ -192,20 +247,74 @@ def list_documents(
     documents = db.query(Document).filter(
         Document.organization_id == org.id
     ).order_by(Document.created_at.desc()).all()
+    
+    # Also fetch all global regulations
+    regulations = db.query(Regulation).order_by(Regulation.created_at.desc()).all()
+    
+    # To maintain frontend backward compatibility, we convert regulations into
+    # dictionaries that look like DocumentResponse, injecting the requested org_id.
+    combined = []
+    
+    for doc in documents:
+        combined.append(doc)
+        
+    for reg in regulations:
+        reg_dict = {
+            "id": reg.id,
+            "organization_id": org.id,
+            "uploaded_by": reg.uploaded_by,
+            "original_filename": reg.original_filename,
+            "stored_filename": reg.stored_filename,
+            "file_path": reg.file_path,
+            "file_size": reg.file_size,
+            "mime_type": reg.mime_type,
+            "checksum": reg.document_hash,
+            "document_type": DBDocumentType.REGULATION.value,
+            "processing_status": reg.processing_status,
+            "progress": reg.progress,
+            "current_step": reg.current_step,
+            "processing_started_at": reg.processing_started_at,
+            "processed_at": reg.processed_at,
+            "error_message": reg.error_message,
+            "created_at": reg.created_at,
+            "updated_at": reg.updated_at,
+        }
+        combined.append(reg_dict)
 
-    return documents
+    # Sort combined by created_at desc
+    combined.sort(
+        key=lambda x: x.created_at if hasattr(x, "created_at") else x["created_at"],
+        reverse=True
+    )
+
+    return combined
+
+
+@router.get(
+    "/regulations",
+    response_model=list[RegulationResponse],
+    summary="List all global regulations",
+)
+def list_all_regulations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Regulation]:
+    """
+    List all global regulations available across all organizations.
+    """
+    return db.query(Regulation).order_by(Regulation.created_at.desc()).all()
 
 
 @router.get(
     "/{document_id}",
-    response_model=DocumentResponse,
+    response_model=Union[DocumentResponse, RegulationResponse],
     summary="Get a document by ID",
 )
 def get_document(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Document:
+) -> Union[Document, dict]:
     """
     Get a specific document by its ID.
 
@@ -217,9 +326,18 @@ def get_document(
     document = db.get(Document, document_id)
 
     if not document:
+        # Check if it's a regulation
+        reg = db.get(Regulation, document_id)
+        if reg:
+            # We don't have an organization ID here because we don't know it from the path.
+            # But we can just return it as a dictionary that matches DocumentResponse without org_id 
+            # or with a dummy one, or actually just return the Regulation and let FastAPI use RegulationResponse
+            # since response_model is Union[DocumentResponse, RegulationResponse].
+            return reg
+            
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found.",
+            detail="Document or Regulation not found.",
         )
 
     # Validate organization ownership
@@ -260,12 +378,20 @@ def get_document_status(
         }
     """
     document = db.get(Document, document_id)
+    is_regulation = False
 
     if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found.",
-        )
+        # Check if it's a regulation
+        document = db.get(Regulation, document_id)
+        if document:
+            is_regulation = True
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document or Regulation not found.",
+            )
+
+
 
     # 403 rather than 404 so users know the document exists but is not theirs.
     if document.uploaded_by != current_user.id:
@@ -281,6 +407,17 @@ def get_document_status(
         document.progress,
         current_user.id,
     )
+
+    if is_regulation:
+        return DocumentStatusResponse(
+            document_id=document.id,
+            status=document.processing_status,
+            progress=document.progress,
+            current_step=document.current_step,
+            error_message=document.error_message,
+            processing_started_at=document.processing_started_at,
+            processed_at=document.processed_at,
+        )
 
     return DocumentStatusResponse(
         document_id=document.id,
@@ -400,6 +537,12 @@ def delete_document(
     document = db.get(Document, document_id)
 
     if not document:
+        # Check if it is a regulation
+        if db.get(Regulation, document_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Global regulations cannot be deleted.",
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found.",

@@ -14,8 +14,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.compliance.models import ComplianceReport, ComplianceReportStatus
+from app.core.dependencies import get_current_user
 from app.db.models.document import Document, DocumentType
+from app.db.models.regulation import Regulation
 from app.db.models.organization import Organization
+from app.db.models.user import User
 from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
@@ -24,11 +27,11 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 class KpiStats(BaseModel):
-    total_organizations: int = Field(0, description="Total number of registered organizations")
-    total_regulations: int = Field(0, description="Total regulation documents uploaded")
-    total_policies: int = Field(0, description="Total policy documents uploaded")
-    total_compliance_reports: int = Field(0, description="Total compliance reports generated")
-    average_compliance_score: float = Field(0.0, description="Average compliance score (0-100)")
+    total_organizations: int = Field(0, description="Total number of user registered organizations")
+    total_regulations: int = Field(0, description="Total global regulation documents uploaded")
+    total_policies: int = Field(0, description="Total user policy documents uploaded")
+    total_compliance_reports: int = Field(0, description="Total user compliance reports generated")
+    average_compliance_score: float = Field(0.0, description="Average compliance score of user reports (0-100)")
 
 
 class ActivityItem(BaseModel):
@@ -59,11 +62,20 @@ class ReportsOverTimeItem(BaseModel):
     count: int
 
 
-class TopOrganizationItem(BaseModel):
+class OrgScoreAnalyticsItem(BaseModel):
     id: str
     name: str
     avg_score: float
     report_count: int
+
+
+class RecentReportItem(BaseModel):
+    id: str
+    name: str
+    organization_name: str
+    compliance_score: Optional[float] = None
+    created_at: str
+    status: str
 
 
 class DashboardStatsResponse(BaseModel):
@@ -72,7 +84,8 @@ class DashboardStatsResponse(BaseModel):
     score_distribution: ScoreDistribution
     risk_breakdown: RiskBreakdown
     reports_over_time: List[ReportsOverTimeItem]
-    top_organizations: List[TopOrganizationItem]
+    org_scores: List[OrgScoreAnalyticsItem]
+    recent_reports: List[RecentReportItem]
 
 
 @router.get(
@@ -80,23 +93,34 @@ class DashboardStatsResponse(BaseModel):
     response_model=DashboardStatsResponse,
     summary="Get aggregated live dashboard statistics",
 )
-def get_dashboard_stats(db: Session = Depends(get_db)) -> DashboardStatsResponse:
+def get_dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DashboardStatsResponse:
     """
-    Computes real-time live dashboard metrics directly from PostgreSQL database records.
-    Calculates KPI totals, activity streams, score distributions, and organization rankings.
+    Computes real-time live user-specific dashboard metrics directly from PostgreSQL database records.
+    Calculates KPI totals, activity streams, score distributions, risk level breakdown, reports over time, org averages, and recent reports for current user.
     """
     # 1. KPI Counts
-    total_orgs = db.scalar(select(func.count(Organization.id))) or 0
-    total_regs = db.scalar(
-        select(func.count(Document.id)).where(Document.document_type == DocumentType.REGULATION)
+    total_orgs = db.scalar(
+        select(func.count(Organization.id)).where(Organization.created_by == current_user.id)
     ) or 0
+    total_regs = db.scalar(select(func.count(Regulation.id))) or 0
     total_pols = db.scalar(
-        select(func.count(Document.id)).where(Document.document_type == DocumentType.POLICY)
+        select(func.count(Document.id)).where(
+            Document.document_type == DocumentType.POLICY,
+            Document.uploaded_by == current_user.id,
+        )
     ) or 0
-    total_reports = db.scalar(select(func.count(ComplianceReport.id))) or 0
+    total_reports = db.scalar(
+        select(func.count(ComplianceReport.id)).where(ComplianceReport.created_by == current_user.id)
+    ) or 0
 
-    # Calculate average compliance score across evaluated reports
-    scores_query = select(ComplianceReport.overall_score).where(ComplianceReport.overall_score.isnot(None))
+    # Calculate average compliance score across user's evaluated reports
+    scores_query = select(ComplianceReport.overall_score).where(
+        ComplianceReport.created_by == current_user.id,
+        ComplianceReport.overall_score.isnot(None),
+    )
     scores = db.scalars(scores_query).all()
     if scores:
         normalized_scores = [s * 100 if (s <= 1.0 and s > 0) else s for s in scores]
@@ -112,19 +136,21 @@ def get_dashboard_stats(db: Session = Depends(get_db)) -> DashboardStatsResponse
         average_compliance_score=avg_score,
     )
 
-    # 2. Score Distribution
+    # 2. Score Distribution & Risk Breakdown (user-specific)
     excellent_c = 0
     good_c = 0
     needs_review_c = 0
     high_risk_c = 0
 
-    # 3. Risk Breakdown
     low_r = 0
     medium_r = 0
     high_r = 0
     critical_r = 0
 
-    all_reports = db.scalars(select(ComplianceReport)).all()
+    all_reports = db.scalars(
+        select(ComplianceReport).where(ComplianceReport.created_by == current_user.id)
+    ).all()
+
     for rep in all_reports:
         sc = rep.overall_score
         if sc is not None:
@@ -163,7 +189,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)) -> DashboardStatsResponse
         critical=critical_r,
     )
 
-    # 4. Reports Over Time (Monthly grouping)
+    # 3. Reports Over Time (Monthly grouping, user-specific)
     over_time_map: Dict[str, int] = {}
     for rep in all_reports:
         dt = rep.created_at
@@ -175,20 +201,23 @@ def get_dashboard_stats(db: Session = Depends(get_db)) -> DashboardStatsResponse
         for lbl, cnt in list(over_time_map.items())[-6:]
     ]
 
-    # 5. Top Organizations by Compliance
-    orgs = db.scalars(select(Organization)).all()
-    top_orgs_list: List[TopOrganizationItem] = []
+    # 4. Average Score Per Organization (user-owned organizations)
+    user_orgs = db.scalars(
+        select(Organization).where(Organization.created_by == current_user.id)
+    ).all()
+    org_name_map = {str(o.id): o.name for o in user_orgs}
 
-    for org in orgs:
+    org_scores_list: List[OrgScoreAnalyticsItem] = []
+    for org in user_orgs:
         org_reports = [r for r in all_reports if r.organization_id == org.id and r.overall_score is not None]
         if org_reports:
-            org_scores = [r.overall_score * 100 if (r.overall_score <= 1.0 and r.overall_score > 0) else r.overall_score for r in org_reports]
-            org_avg = round(sum(org_scores) / len(org_scores), 1)
+            org_scores_vals = [r.overall_score * 100 if (r.overall_score <= 1.0 and r.overall_score > 0) else r.overall_score for r in org_reports]
+            org_avg = round(sum(org_scores_vals) / len(org_scores_vals), 1)
         else:
             org_avg = 0.0
 
-        top_orgs_list.append(
-            TopOrganizationItem(
+        org_scores_list.append(
+            OrgScoreAnalyticsItem(
                 id=str(org.id),
                 name=org.name,
                 avg_score=org_avg,
@@ -196,55 +225,50 @@ def get_dashboard_stats(db: Session = Depends(get_db)) -> DashboardStatsResponse
             )
         )
 
-    # Sort top orgs by avg_score descending
-    top_orgs_list.sort(key=lambda x: x.avg_score, reverse=True)
-    top_organizations = top_orgs_list[:5]
+    org_scores_list.sort(key=lambda x: x.avg_score, reverse=True)
+    org_scores = org_scores_list[:5]
 
-    # 6. Recent Activity Feed
-    activities: List[Dict[str, Any]] = []
+    # 5. Recent Reports Widget (Limit 5, user-specific)
+    recent_report_objs = db.scalars(
+        select(ComplianceReport)
+        .where(ComplianceReport.created_by == current_user.id)
+        .order_by(ComplianceReport.created_at.desc())
+        .limit(5)
+    ).all()
 
-    # Recent orgs
-    recent_orgs = db.scalars(select(Organization).order_by(Organization.created_at.desc()).limit(5)).all()
-    for o in recent_orgs:
-        activities.append({
-            "id": f"org-{o.id}",
-            "type": "ORGANIZATION_CREATED",
-            "title": f"Created Organization",
-            "description": f"Added '{o.name}' to workspace",
-            "timestamp": o.created_at.isoformat() if o.created_at else datetime.utcnow().isoformat(),
-            "icon_type": "building",
-        })
-
-    # Recent docs
-    recent_docs = db.scalars(select(Document).order_by(Document.created_at.desc()).limit(5)).all()
-    for d in recent_docs:
-        doc_type_label = "Regulation" if d.document_type == DocumentType.REGULATION else "Policy"
-        activities.append({
-            "id": f"doc-{d.id}",
-            "type": "DOCUMENT_UPLOADED",
-            "title": f"Uploaded {doc_type_label}",
-            "description": f"Uploaded file '{d.original_filename}'",
-            "timestamp": d.created_at.isoformat() if d.created_at else datetime.utcnow().isoformat(),
-            "icon_type": "file",
-        })
-
-    # Recent reports
-    recent_reps = db.scalars(select(ComplianceReport).order_by(ComplianceReport.created_at.desc()).limit(5)).all()
-    org_name_map = {str(o.id): o.name for o in orgs}
-    for r in recent_reps:
+    recent_reports: List[RecentReportItem] = []
+    for r in recent_report_objs:
         org_name = org_name_map.get(str(r.organization_id), "Organization")
-        activities.append({
-            "id": f"rep-{r.id}",
-            "type": "REPORT_GENERATED",
-            "title": "Generated Compliance Report",
-            "description": f"Completed compliance check for {org_name}",
-            "timestamp": r.created_at.isoformat() if r.created_at else datetime.utcnow().isoformat(),
-            "icon_type": "report",
-        })
+        score_val = None
+        if r.overall_score is not None:
+            score_val = round(r.overall_score * 100 if (r.overall_score <= 1.0 and r.overall_score > 0) else r.overall_score, 1)
 
-    # Sort all activity events by timestamp descending
-    activities.sort(key=lambda x: x["timestamp"], reverse=True)
-    recent_activity = [ActivityItem(**act) for act in activities[:10]]
+        status_str = r.status.value if hasattr(r.status, "value") else str(r.status)
+        recent_reports.append(
+            RecentReportItem(
+                id=str(r.id),
+                name=f"Compliance Check ({str(r.id)[:6]})",
+                organization_name=org_name,
+                compliance_score=score_val,
+                created_at=r.created_at.isoformat() if r.created_at else datetime.utcnow().isoformat(),
+                status=status_str,
+            )
+        )
+
+    # 6. Recent Activity Feed (real-time activities from Activity table for current_user, limit 20)
+    from app.services.activity_service import get_user_activities
+    db_activities = get_user_activities(db, current_user.id, limit=20)
+    recent_activity = [
+        ActivityItem(
+            id=str(act.id),
+            type=act.event_type,
+            title=act.title,
+            description=act.description,
+            timestamp=act.created_at.isoformat() if act.created_at else datetime.utcnow().isoformat(),
+            icon_type=act.icon_type,
+        )
+        for act in db_activities
+    ]
 
     return DashboardStatsResponse(
         kpis=kpis,
@@ -252,5 +276,6 @@ def get_dashboard_stats(db: Session = Depends(get_db)) -> DashboardStatsResponse
         score_distribution=score_dist,
         risk_breakdown=risk_bd,
         reports_over_time=reports_over_time,
-        top_organizations=top_organizations,
+        org_scores=org_scores,
+        recent_reports=recent_reports,
     )

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.compliance.models import ComplianceReportStatus
 
@@ -16,8 +16,19 @@ class ComplianceAnalyzeRequest(BaseModel):
     """Schema for initiating compliance analysis."""
 
     organization_id: uuid.UUID
-    regulation_document_id: uuid.UUID
+    regulation_id: uuid.UUID | None = None
+    regulation_document_id: uuid.UUID | None = None
     policy_document_id: uuid.UUID
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_regulation_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            reg_id = data.get("regulation_id") or data.get("regulation_document_id")
+            if reg_id:
+                data["regulation_id"] = reg_id
+                data["regulation_document_id"] = reg_id
+        return data
 
 
 class ComplianceAnalyzeResponse(BaseModel):
@@ -31,7 +42,7 @@ class ComplianceReportCreate(BaseModel):
     """Schema for creating/initiating a compliance report."""
 
     organization_id: uuid.UUID
-    regulation_document_id: uuid.UUID
+    regulation_id: uuid.UUID
     policy_document_id: uuid.UUID
 
 
@@ -54,7 +65,7 @@ class ComplianceReportResponse(BaseModel):
 
     id: uuid.UUID
     organization_id: uuid.UUID
-    regulation_document_id: uuid.UUID
+    regulation_id: uuid.UUID
     policy_document_id: uuid.UUID
     overall_score: float | None = None
     total_clauses: int | None = None

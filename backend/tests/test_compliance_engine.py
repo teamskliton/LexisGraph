@@ -174,7 +174,7 @@ class ComplianceEngineTest(unittest.TestCase):
         report = ComplianceReport(
             id=uuid.uuid4(),
             organization_id=self.org.id,
-            regulation_document_id=self.reg_doc.id,
+            regulation_id=self.reg_doc.id,
             policy_document_id=self.policy_doc.id,
             status=ComplianceReportStatus.PENDING,
             created_by=self.user.id,

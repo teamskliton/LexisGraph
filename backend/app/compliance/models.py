@@ -7,7 +7,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text, JSON, Enum as SQLEnum
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, JSON, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
@@ -46,10 +46,10 @@ class ComplianceReport(Base):
         index=True,
     )
 
-    # Foreign key to documents.id (Regulation document)
-    regulation_document_id: Mapped[uuid.UUID] = mapped_column(
+    # Foreign key to regulations.id (Global Regulation)
+    regulation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("documents.id", ondelete="CASCADE"),
+        ForeignKey("regulations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -59,6 +59,19 @@ class ComplianceReport(Base):
         UUID(as_uuid=True),
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+
+    # Document SHA-256 Checksums for compliance report caching
+    policy_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        index=True,
+    )
+
+    regulation_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
         index=True,
     )
 
@@ -159,9 +172,9 @@ class ComplianceReport(Base):
         lazy="select",
     )
 
-    regulation_document: Mapped["Document"] = relationship(
-        "Document",
-        foreign_keys=[regulation_document_id],
+    regulation: Mapped["Regulation"] = relationship(
+        "Regulation",
+        foreign_keys=[regulation_id],
         lazy="select",
     )
 

@@ -14,15 +14,23 @@ from sqlalchemy.orm import sessionmaker
 
 import app.db.models  # noqa: F401 - Register all models with Base.metadata
 from app.compliance.models import ComplianceReport, ComplianceReportStatus
-from app.db.models import Document, DocumentType, Organization, ProcessingStatus, User
+from app.core.dependencies import get_current_user
+from app.db.models import Document, DocumentType, Organization, ProcessingStatus, User, Regulation
 from app.db.session import Base, get_db
 from app.routes.reports import router as reports_router
+
+
+from sqlalchemy.pool import StaticPool
 
 
 class ReportsApiTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.engine = create_engine("sqlite:///:memory:")
+        cls.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
         Base.metadata.create_all(cls.engine)
         cls.SessionLocal = sessionmaker(bind=cls.engine)
 
@@ -46,17 +54,16 @@ class ReportsApiTest(unittest.TestCase):
         db.add(cls.org)
         db.commit()
 
-        cls.reg_doc = Document(
+        cls.reg_doc = Regulation(
             id=uuid.uuid4(),
-            organization_id=cls.org.id,
             uploaded_by=cls.user.id,
+            title="reg.pdf",
             original_filename="reg.pdf",
             stored_filename="reg.pdf",
             file_path="/tmp/reg.pdf",
             file_size=100,
             mime_type="application/pdf",
-            checksum="abc",
-            document_type=DocumentType.REGULATION,
+            document_hash="abc",
             processing_status=ProcessingStatus.PROCESSED,
         )
         cls.policy_doc = Document(
@@ -79,7 +86,7 @@ class ReportsApiTest(unittest.TestCase):
         cls.report1 = ComplianceReport(
             id=uuid.uuid4(),
             organization_id=cls.org.id,
-            regulation_document_id=cls.reg_doc.id,
+            regulation_id=cls.reg_doc.id,
             policy_document_id=cls.policy_doc.id,
             overall_score=85.5,
             total_clauses=10,
@@ -97,15 +104,20 @@ class ReportsApiTest(unittest.TestCase):
         cls.report2 = ComplianceReport(
             id=uuid.uuid4(),
             organization_id=cls.org.id,
-            regulation_document_id=cls.reg_doc.id,
+            regulation_id=cls.reg_doc.id,
             policy_document_id=cls.policy_doc.id,
             status=ComplianceReportStatus.PROCESSING,
             created_by=cls.user.id,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
+        cls.report1_id = cls.report1.id
+        cls.report2_id = cls.report2.id
+        cls.org_id = cls.org.id
+
         db.add_all([cls.report1, cls.report2])
         db.commit()
+        cls.user_id = cls.user.id
         db.close()
 
         cls.app = FastAPI()
@@ -118,7 +130,11 @@ class ReportsApiTest(unittest.TestCase):
             finally:
                 db_session.close()
 
+        def _override_get_current_user():
+            return User(id=cls.user_id, email="reports_test@example.com", username="reports_user")
+
         cls.app.dependency_overrides[get_db] = _override_get_db
+        cls.app.dependency_overrides[get_current_user] = _override_get_current_user
         cls.client = TestClient(cls.app)
 
     def test_list_reports_paginated(self):
@@ -141,10 +157,10 @@ class ReportsApiTest(unittest.TestCase):
         self.assertEqual(data["items"][0]["overall_score"], 85.5)
 
     def test_get_report_by_id_success(self):
-        response = self.client.get(f"/reports/{self.report1.id}")
+        response = self.client.get(f"/reports/{self.report1_id}")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["id"], str(self.report1.id))
+        self.assertEqual(data["id"], str(self.report1_id))
         self.assertEqual(data["overall_score"], 85.5)
         self.assertEqual(data["total_clauses"], 10)
         self.assertEqual(data["compliant_clauses"], 8)
@@ -158,11 +174,36 @@ class ReportsApiTest(unittest.TestCase):
         self.assertIn("not found", response.json()["detail"].lower())
 
     def test_get_organization_reports(self):
-        response = self.client.get(f"/reports/organization/{self.org.id}")
+        response = self.client.get(f"/reports/organization/{self.org_id}")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data), 2)
-        self.assertEqual(data[0]["organization_id"], str(self.org.id))
+        self.assertEqual(data[0]["organization_id"], str(self.org_id))
+
+    def test_list_reports_filters_and_sorting(self):
+        # Filter by risk level
+        response = self.client.get("/reports?risk_level=LOW")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["items"][0]["id"], str(self.report1_id))
+
+        # Search by policy name
+        response = self.client.get("/reports?policy_name=policy")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total"], 2)
+
+        # Search by Report ID
+        short_id = str(self.report1_id)[:8]
+        response = self.client.get(f"/reports?report_id={short_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total"], 1)
+
+        # Sort by highest score
+        response = self.client.get("/reports?sort_by=highest_score")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["items"][0]["id"], str(self.report1_id))
 
 
 if __name__ == "__main__":

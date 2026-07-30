@@ -7,6 +7,8 @@ import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { dashboardService } from "@/services/dashboard-service";
 import { DashboardStatsResponse } from "@/types/dashboard";
+import { OrganizationDialog } from "@/components/features/organizations/OrganizationDialog";
+import { organizationsService, OrganizationCreate, OrganizationUpdate } from "@/services/api/organizations";
 
 // Dashboard Components
 import { DashboardKpiCards } from "@/components/dashboard/DashboardKpiCards";
@@ -14,7 +16,8 @@ import { RecentActivityList } from "@/components/dashboard/RecentActivityList";
 import { ComplianceScoreChart } from "@/components/dashboard/ComplianceScoreChart";
 import { ReportsOverTimeChart } from "@/components/dashboard/ReportsOverTimeChart";
 import { RiskBreakdownChart } from "@/components/dashboard/RiskBreakdownChart";
-import { TopOrganizationsChart } from "@/components/dashboard/TopOrganizationsChart";
+import { OrgScoresChart } from "@/components/dashboard/OrgScoresChart";
+import { RecentReportsWidget } from "@/components/dashboard/RecentReportsWidget";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -31,6 +34,7 @@ import {
   FileText,
   FileCheck,
   Zap,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,6 +46,10 @@ function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Organization dialog state
+  const [isOrgDialogOpen, setIsOrgDialogOpen] = useState(false);
+  const [isSubmittingOrg, setIsSubmittingOrg] = useState(false);
 
   // Fetch Live Dashboard Stats
   const fetchStats = useCallback(async (isManualRefresh = false) => {
@@ -72,18 +80,53 @@ function DashboardContent() {
     fetchStats();
   }, [fetchStats]);
 
+  const handleCreateOrgSubmit = async (data: OrganizationCreate | OrganizationUpdate) => {
+    try {
+      setIsSubmittingOrg(true);
+      await organizationsService.createOrganization(data as OrganizationCreate);
+      toast.success("Organization created successfully.");
+      setIsOrgDialogOpen(false);
+      fetchStats(false);
+    } catch (error) {
+      console.error("Failed to create organization:", error);
+      toast.error("Failed to create organization. Please check your inputs.");
+    } finally {
+      setIsSubmittingOrg(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
-              <Layers className="h-4 w-4 text-white" />
+          <div className="flex items-center gap-2 md:gap-6">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push("/dashboard")}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
+                <Layers className="h-4 w-4 text-white" />
+              </div>
+              <span className="font-bold tracking-tight text-foreground">
+                LexisGraph
+              </span>
             </div>
-            <span className="font-bold tracking-tight text-foreground">
-              LexisGraph
-            </span>
+
+            <nav className="hidden md:flex items-center gap-1 text-xs font-medium">
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-foreground font-semibold" onClick={() => router.push("/dashboard")}>
+                Dashboard
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => router.push("/organizations")}>
+                <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                Organizations
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => router.push("/documents")}>
+                <FileText className="h-3.5 w-3.5 mr-1.5" />
+                Documents
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => router.push("/reports")}>
+                <FileCheck className="h-3.5 w-3.5 mr-1.5" />
+                Reports
+              </Button>
+            </nav>
           </div>
 
           <div className="flex items-center gap-4">
@@ -114,7 +157,7 @@ function DashboardContent() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Button
               variant="outline"
               size="sm"
@@ -124,6 +167,16 @@ function DashboardContent() {
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-primary" : ""}`} />
               <span>Refresh Data</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsOrgDialogOpen(true)}
+              className="gap-1.5 cursor-pointer text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Create Organization</span>
             </Button>
 
             <Button
@@ -162,20 +215,27 @@ function DashboardContent() {
         {/* 1. Live KPI Cards (5 Cards) */}
         <DashboardKpiCards kpis={stats?.kpis} isLoading={isLoading} />
 
-        {/* 2. Charts Grid (4 Live Charts) */}
+        {/* 2. Charts Grid (4 Live Analytics Charts) */}
         <div className="grid gap-6 md:grid-cols-2">
           {/* Chart 1: Compliance Score Distribution */}
           <ComplianceScoreChart data={stats?.score_distribution} isLoading={isLoading} />
 
-          {/* Chart 2: Reports Generated Over Time */}
+          {/* Chart 2: Reports Generated Per Month */}
           <ReportsOverTimeChart data={stats?.reports_over_time} isLoading={isLoading} />
 
           {/* Chart 3: Risk Level Breakdown */}
           <RiskBreakdownChart data={stats?.risk_breakdown} isLoading={isLoading} />
 
-          {/* Chart 4: Top Organizations by Compliance */}
-          <TopOrganizationsChart data={stats?.top_organizations} isLoading={isLoading} />
+          {/* Chart 4: Average Score Per Organization */}
+          <OrgScoresChart
+            data={stats?.org_scores}
+            isLoading={isLoading}
+            onAddOrg={() => setIsOrgDialogOpen(true)}
+          />
         </div>
+
+        {/* 3. Recent Reports Widget */}
+        <RecentReportsWidget reports={stats?.recent_reports} isLoading={isLoading} />
 
         {/* 3. Recent Activity Feed & User Identity Panel */}
         <div className="grid gap-6 md:grid-cols-3">
@@ -240,9 +300,15 @@ function DashboardContent() {
               </div>
             </CardContent>
 
-            <CardFooter className="bg-muted/30 border-t border-border/40 py-2.5 text-center text-[11px] text-muted-foreground flex justify-between items-center">
+            <CardFooter className="bg-muted/30 border-t border-border/40 py-2.5 text-center text-[11px] text-muted-foreground flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <span>Quick Navigation:</span>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5 flex-wrap">
+                <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 font-medium text-indigo-600 dark:text-indigo-400" onClick={() => setIsOrgDialogOpen(true)}>
+                  + Create Org
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2" onClick={() => router.push("/organizations")}>
+                  Organizations
+                </Button>
                 <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2" onClick={() => router.push("/reports")}>
                   Reports
                 </Button>
@@ -254,6 +320,13 @@ function DashboardContent() {
           </Card>
         </div>
       </main>
+
+      <OrganizationDialog
+        open={isOrgDialogOpen}
+        onOpenChange={setIsOrgDialogOpen}
+        onSubmit={handleCreateOrgSubmit}
+        isLoading={isSubmittingOrg}
+      />
     </div>
   );
 }

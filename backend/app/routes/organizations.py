@@ -15,6 +15,7 @@ from app.core.schemas import (
 from app.core.dependencies import get_current_user
 from app.db.models import Organization, User
 from app.db.session import get_db
+from app.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,17 @@ def create_organization(
     db.refresh(org)
     
     logger.info("Organization created: id=%s by user=%s", org.id, current_user.id)
+    
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="ORGANIZATION_CREATED",
+        title="Created Organization",
+        description=f"Added '{org.name}' to workspace",
+        icon_type="building",
+        extra_data={"organization_id": str(org.id)},
+    )
+
     return org
 
 

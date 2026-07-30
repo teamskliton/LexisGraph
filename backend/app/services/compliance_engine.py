@@ -289,11 +289,15 @@ def _get_structural_context(clause_id: str) -> dict[str, Any]:
     }
 
     try:
-        # Get parent document and sibling clauses via HAS_CLAUSE
+        # Get parent document and sibling clauses via HAS_CLAUSE.
+        # Documents may use either a plain Clause label (document_processor pipeline)
+        # or PolicyClause / RegulationClause (knowledge_graph pipeline).
         doc_query = """
-        MATCH (d:Document)-[:HAS_CLAUSE]->(c:Clause {id: $clause_id})
-        OPTIONAL MATCH (d)-[:HAS_CLAUSE]->(sibling:Clause)
-        WHERE sibling.id <> $clause_id
+        MATCH (d)-[:HAS_CLAUSE]->(c)
+        WHERE (c:Clause OR c:PolicyClause OR c:RegulationClause) AND c.id = $clause_id
+        OPTIONAL MATCH (d)-[:HAS_CLAUSE]->(sibling)
+        WHERE (sibling:Clause OR sibling:PolicyClause OR sibling:RegulationClause)
+          AND sibling.id <> $clause_id
         RETURN
             d.id AS doc_id,
             d.title AS doc_title,
@@ -325,9 +329,13 @@ def _get_structural_context(clause_id: str) -> dict[str, Any]:
         logger.warning("Neo4j structural context (doc/siblings) notice for clause=%s: %s", clause_id, exc)
 
     try:
-        # Get entities via HAS_ENTITY
+        # Get entities via HAS_ENTITY.
+        # Entity nodes are labeled KnowledgeGraphNode:Entity in the knowledge graph pipeline.
+        # The Clause node may be a generic Clause or a PolicyClause/RegulationClause.
         entity_query = """
-        MATCH (c:Clause {id: $clause_id})-[:HAS_ENTITY]->(e:Entity)
+        MATCH (c)-[:HAS_ENTITY]->(e)
+        WHERE (c:Clause OR c:PolicyClause OR c:RegulationClause) AND c.id = $clause_id
+          AND (e:Entity OR e:KnowledgeGraphNode)
         RETURN e.id AS id, e.name AS name
         LIMIT 5
         """
@@ -946,7 +954,7 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
 
     try:
         org = report.organization
-        reg_doc = report.regulation_document
+        reg_doc = report.regulation
         policy_doc = report.policy_document
 
         result = analyze_compliance_engine(org, reg_doc, policy_doc)
@@ -958,7 +966,9 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
         report.compliant_clauses = result.get("compliant_count", 0)
         report.partial_clauses = result.get("partially_compliant_count", 0)
         report.non_compliant_clauses = result.get("non_compliant_count", 0)
-        report.summary = result.get("summary") or "Analysis completed successfully."
+        # Store the full result payload as JSON so clause-level details survive the DB
+        # round-trip.  The service layer parses this back via json.loads(report.summary).
+        report.summary = json.dumps(result, default=str)
         report.recommendations = result.get("recommendations", [])
         report.processing_time_seconds = round(elapsed_seconds, 2)
         report.status = ComplianceReportStatus.COMPLETED
@@ -973,6 +983,18 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
             report.overall_score,
             elapsed_seconds,
         )
+
+        from app.services.activity_service import log_activity
+        log_activity(
+            db,
+            user_id=report.created_by,
+            event_type="COMPLIANCE_COMPLETED",
+            title="Generated Compliance Report",
+            description=f"Completed compliance check for {org.name if org else 'Organization'}",
+            icon_type="report",
+            extra_data={"report_id": str(report.id), "overall_score": report.overall_score},
+        )
+
         return result
     except Exception as exc:
         db.rollback()
