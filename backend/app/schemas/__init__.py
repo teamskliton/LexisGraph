@@ -1,6 +1,7 @@
 """
 Schemas package.
 """
+from app.schemas.chat import ChatRequest, ChatResponse, SourceCitation
 from app.schemas.report import (
     ReportBase,
     ReportCreate,
@@ -12,6 +13,9 @@ from app.schemas.report import (
 )
 
 __all__ = [
+    "ChatRequest",
+    "ChatResponse",
+    "SourceCitation",
     "ReportBase",
     "ReportCreate",
     "ReportUpdate",
@@ -20,3 +24,4 @@ __all__ = [
     "ReportDetailResponse",
     "ReportResponse",
 ]
+

@@ -280,25 +280,4 @@ class RegulationStatusResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ChatRequest(BaseModel):
-    """Payload for submitting a question to the Chat RAG endpoint."""
-
-    organization_id: uuid.UUID = Field(..., description="UUID of the organization to query")
-    question: str = Field(..., min_length=1, max_length=2000, description="User question or prompt")
-
-
-class SourceCitation(BaseModel):
-    """Citation specifying document name, clause number/id, confidence score, and search source origin."""
-
-    document: str = Field(..., description="Original filename or document title")
-    clause: str = Field(..., description="Relevant clause text snippet")
-    clause_number: str | None = Field(default=None, description="Clause number or ID if available")
-    confidence_score: float = Field(..., description="Relevance / similarity confidence score (0.0 to 1.0)")
-    search_source: str = Field(..., description="Source origin: 'Vector Search', 'Graph Search', or 'Both'")
-
-
-class ChatResponse(BaseModel):
-    """Structured response from the Chat RAG endpoint."""
-
-    answer: str = Field(..., description="LLM generated answer")
-    sources: list[SourceCitation] = Field(default_factory=list, description="Citations used in constructing the answer")
+from app.schemas.chat import ChatRequest, ChatResponse, SourceCitation

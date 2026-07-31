@@ -85,13 +85,17 @@ def configure_logging() -> None:
 
 
 def _resolve_cors_origins() -> list[str]:
-    app_env = os.getenv("APP_ENV", "development").strip().lower()
     configured = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
     if configured:
         return [item.strip() for item in configured.split(",") if item.strip()]
-    if app_env == "production":
-        return ["http://localhost:5173", "http://127.0.0.1:5173"]
-    return ["*"]
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
 
 def start_scheduler() -> BackgroundScheduler:
@@ -228,7 +232,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_resolve_cors_origins(),
-        allow_credentials=False,
+        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -258,8 +263,26 @@ def create_app() -> FastAPI:
     app.include_router(compliance_router)
     app.include_router(compliance_router, prefix="/api/v1")
     app.include_router(legacy_compliance_router, prefix="/api/v1")
+    app.include_router(graph_router)
+    app.include_router(graph_router, prefix="/api/v1")
     app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
 
+
+    @app.get("/clauses/{clause_id}", tags=["clauses"])
+    async def clause_detail_endpoint(clause_id: str):
+        return {
+            "clause_id": clause_id,
+            "document_id": clause_id,
+            "clause_number": clause_id,
+            "section": f"Section {clause_id[:8]}",
+            "title": f"Clause {clause_id}",
+            "text": f"Detailed legal text content for clause {clause_id}.",
+            "page_number": 1,
+            "metadata": {
+                "retrieved_at": "2026-07-31T16:00:00Z",
+                "jurisdiction": "India/Global",
+            },
+        }
 
     @app.get("/", tags=["system"])
     async def root():
