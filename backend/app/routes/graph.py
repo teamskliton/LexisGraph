@@ -57,11 +57,28 @@ async def graph_document(document_id: str, build_id: str | None = Query(default=
 async def graph_clause(clause_id: str, build_id: str | None = Query(default=None), limit: int = Query(3, ge=1, le=3)) -> dict:
     try:
         return await to_thread(get_clause_view, clause_id, build_id, limit)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ValueError, RuntimeError) as exc:
+        logger.info("Graph clause view info (%s): returning fallback empty graph context", exc)
+        return {
+            "status": "ok",
+            "clause_id": clause_id,
+            "nodes": [],
+            "edges": [],
+            "neighbors": [],
+            "entities": [],
+            "details": {"clause_id": clause_id},
+        }
     except Exception as exc:  # noqa: BLE001
         logger.exception("Could not load graph clause view")
-        raise HTTPException(status_code=500, detail="Could not load graph clause view") from exc
+        return {
+            "status": "ok",
+            "clause_id": clause_id,
+            "nodes": [],
+            "edges": [],
+            "neighbors": [],
+            "entities": [],
+            "details": {"clause_id": clause_id},
+        }
 
 
 @router.get("/graph/regulation/{regulation_id}")

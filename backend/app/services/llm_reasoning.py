@@ -1,9 +1,15 @@
+"""
+LLM Reasoning Service for LexisGraph.
+
+Supports OpenRouter and Google Gemini APIs with non-streaming and real-time streaming interfaces.
+"""
 import json
 import logging
 import os
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Iterator
 
 from dotenv import load_dotenv
 
@@ -188,6 +194,125 @@ def _resolve_reasoning(prompt: str) -> str | None:
     if gemini_enabled:
         return _gemini_reasoning(prompt)
     return None
+
+
+def _stream_openrouter_reasoning(prompt: str) -> Iterator[str]:
+    """Stream token chunks from OpenRouter using SSE stream=true."""
+    openrouter_api_key = _env("OPENROUTER_API_KEY")
+    if not _is_enabled_key(openrouter_api_key):
+        return
+
+    model_candidates = _openrouter_model_candidates()
+    for model_name in model_candidates:
+        try:
+            payload = json.dumps(
+                {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": True,
+                }
+            ).encode("utf-8")
+
+            req = urllib.request.Request(
+                "https://openrouter.ai/api/v1/chat/completions",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {openrouter_api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "http://localhost:8001",
+                    "X-Title": "LexisGraph Legal Assistant",
+                },
+                method="POST",
+            )
+
+            with urllib.request.urlopen(req, timeout=30) as response:
+                for line in response:
+                    line_str = line.decode("utf-8").strip()
+                    if line_str.startswith("data: "):
+                        data_str = line_str[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data_obj = json.loads(data_str)
+                            choices = data_obj.get("choices", [])
+                            if choices:
+                                delta = choices[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    yield content
+                        except Exception:
+                            continue
+                return
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("OpenRouter stream failed for model %s: %s", model_name, exc)
+            continue
+
+
+def _stream_gemini_reasoning(prompt: str) -> Iterator[str]:
+    """Stream token chunks from Gemini REST streamGenerateContent SSE endpoint."""
+    gemini_api_key = _env("GEMINI_API_KEY")
+    if not _is_enabled_key(gemini_api_key):
+        return
+
+    candidate_models = [
+        _env("GEMINI_MODEL", "gemini-flash-latest"),
+        "gemini-flash-latest",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash",
+    ]
+    for model_name in dict.fromkeys(candidate_models):
+        try:
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model_name}:streamGenerateContent?alt=sse&key={gemini_api_key}"
+            )
+            payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+
+            with urllib.request.urlopen(req, timeout=30) as response:
+                for line in response:
+                    line_str = line.decode("utf-8").strip()
+                    if line_str.startswith("data: "):
+                        data_str = line_str[6:].strip()
+                        try:
+                            data_obj = json.loads(data_str)
+                            candidates = data_obj.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts and "text" in parts[0]:
+                                    yield parts[0]["text"]
+                        except Exception:
+                            continue
+                return
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Gemini stream failed for model %s: %s", model_name, exc)
+            continue
+
+
+def _stream_resolve_reasoning(prompt: str) -> Iterator[str]:
+    """Stream tokens from the active LLM provider (OpenRouter or Gemini)."""
+    provider = _provider_mode()
+    openrouter_enabled = _is_enabled_key(_env("OPENROUTER_API_KEY"))
+    gemini_enabled = _is_enabled_key(_env("GEMINI_API_KEY"))
+
+    if provider == "openrouter":
+        yield from _stream_openrouter_reasoning(prompt)
+        return
+    if provider == "gemini":
+        yield from _stream_gemini_reasoning(prompt)
+        return
+
+    if openrouter_enabled:
+        yield from _stream_openrouter_reasoning(prompt)
+        return
+    if gemini_enabled:
+        yield from _stream_gemini_reasoning(prompt)
+        return
 
 
 def generate_compliance_reasoning(

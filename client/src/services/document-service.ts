@@ -1,10 +1,56 @@
 /**
- * Document service for interacting with the FastAPI document endpoints.
+ * Document service for interacting with FastAPI document, clause, and knowledge graph endpoints.
  */
 
 import { api } from "./api";
 import { Organization } from "./api/organizations";
 import { DocumentResponse, DocumentStatusResponse, UploadDocumentParams } from "@/types/document";
+
+export interface ClauseDetailPayload {
+  clause_id: string;
+  document_id: string;
+  clause_number?: string;
+  section?: string;
+  title?: string;
+  text: string;
+  page_number?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface DocumentViewerPayload {
+  document_id: string;
+  title: string;
+  document_type?: string;
+  pdf_url?: string;
+  page_number?: number;
+  highlight_coordinates?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export interface ClauseGraphPayload {
+  clause_id: string;
+  neighbors?: Array<{
+    id: string;
+    label?: string;
+    text?: string;
+    relation_type?: string;
+  }>;
+  entities?: Array<{
+    id: string;
+    name: string;
+    type: string;
+  }>;
+  relationships?: Array<{
+    from: string;
+    to: string;
+    type: string;
+  }>;
+  summary?: string;
+}
 
 export const documentService = {
   /**
@@ -34,8 +80,40 @@ export const documentService = {
   },
 
   /**
+   * Get PDF viewer details, page number, and highlight coordinates.
+   */
+  async getDocumentViewer(documentId: string): Promise<DocumentViewerPayload> {
+    const response = await api.get<DocumentViewerPayload>(`/documents/${documentId}/viewer`);
+    return response.data;
+  },
+
+  /**
+   * Fetch clause content, section, page number, and metadata.
+   */
+  async getClauseDetail(clauseId: string): Promise<ClauseDetailPayload> {
+    const response = await api.get<ClauseDetailPayload>(`/clauses/${clauseId}`);
+    return response.data;
+  },
+
+  /**
+   * Fetch connected Neo4j knowledge graph neighbors for a clause.
+   */
+  async getClauseGraph(clauseId: string): Promise<ClauseGraphPayload> {
+    try {
+      const response = await api.get<ClauseGraphPayload>(`/graph/clause/${clauseId}`);
+      return response.data;
+    } catch (err) {
+      console.warn(`getClauseGraph notice for ${clauseId}:`, err);
+      return {
+        clause_id: clauseId,
+        neighbors: [],
+        entities: [],
+      };
+    }
+  },
+
+  /**
    * Upload a document to an organization.
-   * Uses multipart/form-data and tracks upload progress.
    */
   async uploadDocument(
     params: UploadDocumentParams
@@ -75,7 +153,6 @@ export const documentService = {
 
   /**
    * Get the processing status of a document.
-   * Returns progress (0-100), current step label, and error info.
    */
   async getDocumentStatus(documentId: string): Promise<DocumentStatusResponse> {
     const response = await api.get<DocumentStatusResponse>(
@@ -86,8 +163,6 @@ export const documentService = {
 
   /**
    * Retry processing a FAILED document.
-   * Only the document owner can call this.
-   * Returns 409 if the document is not in FAILED state.
    */
   async retryDocument(documentId: string): Promise<DocumentStatusResponse> {
     const response = await api.post<DocumentStatusResponse>(
@@ -110,7 +185,6 @@ export const FILE_VALIDATION = {
  * Validate a file for upload.
  */
 export function validateFile(file: File): { valid: boolean; error?: string } {
-  // Check file type
   if (!FILE_VALIDATION.ALLOWED_MIME_TYPES.includes(file.type)) {
     return {
       valid: false,
@@ -118,7 +192,6 @@ export function validateFile(file: File): { valid: boolean; error?: string } {
     };
   }
 
-  // Check file size
   if (file.size > FILE_VALIDATION.MAX_SIZE_BYTES) {
     const maxSizeMB = FILE_VALIDATION.MAX_SIZE_BYTES / (1024 * 1024);
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);

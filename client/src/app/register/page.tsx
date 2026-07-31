@@ -45,9 +45,8 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     try {
       await registerUser(data);
-    } catch (err) {
-      // Errors handled by toast inside auth-context
-      console.error(err);
+    } catch {
+      // User error toast is displayed by auth-context
     } finally {
       setIsSubmitting(false);
     }
