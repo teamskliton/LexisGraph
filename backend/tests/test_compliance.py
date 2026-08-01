@@ -4,6 +4,7 @@ Unit and integration tests for Compliance domain (models, schemas, crud, service
 from __future__ import annotations
 
 import unittest
+import unittest.mock
 import uuid
 
 from fastapi import FastAPI, status
@@ -198,19 +199,12 @@ class ComplianceDomainTest(unittest.TestCase):
             "regulation_id": str(self.reg_doc.id),
             "policy_document_id": str(self.policy_doc.id),
         }
-        res = client.post("/compliance/analyze", json=payload)
-        self.assertEqual(res.status_code, status.HTTP_202_ACCEPTED)
-        data = res.json()
-        self.assertIn("report_id", data)
-        self.assertEqual(data["status"], "PROCESSING")
-        report_id = data["report_id"]
-
-        # GET /compliance/{report_id}
-        res_get = client.get(f"/compliance/{report_id}")
-        self.assertEqual(res_get.status_code, status.HTTP_200_OK)
-        report_data = res_get.json()
-        self.assertEqual(report_data["id"], report_id)
-        self.assertEqual(report_data["organization_id"], str(self.org.id))
+        with unittest.mock.patch("app.compliance.service.execute_compliance_job"):
+            res = client.post("/compliance/analyze", json=payload)
+            self.assertEqual(res.status_code, status.HTTP_202_ACCEPTED)
+            data = res.json()
+            self.assertIn("job_id", data)
+            self.assertEqual(data["status"], "QUEUED")
 
     def test_organization_owner_restriction(self):
         app = FastAPI()
@@ -257,34 +251,48 @@ class ComplianceDomainTest(unittest.TestCase):
             "policy_document_id": str(self.policy_doc.id),
         }
 
-        # 1. First execution -> CACHE MISS (creates report)
-        res1 = client.post("/compliance/analyze", json=payload)
-        self.assertEqual(res1.status_code, status.HTTP_202_ACCEPTED)
-        report_id_1 = res1.json()["report_id"]
-        self.assertEqual(res1.json()["status"], "PROCESSING")
+        # 1. First execution -> CACHE MISS (queues job)
+        with unittest.mock.patch("app.compliance.service.execute_compliance_job"):
+            res1 = client.post("/compliance/analyze", json=payload)
+            self.assertEqual(res1.status_code, status.HTTP_202_ACCEPTED)
+            job_id_1 = res1.json()["job_id"]
+            self.assertEqual(res1.json()["status"], "QUEUED")
 
-        # 2. Mark report 1 as COMPLETED
-        report1 = self.db.get(ComplianceReport, uuid.UUID(report_id_1))
-        report1.status = ComplianceReportStatus.COMPLETED
-        report1.overall_score = 90.0
+        # 2. Seed a completed report with identical document hashes
+        reg_hash = getattr(self.reg_doc, "document_hash", None) or getattr(self.reg_doc, "checksum", None) or "reg_hash_123"
+        cached_report = ComplianceReport(
+            id=uuid.uuid4(),
+            organization_id=self.org.id,
+            regulation_id=self.reg_doc.id,
+            policy_document_id=self.policy_doc.id,
+            policy_hash=self.policy_doc.checksum,
+            regulation_hash=reg_hash,
+            overall_score=90.0,
+            status=ComplianceReportStatus.COMPLETED,
+            created_by=self.user.id,
+        )
+        self.db.add(cached_report)
         self.db.commit()
 
         # 3. Second execution with identical document hashes -> CACHE HIT
-        res2 = client.post("/compliance/analyze", json=payload)
-        self.assertEqual(res2.status_code, status.HTTP_202_ACCEPTED)
-        report_id_2 = res2.json()["report_id"]
-        self.assertEqual(report_id_1, report_id_2)  # Reused cached report
-        self.assertEqual(res2.json()["status"], "COMPLETED")
+        with unittest.mock.patch("app.compliance.service.execute_compliance_job"):
+            res2 = client.post("/compliance/analyze", json=payload)
+            self.assertEqual(res2.status_code, status.HTTP_202_ACCEPTED)
+            data2 = res2.json()
+            self.assertEqual(data2["report_id"], str(cached_report.id))  # Reused cached report
+            self.assertEqual(data2["status"], "COMPLETED")
+            self.assertTrue(data2["existing_report"])
 
-        # 4. Modify policy checksum -> CACHE MISS (creates new report)
+        # 4. Modify policy checksum -> CACHE MISS (queues new job)
         self.policy_doc.checksum = "new_modified_policy_checksum"
         self.db.commit()
 
-        res3 = client.post("/compliance/analyze", json=payload)
-        self.assertEqual(res3.status_code, status.HTTP_202_ACCEPTED)
-        report_id_3 = res3.json()["report_id"]
-        self.assertNotEqual(report_id_1, report_id_3)  # Brand new report created
-        self.assertEqual(res3.json()["status"], "PROCESSING")
+        with unittest.mock.patch("app.compliance.service.execute_compliance_job"):
+            res3 = client.post("/compliance/analyze", json=payload)
+            self.assertEqual(res3.status_code, status.HTTP_202_ACCEPTED)
+            data3 = res3.json()
+            self.assertNotEqual(data3["job_id"], job_id_1)
+            self.assertEqual(data3["status"], "QUEUED")
 
     def test_regulation_versioning(self):
         # 1. Create multiple versions of Code of Wages

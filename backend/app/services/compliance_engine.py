@@ -961,16 +961,33 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
 
         elapsed_seconds = time.perf_counter() - start_time
 
-        report.overall_score = result.get("overall_score")
+        score_val = result.get("overall_score") or 0.0
+        if score_val >= 85.0:
+            calculated_risk = "LOW"
+        elif score_val >= 70.0:
+            calculated_risk = "MEDIUM"
+        elif score_val >= 50.0:
+            calculated_risk = "HIGH"
+        else:
+            calculated_risk = "CRITICAL"
+
+        report.overall_score = score_val
+        report.risk_level = calculated_risk
         report.total_clauses = result.get("total_regulation_clauses", 0)
         report.compliant_clauses = result.get("compliant_count", 0)
         report.partial_clauses = result.get("partially_compliant_count", 0)
         report.non_compliant_clauses = result.get("non_compliant_count", 0)
-        # Store the full result payload as JSON so clause-level details survive the DB
-        # round-trip.  The service layer parses this back via json.loads(report.summary).
+
+        report.total_matches = result.get("compliant_count", 0)
+        report.total_partial_matches = result.get("partially_compliant_count", 0)
+        report.total_missing = result.get("non_compliant_count", 0)
+
+        report.executive_summary = result.get("summary")
         report.summary = json.dumps(result, default=str)
+        report.report_json = result
         report.recommendations = result.get("recommendations", [])
         report.processing_time_seconds = round(elapsed_seconds, 2)
+        report.processing_time_ms = round(elapsed_seconds * 1000.0, 2)
         report.status = ComplianceReportStatus.COMPLETED
         report.updated_at = datetime.now(timezone.utc)
 
@@ -978,10 +995,11 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
         db.refresh(report)
 
         logger.info(
-            "Report completed... report_id=%s status=COMPLETED score=%s time=%.2fs",
-            report_id,
+            "New report stored: report_id=%s status=COMPLETED score=%s time=%.2fs risk=%s",
+            report.id,
             report.overall_score,
             elapsed_seconds,
+            report.risk_level,
         )
 
         from app.services.activity_service import log_activity
