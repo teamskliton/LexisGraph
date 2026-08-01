@@ -39,10 +39,10 @@ class ReportService:
         Raises
         ------
         ReportNotFoundError
-            If no report with the given ID exists.
+            If no report with the given ID exists or if it is soft deleted.
         """
         report = db.get(ComplianceReport, report_id)
-        if not report:
+        if not report or report.is_deleted:
             raise ReportNotFoundError(report_id)
         return report
 
@@ -63,9 +63,9 @@ class ReportService:
         user_id: Optional[uuid.UUID] = None,
     ) -> Tuple[List[ComplianceReport], int]:
         """
-        List reports with comprehensive filtering, sorting, and pagination.
+        List reports with comprehensive filtering, sorting, and pagination (excludes soft deleted reports).
         """
-        stmt = select(ComplianceReport)
+        stmt = select(ComplianceReport).where(ComplianceReport.is_deleted == False)
 
         if user_id:
             stmt = stmt.where(ComplianceReport.created_by == user_id)
@@ -152,23 +152,12 @@ class ReportService:
         status_filter: Optional[ComplianceReportStatus] = None,
     ) -> List[ComplianceReport]:
         """
-        Retrieve all reports belonging to a specific organization, ordered newest first (created_at DESC).
-
-        Parameters
-        ----------
-        db : Session
-            SQLAlchemy session connected to PostgreSQL.
-        organization_id : uuid.UUID
-            The organization UUID to filter by.
-        status_filter : Optional[ComplianceReportStatus]
-            Optional status filter.
-
-        Returns
-        -------
-        List[ComplianceReport]
-            List of reports for the organization.
+        Retrieve all non-deleted reports belonging to a specific organization, ordered newest first.
         """
-        stmt = select(ComplianceReport).where(ComplianceReport.organization_id == organization_id)
+        stmt = (
+            select(ComplianceReport)
+            .where(ComplianceReport.organization_id == organization_id, ComplianceReport.is_deleted == False)
+        )
         if status_filter:
             stmt = stmt.where(ComplianceReport.status == status_filter)
         stmt = stmt.order_by(ComplianceReport.created_at.desc())
@@ -199,8 +188,13 @@ class ReportService:
         report_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> bool:
-        """Delete a report from PostgreSQL."""
-        pass
+        """Soft delete a report in PostgreSQL."""
+        report = db.get(ComplianceReport, report_id)
+        if not report or report.is_deleted:
+            return False
+        report.is_deleted = True
+        db.commit()
+        return True
 
 
 def get_report_service() -> ReportService:

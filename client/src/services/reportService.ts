@@ -84,6 +84,12 @@ export const reportService = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
+  /**
+   * Soft delete a compliance report via DELETE /reports/{id}
+   */
+  deleteReport: async (reportId: string): Promise<void> => {
+    await api.delete(`/reports/${reportId}`);
+  },
 };
 
 export default reportService;

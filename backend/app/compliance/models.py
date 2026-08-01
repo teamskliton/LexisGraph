@@ -7,7 +7,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, JSON, Enum as SQLEnum
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, JSON, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
@@ -135,6 +135,61 @@ class ComplianceReport(Base):
         nullable=True,
     )
 
+    # Alias regulation_document_id to regulation_id for requirement compatibility
+    regulation_document_id = synonym("regulation_id")
+
+    # Risk level: LOW, MEDIUM, HIGH, CRITICAL
+    risk_level: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        index=True,
+    )
+
+    # Executive Summary narrative text
+    executive_summary: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # Compliant, Partial, and Missing clause counts matching requirement field names
+    total_matches: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        default=0,
+    )
+
+    total_partial_matches: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        default=0,
+    )
+
+    total_missing: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        default=0,
+    )
+
+    # Execution timing in milliseconds
+    processing_time_ms: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+    # Complete structured report output stored as JSONB
+    report_json: Mapped[dict | list | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
+
+    # Soft delete flag
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+
     # Schema version for future report versioning compatibility
     version: Mapped[int] = mapped_column(
         Integer,
@@ -194,4 +249,149 @@ class ComplianceReport(Base):
         return (
             f"<ComplianceReport(id={self.id}, org={self.organization_id}, "
             f"status={self.status.value!r}, score={self.overall_score})>"
+        )
+
+
+class ComplianceJobStatus(str, enum.Enum):
+    """Compliance background job processing status."""
+
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ComplianceJob(Base):
+    """
+    Compliance background job entity tracking async compliance audit execution.
+    Persists progress (0-100), current_step, and job status in PostgreSQL.
+    """
+
+    __tablename__ = "compliance_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("compliance_reports.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    regulation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+
+    regulation_document_id = synonym("regulation_id")
+
+    policy_document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[ComplianceJobStatus] = mapped_column(
+        SQLEnum(ComplianceJobStatus, native_enum=False, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=ComplianceJobStatus.QUEUED,
+        index=True,
+    )
+
+    progress: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    current_step: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="QUEUED",
+    )
+
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    processing_time_ms: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    # Relationships
+    report: Mapped["ComplianceReport"] = relationship(
+        "ComplianceReport",
+        foreign_keys=[report_id],
+        lazy="select",
+    )
+
+    organization: Mapped["Organization"] = relationship(
+        "Organization",
+        foreign_keys=[organization_id],
+        lazy="select",
+    )
+
+    policy_document: Mapped["Document"] = relationship(
+        "Document",
+        foreign_keys=[policy_document_id],
+        lazy="select",
+    )
+
+    creator: Mapped["User"] = relationship(
+        "User",
+        foreign_keys=[created_by],
+        lazy="select",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ComplianceJob(id={self.id}, status={self.status.value!r}, "
+            f"progress={self.progress}%, step={self.current_step!r})>"
         )

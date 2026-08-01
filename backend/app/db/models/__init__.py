@@ -14,7 +14,7 @@ from app.db.models.document import Document, DocumentType, ProcessingStatus
 from app.db.models.regulation import Regulation
 from app.db.models.activity import Activity
 from app.db.models.conversation import ConversationSession, ConversationMessage
-from app.compliance.models import ComplianceReport, ComplianceReportStatus
+from app.compliance.models import ComplianceReport, ComplianceReportStatus, ComplianceJob, ComplianceJobStatus
 from app.models.report import Report
 
 __all__ = [
@@ -29,5 +29,7 @@ __all__ = [
     "ConversationMessage",
     "ComplianceReport",
     "ComplianceReportStatus",
+    "ComplianceJob",
+    "ComplianceJobStatus",
     "Report",
 ]

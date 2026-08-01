@@ -124,9 +124,35 @@ def get_report(
     """
     try:
         report = service.get_report(db, report_id)
+        logger.info("Report loaded: report_id=%s", report_id)
         return ReportDetailResponse.model_validate(report)
     except ReportNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Report with ID '{report_id}' not found.",
         )
+
+
+@router.delete(
+    "/{report_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Soft delete a compliance report",
+)
+def delete_report(
+    report_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: ReportService = Depends(get_report_service),
+    current_user: Optional[User] = Depends(get_current_user),
+) -> None:
+    """
+    Soft delete a compliance report by ID.
+    """
+    user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000000")
+    success = service.delete_report(db, report_id, user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Report with ID '{report_id}' not found.",
+        )
+    logger.info("Report deleted: report_id=%s", report_id)
+    return None

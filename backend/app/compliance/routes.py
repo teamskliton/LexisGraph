@@ -29,7 +29,21 @@ router = APIRouter(prefix="/compliance", tags=["compliance"])
     "/analyze",
     response_model=ComplianceAnalyzeResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    summary="Initiate compliance analysis (Async Job)",
+)
+@router.post(
+    "",
+    response_model=ComplianceAnalyzeResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Initiate compliance analysis",
+    include_in_schema=False,
+)
+@router.post(
+    "/",
+    response_model=ComplianceAnalyzeResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Initiate compliance analysis (alias)",
+    include_in_schema=False,
 )
 def analyze_compliance(
     data: ComplianceAnalyzeRequest,
@@ -38,19 +52,21 @@ def analyze_compliance(
     current_user: User = Depends(get_current_user),
 ) -> ComplianceAnalyzeResponse:
     """
-    Initiate compliance analysis between a regulation document and a policy document.
+    Initiate asynchronous compliance analysis between a regulation document and a policy document.
 
     - **organization_id**: UUID of the organization
     - **regulation_id**: UUID of the regulation document
     - **policy_document_id**: UUID of the policy document
 
     Requires JWT authentication. Only the organization owner can execute analysis.
-    Returns 202 Accepted with `{ "report_id": "...", "status": "PROCESSING" }`.
+    Returns 202 Accepted immediately with `{ "job_id": "...", "status": "QUEUED" }`.
     """
     res = service.analyze_compliance_report(db, data, current_user.id, background_tasks)
     return ComplianceAnalyzeResponse(
-        report_id=res["report_id"],
+        job_id=res["job_id"],
         status=res["status"],
+        report_id=res.get("report_id"),
+        existing_report=res.get("existing_report", False),
     )
 
 

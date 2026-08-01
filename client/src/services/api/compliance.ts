@@ -10,8 +10,10 @@ export interface ComplianceAnalyzeRequest {
 }
 
 export interface ComplianceAnalyzeResponse {
-  report_id: string;
-  status: ComplianceReportStatus;
+  job_id: string;
+  report_id?: string | null;
+  status: string;
+  existing_report?: boolean;
 }
 
 export interface EvaluatedClause {
@@ -62,13 +64,46 @@ export interface ComplianceReportDetails {
 export interface ComplianceReport {
   id: string;
   organization_id: string;
+  regulation_id?: string;
   regulation_document_id: string;
   policy_document_id: string;
   overall_score?: number | null;
+  risk_level?: string | null;
+  executive_summary?: string | null;
+  total_matches?: number | null;
+  total_partial_matches?: number | null;
+  total_missing?: number | null;
+  processing_time_seconds?: number | null;
+  processing_time_ms?: number | null;
   status: ComplianceReportStatus;
   summary?: string | null;
   details?: ComplianceReportDetails | null;
+  report_json?: any;
+  is_deleted?: boolean;
   created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ComplianceJobStatus = "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+
+export interface ComplianceJob {
+  id: string;
+  job_id: string;
+  report_id?: string | null;
+  organization_id: string;
+  regulation_id: string;
+  regulation_document_id?: string | null;
+  policy_document_id: string;
+  status: ComplianceJobStatus;
+  progress: number;
+  current_step: string;
+  error_message?: string | null;
+  processing_time_ms?: number | null;
+  processing_time?: number | null;
+  created_by: string;
+  started_at?: string | null;
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +134,22 @@ export const complianceService = {
 
   deleteComplianceReport: async (reportId: string): Promise<void> => {
     await api.delete(`/compliance/${reportId}`);
+  },
+
+  getComplianceJob: async (jobId: string): Promise<ComplianceJob> => {
+    const response = await api.get(`/jobs/${jobId}`);
+    return response.data;
+  },
+
+  listComplianceJobs: async (organizationId?: string): Promise<ComplianceJob[]> => {
+    const params = organizationId ? { organization_id: organizationId } : undefined;
+    const response = await api.get("/jobs", { params });
+    return response.data;
+  },
+
+  cancelComplianceJob: async (jobId: string): Promise<ComplianceJob> => {
+    const response = await api.delete(`/jobs/${jobId}`);
+    return response.data;
   },
 
   downloadReportPDF: async (reportId: string): Promise<Blob> => {

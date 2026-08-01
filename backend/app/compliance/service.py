@@ -18,6 +18,7 @@ from app.compliance.schemas import ComplianceAnalyzeRequest, ComplianceReportCre
 from app.db.models import Document, DocumentType, Organization, Regulation
 from app.db.session import SessionLocal
 from app.services.activity_service import log_activity
+from app.services.job_worker import execute_compliance_job
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +47,10 @@ def analyze_compliance_report(
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     """
-    Start compliance analysis for an organization.
-
-    Validates:
-    - User is the owner of the organization.
-    - Regulation document exists and belongs to the organization.
-    - Policy document exists and belongs to the organization.
-
-    Creates report in PROCESSING status and enqueues background engine task.
+    Initiate asynchronous compliance analysis for an organization.
+    Validates organization ownership, regulation, and policy documents.
+    Creates a ComplianceJob in QUEUED status and enqueues non-blocking worker execution.
+    Returns immediately in < 1 second.
     """
     # 1. Validate Organization ownership
     org = db.get(Organization, data.organization_id)
@@ -102,68 +99,66 @@ def analyze_compliance_report(
             .order_by(ComplianceReport.created_at.desc())
         ).first()
 
-        if cached_report:
+        if cached_report and not cached_report.is_deleted:
             logger.info(
-                "CACHE HIT: Reusing completed compliance report id=%s for organization_id=%s (policy_hash=%s, regulation_hash=%s)",
+                "Existing report reused: report_id=%s for organization_id=%s (policy_hash=%s, regulation_hash=%s)",
                 cached_report.id,
                 data.organization_id,
                 policy_hash,
                 regulation_hash,
             )
+            # Create a completed job reference for cached report
+            cached_job = crud.create_compliance_job(
+                db,
+                organization_id=data.organization_id,
+                regulation_id=data.regulation_id,
+                policy_document_id=data.policy_document_id,
+                user_id=user_id,
+            )
+            cached_job.status = crud.ComplianceJobStatus.COMPLETED
+            cached_job.progress = 100
+            cached_job.current_step = "Completed (Cached)"
+            cached_job.report_id = cached_report.id
+            db.commit()
+
             return {
+                "job_id": cached_job.id,
+                "status": "COMPLETED",
                 "report_id": cached_report.id,
-                "status": cached_report.status,
+                "existing_report": True,
             }
 
-    logger.info(
-        "CACHE MISS: Initiating new compliance check for organization_id=%s (policy_hash=%s, regulation_hash=%s)",
-        data.organization_id,
-        policy_hash,
-        regulation_hash,
-    )
-
-    # 5. Create ComplianceReport record in PROCESSING status
-    report = ComplianceReport(
+    # 5. Create ComplianceJob record in QUEUED status
+    job = crud.create_compliance_job(
+        db,
         organization_id=data.organization_id,
         regulation_id=data.regulation_id,
         policy_document_id=data.policy_document_id,
-        policy_hash=policy_hash,
-        regulation_hash=regulation_hash,
-        status=ComplianceReportStatus.PROCESSING,
-        created_by=user_id,
+        user_id=user_id,
     )
-    db.add(report)
-    try:
-        db.commit()
-        db.refresh(report)
-    except Exception:
-        db.rollback()
-        logger.error("Failed creating report... organization_id=%s", data.organization_id)
-        raise
 
-    logger.info("Creating report... report_id=%s created successfully", report.id)
+    logger.info("Job queued: job_id=%s organization_id=%s user_id=%s", job.id, data.organization_id, user_id)
 
-    # 6. Enqueue background task
+    # 6. Enqueue non-blocking background job worker
     try:
-        background_tasks.add_task(_run_background_analysis, report.id)
+        background_tasks.add_task(execute_compliance_job, job.id)
     except Exception:  # noqa: BLE001
-        logger.exception("Failed to enqueue background analysis for report_id=%s", report.id)
-
-    logger.info("Enqueued compliance analysis report_id=%s for user=%s", report.id, user_id)
+        logger.exception("Failed to enqueue compliance job worker for job_id=%s", job.id)
 
     log_activity(
         db,
         user_id=user_id,
         event_type="COMPLIANCE_STARTED",
-        title="Started Compliance Check",
-        description=f"Initiated compliance analysis for organization '{org.name}'",
+        title="Queued Compliance Audit Job",
+        description=f"Queued async compliance analysis job for organization '{org.name}'",
         icon_type="report",
-        extra_data={"report_id": str(report.id), "organization_id": str(data.organization_id)},
+        extra_data={"job_id": str(job.id), "organization_id": str(data.organization_id)},
     )
 
     return {
-        "report_id": report.id,
-        "status": ComplianceReportStatus.PROCESSING,
+        "job_id": job.id,
+        "status": "QUEUED",
+        "existing_report": False,
     }
 
 
@@ -177,7 +172,7 @@ def get_compliance_report_by_id(
     Only the owner of the organization can access the report.
     """
     report = crud.get_compliance_report(db, report_id)
-    if not report:
+    if not report or report.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Compliance report not found.",
@@ -221,22 +216,33 @@ def get_compliance_report_by_id(
             "recommendations": report.recommendations or [],
         }
 
+    logger.info("Report loaded: report_id=%s", report_id)
+
     return {
         "id": report.id,
         "organization_id": report.organization_id,
         "regulation_id": report.regulation_id,
+        "regulation_document_id": report.regulation_id,
         "policy_document_id": report.policy_document_id,
         "overall_score": report.overall_score,
+        "risk_level": report.risk_level,
         "total_clauses": report.total_clauses,
         "compliant_clauses": report.compliant_clauses,
         "partial_clauses": report.partial_clauses,
         "non_compliant_clauses": report.non_compliant_clauses,
+        "total_matches": report.total_matches or report.compliant_clauses or 0,
+        "total_partial_matches": report.total_partial_matches or report.partial_clauses or 0,
+        "total_missing": report.total_missing or report.non_compliant_clauses or 0,
         "status": report.status,
         "report_status": report.report_status,
         "summary": text_summary,
+        "executive_summary": report.executive_summary or text_summary,
         "recommendations": report.recommendations,
         "details": details_payload,
+        "report_json": report.report_json or details_payload,
         "processing_time_seconds": report.processing_time_seconds,
+        "processing_time_ms": report.processing_time_ms or (report.processing_time_seconds * 1000.0 if report.processing_time_seconds else None),
+        "is_deleted": report.is_deleted,
         "created_by": report.created_by,
         "created_at": report.created_at,
         "updated_at": report.updated_at,
@@ -260,9 +266,12 @@ def list_compliance_reports(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Organization not found or you don't have access to it.",
             )
-        return crud.list_compliance_reports_by_org(db, organization_id, skip=skip, limit=limit)
+        reports = crud.list_compliance_reports_by_org(db, organization_id, skip=skip, limit=limit)
+    else:
+        reports = crud.list_compliance_reports_by_user(db, user_id, skip=skip, limit=limit)
 
-    return crud.list_compliance_reports_by_user(db, user_id, skip=skip, limit=limit)
+    logger.info("Report loaded: list count=%s for user=%s", len(reports), user_id)
+    return reports
 
 
 def delete_compliance_report_by_id(
@@ -271,10 +280,10 @@ def delete_compliance_report_by_id(
     user_id: uuid.UUID,
 ) -> None:
     """
-    Delete a compliance report by ID after verifying organization ownership.
+    Soft delete a compliance report by ID after verifying organization ownership.
     """
-    report = crud.get_compliance_report(db, report_id)
-    if not report:
+    report = crud.get_compliance_report(db, report_id, include_deleted=True)
+    if not report or report.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Compliance report not found.",
@@ -287,4 +296,72 @@ def delete_compliance_report_by_id(
         )
 
     crud.delete_compliance_report(db, report_id)
-    logger.info("Compliance report deleted: id=%s by user=%s", report_id, user_id)
+    logger.info("Report deleted: report_id=%s by user=%s", report_id, user_id)
+
+
+# ---------------------------------------------------------------------------
+# ComplianceJob Service functions
+# ---------------------------------------------------------------------------
+
+def get_compliance_job_by_id(
+    db: Session,
+    job_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> crud.ComplianceJob:
+    """
+    Get job progress, status, and details by ID.
+    Validates user authorization.
+    """
+    job = crud.get_compliance_job(db, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Compliance job not found.",
+        )
+
+    if job.created_by != user_id and job.organization.created_by != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this compliance job.",
+        )
+
+    return job
+
+
+def list_compliance_jobs(
+    db: Session,
+    user_id: uuid.UUID,
+    organization_id: uuid.UUID | None = None,
+    status_filter: crud.ComplianceJobStatus | str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+) -> Sequence[crud.ComplianceJob]:
+    """
+    List active/recent compliance jobs for the current user.
+    """
+    return crud.list_compliance_jobs_by_user(
+        db,
+        user_id=user_id,
+        organization_id=organization_id,
+        status_filter=status_filter,
+        skip=skip,
+        limit=limit,
+    )
+
+
+def cancel_compliance_job_by_id(
+    db: Session,
+    job_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> crud.ComplianceJob:
+    """
+    Cancel a queued or running compliance job.
+    """
+    job = crud.cancel_compliance_job(db, job_id, user_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Compliance job not found or cannot be cancelled.",
+        )
+    logger.info("Job cancelled: job_id=%s by user=%s", job_id, user_id)
+    return job

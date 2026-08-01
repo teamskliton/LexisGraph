@@ -23,6 +23,7 @@ interface ReportsTableProps {
   orgMap?: Map<string, string>;
   isLoading: boolean;
   onViewReport: (reportId: string) => void;
+  onDeleteReport?: (reportId: string) => void;
 }
 
 export const ReportsTableSkeleton: React.FC = () => {
@@ -31,15 +32,16 @@ export const ReportsTableSkeleton: React.FC = () => {
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40">
-            <TableHead className="w-[14%]">Report ID</TableHead>
-            <TableHead className="w-[16%]">Organization</TableHead>
-            <TableHead className="w-[14%]">Regulation</TableHead>
-            <TableHead className="w-[14%]">Policy</TableHead>
-            <TableHead className="w-[14%]">Overall Score</TableHead>
-            <TableHead className="w-[12%]">Status</TableHead>
-            <TableHead className="w-[8%]">Time</TableHead>
+            <TableHead className="w-[12%]">Report ID</TableHead>
+            <TableHead className="w-[15%]">Organization</TableHead>
+            <TableHead className="w-[12%]">Regulation</TableHead>
+            <TableHead className="w-[12%]">Policy</TableHead>
+            <TableHead className="w-[12%]">Overall Score</TableHead>
+            <TableHead className="w-[10%]">Risk Level</TableHead>
+            <TableHead className="w-[10%]">Status</TableHead>
+            <TableHead className="w-[7%]">Time</TableHead>
             <TableHead className="w-[10%]">Created Date</TableHead>
-            <TableHead className="w-[8%] text-right">Actions</TableHead>
+            <TableHead className="w-[10%] text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -49,7 +51,8 @@ export const ReportsTableSkeleton: React.FC = () => {
               <TableCell><Skeleton className="h-5 w-28" /></TableCell>
               <TableCell><Skeleton className="h-5 w-24 font-mono" /></TableCell>
               <TableCell><Skeleton className="h-5 w-24 font-mono" /></TableCell>
-              <TableCell><Skeleton className="h-6 w-24 rounded-md" /></TableCell>
+              <TableCell><Skeleton className="h-6 w-20 rounded-md" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-16" /></TableCell>
               <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
               <TableCell><Skeleton className="h-5 w-12" /></TableCell>
               <TableCell><Skeleton className="h-5 w-20" /></TableCell>
@@ -69,6 +72,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
   orgMap = new Map(),
   isLoading,
   onViewReport,
+  onDeleteReport,
 }) => {
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
@@ -104,15 +108,16 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-[14%]">Report ID</TableHead>
-              <TableHead className="w-[16%]">Organization</TableHead>
-              <TableHead className="w-[14%]">Regulation</TableHead>
-              <TableHead className="w-[14%]">Policy</TableHead>
-              <TableHead className="w-[14%]">Overall Score</TableHead>
-              <TableHead className="w-[12%]">Status</TableHead>
-              <TableHead className="w-[8%]">Processing Time</TableHead>
+              <TableHead className="w-[12%]">Report ID</TableHead>
+              <TableHead className="w-[15%]">Organization</TableHead>
+              <TableHead className="w-[12%]">Regulation</TableHead>
+              <TableHead className="w-[12%]">Policy</TableHead>
+              <TableHead className="w-[12%]">Overall Score</TableHead>
+              <TableHead className="w-[10%]">Risk Level</TableHead>
+              <TableHead className="w-[10%]">Status</TableHead>
+              <TableHead className="w-[7%]">Processing Time</TableHead>
               <TableHead className="w-[10%]">Created Date</TableHead>
-              <TableHead className="w-[8%] text-right">Actions</TableHead>
+              <TableHead className="w-[10%] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,6 +127,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
               const regId = report?.regulation_document_id || (report as any)?.regulation_id || "";
               const polId = report?.policy_document_id || "";
               const status = report?.report_status || (report as any)?.status || "PENDING";
+              const riskLevel = report?.risk_level || "MEDIUM";
 
               const orgName =
                 orgMap.get(orgId) ||
@@ -140,7 +146,8 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
               return (
                 <TableRow
                   key={reportId}
-                  className="hover:bg-muted/30 transition-colors"
+                  className="hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => onViewReport(reportId)}
                 >
                   {/* Report ID */}
                   <TableCell className="font-mono text-xs">
@@ -191,6 +198,23 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                     <ReportScoreBadge score={report.overall_score} />
                   </TableCell>
 
+                  {/* Risk Level */}
+                  <TableCell>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider ${
+                        riskLevel === "LOW"
+                          ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/30"
+                          : riskLevel === "HIGH"
+                          ? "bg-orange-500/10 text-orange-600 border border-orange-500/30"
+                          : riskLevel === "CRITICAL"
+                          ? "bg-red-500/10 text-red-600 border border-red-500/30"
+                          : "bg-amber-500/10 text-amber-600 border border-amber-500/30"
+                      }`}
+                    >
+                      {riskLevel}
+                    </span>
+                  </TableCell>
+
                   {/* Status */}
                   <TableCell>
                     <ReportStatusBadge status={status} />
@@ -208,15 +232,32 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
 
                   {/* Actions */}
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onViewReport(reportId)}
-                      className="gap-1.5 h-8 font-medium cursor-pointer text-xs"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>View Report</span>
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onViewReport(reportId)}
+                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>View</span>
+                      </Button>
+                      {onDeleteReport && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDeleteReport(reportId)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                          title="Delete Report"
+                        >
+                          <Inbox className="h-3.5 w-3.5 hidden" />
+                          <span className="sr-only">Delete</span>
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );

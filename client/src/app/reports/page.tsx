@@ -146,6 +146,17 @@ function ReportsPageContent() {
     router.push(`/compliance/reports/${reportId}`);
   };
 
+  const handleDeleteReport = async (reportId: string) => {
+    try {
+      await reportService.deleteReport(reportId);
+      toast.success("Report deleted successfully.");
+      fetchReports();
+    } catch (err) {
+      console.error("Failed to delete report:", err);
+      toast.error("Failed to delete compliance report.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* ── Top Navbar ── */}
@@ -183,10 +194,10 @@ function ReportsPageContent() {
               </div>
               <div>
                 <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-                  Compliance Reports
+                  Report History
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  View and analyze regulation vs. policy compliance reports across your organizations.
+                  View and access stored compliance reports instantly without recomputation.
                 </p>
               </div>
             </div>
@@ -266,6 +277,7 @@ function ReportsPageContent() {
                 orgMap={orgMap}
                 isLoading={isLoading}
                 onViewReport={handleViewReport}
+                onDeleteReport={handleDeleteReport}
               />
             ) : isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

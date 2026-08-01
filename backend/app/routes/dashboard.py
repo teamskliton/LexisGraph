@@ -113,13 +113,17 @@ def get_dashboard_stats(
         )
     ) or 0
     total_reports = db.scalar(
-        select(func.count(ComplianceReport.id)).where(ComplianceReport.created_by == current_user.id)
+        select(func.count(ComplianceReport.id)).where(
+            ComplianceReport.created_by == current_user.id,
+            ComplianceReport.is_deleted == False,
+        )
     ) or 0
 
     # Calculate average compliance score across user's evaluated reports
     scores_query = select(ComplianceReport.overall_score).where(
         ComplianceReport.created_by == current_user.id,
         ComplianceReport.overall_score.isnot(None),
+        ComplianceReport.is_deleted == False,
     )
     scores = db.scalars(scores_query).all()
     if scores:
@@ -148,7 +152,10 @@ def get_dashboard_stats(
     critical_r = 0
 
     all_reports = db.scalars(
-        select(ComplianceReport).where(ComplianceReport.created_by == current_user.id)
+        select(ComplianceReport).where(
+            ComplianceReport.created_by == current_user.id,
+            ComplianceReport.is_deleted == False,
+        )
     ).all()
 
     for rep in all_reports:
@@ -228,10 +235,12 @@ def get_dashboard_stats(
     org_scores_list.sort(key=lambda x: x.avg_score, reverse=True)
     org_scores = org_scores_list[:5]
 
-    # 5. Recent Reports Widget (Limit 5, user-specific)
     recent_report_objs = db.scalars(
         select(ComplianceReport)
-        .where(ComplianceReport.created_by == current_user.id)
+        .where(
+            ComplianceReport.created_by == current_user.id,
+            ComplianceReport.is_deleted == False,
+        )
         .order_by(ComplianceReport.created_at.desc())
         .limit(5)
     ).all()

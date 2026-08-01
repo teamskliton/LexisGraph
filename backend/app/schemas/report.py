@@ -38,11 +38,18 @@ class ReportItemResponse(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
     regulation_id: uuid.UUID
+    regulation_document_id: Optional[uuid.UUID] = None
     policy_document_id: uuid.UUID
     overall_score: Optional[float] = None
+    risk_level: Optional[str] = None
+    total_matches: Optional[int] = None
+    total_partial_matches: Optional[int] = None
+    total_missing: Optional[int] = None
     report_status: ComplianceReportStatus
     created_at: datetime
     processing_time_seconds: Optional[float] = None
+    processing_time_ms: Optional[float] = None
+    is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -62,16 +69,25 @@ class ReportDetailResponse(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
     regulation_id: uuid.UUID
+    regulation_document_id: Optional[uuid.UUID] = None
     policy_document_id: uuid.UUID
     overall_score: Optional[float] = None
+    risk_level: Optional[str] = None
     summary: Optional[str] = None
+    executive_summary: Optional[str] = None
     recommendations: Optional[Any] = None
     total_clauses: Optional[int] = None
     compliant_clauses: Optional[int] = None
     partial_clauses: Optional[int] = None
     non_compliant_clauses: Optional[int] = None
+    total_matches: Optional[int] = None
+    total_partial_matches: Optional[int] = None
+    total_missing: Optional[int] = None
     processing_time_seconds: Optional[float] = None
+    processing_time_ms: Optional[float] = None
+    report_json: Optional[Any] = None
     report_status: ComplianceReportStatus
+    is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
 

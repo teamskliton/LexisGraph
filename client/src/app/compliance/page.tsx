@@ -45,6 +45,7 @@ import {
   complianceService,
   ComplianceReport,
   ComplianceReportDetails,
+  ComplianceJob,
   EvaluatedClause,
   MissingClause,
   WeakClause,
@@ -124,9 +125,11 @@ function CompliancePageContent() {
   const [selectedRegId, setSelectedRegId] = useState<string>("");
   const [selectedPolicyId, setSelectedPolicyId] = useState<string>("");
 
-  // State: Compliance Analysis & Active Report
+  // State: Compliance Analysis, Async Job & Active Report
   const [activeReport, setActiveReport] = useState<ComplianceReport | null>(null);
+  const [activeJob, setActiveJob] = useState<ComplianceJob | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -194,26 +197,34 @@ function CompliancePageContent() {
   }, [selectedOrgId]);
 
   // ---------------------------------------------------------------------------
-  // Polling active report status
+  // Polling active compliance job status from PostgreSQL
   // ---------------------------------------------------------------------------
   const pollErrorCountRef = useRef(0);
 
   useEffect(() => {
-    if (!reportId || !isAnalyzing) return;
+    if (!jobId || !isAnalyzing) return;
 
     pollErrorCountRef.current = 0;
     const interval = setInterval(async () => {
       try {
-        const rep = await complianceService.getComplianceReport(reportId);
+        const job = await complianceService.getComplianceJob(jobId);
         pollErrorCountRef.current = 0;
-        setActiveReport(rep);
-        if (rep.status === "COMPLETED" || rep.status === "FAILED") {
+        setActiveJob(job);
+
+        if (job.status === "COMPLETED") {
           setIsAnalyzing(false);
-          if (rep.status === "COMPLETED") {
-            toast.success("Compliance analysis complete!");
-          } else {
-            toast.error("Compliance analysis encountered an error.");
+          if (job.report_id) {
+            setReportId(job.report_id);
+            const rep = await complianceService.getComplianceReport(job.report_id);
+            setActiveReport(rep);
           }
+          toast.success("Compliance analysis complete!");
+        } else if (job.status === "FAILED") {
+          setIsAnalyzing(false);
+          toast.error(job.error_message || "Compliance analysis failed.");
+        } else if (job.status === "CANCELLED") {
+          setIsAnalyzing(false);
+          toast.info("Compliance job was cancelled.");
         }
       } catch (err: any) {
         pollErrorCountRef.current += 1;
@@ -223,14 +234,14 @@ function CompliancePageContent() {
           toast.error("Unable to reach server. Please check your backend connection.");
         }
       }
-    }, 2000);
+    }, 1500);
 
     return () => clearInterval(interval);
-  }, [reportId, isAnalyzing]);
+  }, [jobId, isAnalyzing]);
 
 
   // ---------------------------------------------------------------------------
-  // Action: Trigger Compliance Analysis
+  // Action: Trigger Async Compliance Analysis
   // ---------------------------------------------------------------------------
   const handleAnalyze = async () => {
     if (!selectedOrgId || !selectedRegId || !selectedPolicyId) {
@@ -240,6 +251,7 @@ function CompliancePageContent() {
 
     setIsAnalyzing(true);
     setActiveReport(null);
+    setActiveJob(null);
     try {
       const res = await complianceService.analyzeCompliance({
         organization_id: selectedOrgId,
@@ -247,12 +259,32 @@ function CompliancePageContent() {
         regulation_document_id: selectedRegId,
         policy_document_id: selectedPolicyId,
       });
-      setReportId(res.report_id);
-      toast.info("Compliance audit initiated. Analyzing clauses...");
+
+      if (res.existing_report && res.report_id) {
+        setReportId(res.report_id);
+        const rep = await complianceService.getComplianceReport(res.report_id);
+        setActiveReport(rep);
+        setIsAnalyzing(false);
+        toast.success("Reused existing completed report for identical document parameters!");
+      } else {
+        setJobId(res.job_id);
+        toast.info("Compliance audit job queued (sub-second response). Analyzing clauses...");
+      }
     } catch (error: any) {
       setIsAnalyzing(false);
       const detail = error?.response?.data?.detail ?? "Failed to initiate compliance analysis.";
       toast.error(detail);
+    }
+  };
+
+  const handleCancelJob = async () => {
+    if (!jobId) return;
+    try {
+      await complianceService.cancelComplianceJob(jobId);
+      setIsAnalyzing(false);
+      toast.info("Job cancellation requested.");
+    } catch (err) {
+      toast.error("Failed to cancel job.");
     }
   };
 
@@ -486,16 +518,28 @@ function CompliancePageContent() {
               </div>
               <div className="space-y-2">
                 <h3 className="text-xl font-bold text-foreground">Executing Compliance Engine...</h3>
-                <p className="text-sm text-muted-foreground max-w-md">
-                  Analyzing semantic vector similarity, querying knowledge graph relationships, and generating LLM reasoning.
+                <p className="text-sm font-semibold text-indigo-400 max-w-md">
+                  Stage: {activeJob?.current_step || "Queued"} ({activeJob?.progress || 0}%)
                 </p>
               </div>
               <div className="w-full max-w-md space-y-2">
-                <Progress value={65} className="h-2" indicatorClassName="bg-indigo-600" />
+                <Progress
+                  value={activeJob?.progress || 5}
+                  className="h-2.5"
+                  indicatorClassName="bg-indigo-600 transition-all duration-500"
+                />
                 <p className="text-xs text-muted-foreground text-center animate-pulse">
-                  Comparing regulation requirements against policy clauses...
+                  Persisted progress tracked live in PostgreSQL...
                 </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelJob}
+                className="text-rose-500 hover:bg-rose-500/10 border-rose-500/30"
+              >
+                Cancel Job
+              </Button>
             </div>
           </Card>
         )}
