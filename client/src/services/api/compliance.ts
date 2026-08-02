@@ -165,5 +165,19 @@ export const complianceService = {
     });
     return response.data;
   },
+
+  compareReports: async (reportId1: string, reportId2: string): Promise<any> => {
+    const response = await api.get('/reports/compare', {
+      params: { report_id_1: reportId1, report_id_2: reportId2 },
+    });
+    return response.data;
+  },
+
+  getReportFindings: async (reportId: string): Promise<any[]> => {
+    const response = await api.get(`/reports/${reportId}/findings`);
+    return response.data;
+  },
 };
+
+export const complianceApi = complianceService;
 

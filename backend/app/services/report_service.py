@@ -196,6 +196,84 @@ class ReportService:
         db.commit()
         return True
 
+    def compare_reports(
+        self,
+        db: Session,
+        report_id_1: uuid.UUID,
+        report_id_2: uuid.UUID,
+    ) -> dict:
+        """
+        Compare two compliance reports.
+        Calculates score diff, resolved findings, new regressions, and recommendation changes.
+        """
+        r1 = self.get_report(db, report_id_1)
+        r2 = self.get_report(db, report_id_2)
+
+        s1 = r1.overall_score or 0.0
+        s2 = r2.overall_score or 0.0
+        if 0 < s1 <= 1.0:
+            s1 *= 100
+        if 0 < s2 <= 1.0:
+            s2 *= 100
+        score_diff = round(s2 - s1, 1)
+
+        findings1 = {f.policy_clause_id or f.citation or str(f.id): f for f in getattr(r1, "findings_list", [])}
+        findings2 = {f.policy_clause_id or f.citation or str(f.id): f for f in getattr(r2, "findings_list", [])}
+
+        resolved = []
+        regressions = []
+        new_findings = []
+
+        for cid, f2 in findings2.items():
+            if cid not in findings1:
+                new_findings.append({
+                    "clause_id": cid,
+                    "status": f2.status,
+                    "severity": f2.severity,
+                    "reasoning": f2.reasoning,
+                })
+            else:
+                f1 = findings1[cid]
+                if f1.status in ("NON_COMPLIANT", "PARTIAL") and f2.status == "COMPLIANT":
+                    resolved.append({
+                        "clause_id": cid,
+                        "previous_status": f1.status,
+                        "current_status": f2.status,
+                    })
+                elif f1.status == "COMPLIANT" and f2.status in ("NON_COMPLIANT", "PARTIAL"):
+                    regressions.append({
+                        "clause_id": cid,
+                        "previous_status": f1.status,
+                        "current_status": f2.status,
+                        "severity": f2.severity,
+                    })
+
+        return {
+            "report_1": {
+                "id": str(r1.id),
+                "created_at": r1.created_at,
+                "overall_score": round(s1, 1),
+                "risk_level": r1.risk_level,
+                "version": r1.version,
+            },
+            "report_2": {
+                "id": str(r2.id),
+                "created_at": r2.created_at,
+                "overall_score": round(s2, 1),
+                "risk_level": r2.risk_level,
+                "version": r2.version,
+            },
+            "score_diff": score_diff,
+            "resolved_findings": resolved,
+            "regression_findings": regressions,
+            "new_findings": new_findings,
+            "recommendation_changes": [
+                {"clause_id": cid, "recommendation": f2.recommendation}
+                for cid, f2 in findings2.items()
+                if f2.recommendation and (cid not in findings1 or findings1[cid].recommendation != f2.recommendation)
+            ],
+        }
+
 
 def get_report_service() -> ReportService:
     """Dependency provider / factory for ReportService."""

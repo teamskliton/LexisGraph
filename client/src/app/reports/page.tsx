@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ReportComparisonModal } from "@/components/reports/ReportComparisonModal";
+import { GitCompare } from "lucide-react";
+
 const PAGE_SIZE = 10;
 
 const DEFAULT_FILTERS: FilterState = {
@@ -53,6 +56,7 @@ function ReportsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  const [compareIds, setCompareIds] = useState<[string, string] | null>(null);
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
@@ -345,6 +349,15 @@ function ReportsPageContent() {
               </div>
             )}
           </>
+        )}
+
+        {/* Comparison Modal */}
+        {compareIds && (
+          <ReportComparisonModal
+            reportId1={compareIds[0]}
+            reportId2={compareIds[1]}
+            onClose={() => setCompareIds(null)}
+          />
         )}
       </main>
     </div>

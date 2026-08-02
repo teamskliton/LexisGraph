@@ -44,9 +44,9 @@ export const DashboardKpiCards: React.FC<DashboardKpiCardsProps> = ({
       icon: <Building2 className="h-4 w-4 text-indigo-500" />,
     },
     {
-      title: "Total Regulations",
+      title: "Global Regulation Library",
       value: kpis.total_regulations,
-      subtext: "Ingested acts & statutes",
+      subtext: "Shared global repository",
       icon: <FileText className="h-4 w-4 text-violet-500" />,
     },
     {

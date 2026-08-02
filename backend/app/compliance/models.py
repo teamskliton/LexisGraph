@@ -170,6 +170,49 @@ class ComplianceReport(Base):
         default=0,
     )
 
+    non_compliant_count: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        default=0,
+    )
+
+    not_applicable_count: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        default=0,
+    )
+
+    llm_model: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        default="gemini-1.5-pro",
+    )
+
+    retrieval_method: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        default="HYBRID_GRAPHRAG",
+    )
+
+    graph_version: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        default="v1.0",
+    )
+
+    embedding_version: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        default="v1.0",
+    )
+
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("compliance_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Execution timing in milliseconds
     processing_time_ms: Mapped[float | None] = mapped_column(
         Float,
@@ -395,3 +438,90 @@ class ComplianceJob(Base):
             f"<ComplianceJob(id={self.id}, status={self.status.value!r}, "
             f"progress={self.progress}%, step={self.current_step!r})>"
         )
+
+
+class ReportFinding(Base):
+    """
+    Detailed clause-level finding entity representing compliance evaluation
+    matches between policy clauses and regulation clauses.
+    """
+
+    __tablename__ = "report_findings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("compliance_reports.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    policy_clause_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    regulation_clause_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="NON_COMPLIANT",
+        index=True,
+    )
+
+    confidence: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=0.85,
+    )
+
+    severity: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="MEDIUM",
+        index=True,
+    )
+
+    reasoning: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    recommendation: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    citation: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    graph_path: Mapped[dict | list | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    report: Mapped["ComplianceReport"] = relationship(
+        "ComplianceReport",
+        backref="findings_list",
+        lazy="select",
+    )
+
+    def __repr__(self) -> str:
+        return f"<ReportFinding(id={self.id}, report_id={self.report_id}, status={self.status!r}, severity={self.severity!r})>"
