@@ -18,6 +18,8 @@ import { ReportsOverTimeChart } from "@/components/dashboard/ReportsOverTimeChar
 import { RiskBreakdownChart } from "@/components/dashboard/RiskBreakdownChart";
 import { OrgScoresChart } from "@/components/dashboard/OrgScoresChart";
 import { RecentReportsWidget } from "@/components/dashboard/RecentReportsWidget";
+import { JobProgressCard } from "@/components/compliance/JobProgressCard";
+import { complianceService, ComplianceJob } from "@/services/api/compliance";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -51,15 +53,22 @@ function DashboardContent() {
   const [isOrgDialogOpen, setIsOrgDialogOpen] = useState(false);
   const [isSubmittingOrg, setIsSubmittingOrg] = useState(false);
 
-  // Fetch Live Dashboard Stats
+  const [activeJobs, setActiveJobs] = useState<ComplianceJob[]>([]);
+
+  // Fetch Live Dashboard Stats & Active Running Jobs
   const fetchStats = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setIsRefreshing(true);
     else setIsLoading(true);
     setError(null);
 
     try {
-      const data = await dashboardService.getStats();
+      const [data, jobsData] = await Promise.all([
+        dashboardService.getStats(),
+        complianceService.listComplianceJobs().catch(() => []),
+      ]);
       setStats(data);
+      const runningJobs = (jobsData || []).filter((j) => j.status === "QUEUED" || j.status === "RUNNING");
+      setActiveJobs(runningJobs);
       if (isManualRefresh) toast.success("Dashboard metrics updated.");
     } catch (err: unknown) {
       console.error("Error fetching dashboard statistics:", err);
@@ -209,6 +218,22 @@ function DashboardContent() {
               <RefreshCw className="h-3.5 w-3.5" />
               <span>Retry</span>
             </Button>
+          </div>
+        )}
+
+        {/* Active Real-Time Jobs Banner */}
+        {activeJobs.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+              Active Compliance Jobs In Progress ({activeJobs.length})
+            </h2>
+            {activeJobs.map((job) => (
+              <JobProgressCard
+                key={job.id}
+                jobId={job.id}
+                onCompleted={() => fetchStats(false)}
+              />
+            ))}
           </div>
         )}
 

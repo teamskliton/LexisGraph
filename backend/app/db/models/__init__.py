@@ -11,10 +11,11 @@ Usage
 from app.db.models.user import User
 from app.db.models.organization import Organization
 from app.db.models.document import Document, DocumentType, ProcessingStatus
-from app.db.models.regulation import Regulation
+from app.db.models.regulation import Regulation, OrganizationRegulation
 from app.db.models.activity import Activity
 from app.db.models.conversation import ConversationSession, ConversationMessage
-from app.compliance.models import ComplianceReport, ComplianceReportStatus, ComplianceJob, ComplianceJobStatus
+from app.compliance.models import ComplianceReport, ComplianceReportStatus, ComplianceJob, ComplianceJobStatus, ReportFinding
+from app.db.models.rbac import OrganizationMember, OrganizationInvitation, AuditLog, UserRole, MemberStatus
 from app.models.report import Report
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "DocumentType",
     "ProcessingStatus",
     "Regulation",
+    "OrganizationRegulation",
     "Activity",
     "ConversationSession",
     "ConversationMessage",
@@ -31,5 +33,11 @@ __all__ = [
     "ComplianceReportStatus",
     "ComplianceJob",
     "ComplianceJobStatus",
+    "ReportFinding",
     "Report",
+    "OrganizationMember",
+    "OrganizationInvitation",
+    "AuditLog",
+    "UserRole",
+    "MemberStatus",
 ]

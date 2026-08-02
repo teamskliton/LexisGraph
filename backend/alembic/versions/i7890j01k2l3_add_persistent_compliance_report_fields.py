@@ -20,16 +20,28 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('compliance_reports', sa.Column('risk_level', sa.String(length=50), nullable=True))
-    op.create_index(op.f('ix_compliance_reports_risk_level'), 'compliance_reports', ['risk_level'], unique=False)
-    op.add_column('compliance_reports', sa.Column('executive_summary', sa.Text(), nullable=True))
-    op.add_column('compliance_reports', sa.Column('total_matches', sa.Integer(), nullable=True, server_default='0'))
-    op.add_column('compliance_reports', sa.Column('total_partial_matches', sa.Integer(), nullable=True, server_default='0'))
-    op.add_column('compliance_reports', sa.Column('total_missing', sa.Integer(), nullable=True, server_default='0'))
-    op.add_column('compliance_reports', sa.Column('processing_time_ms', sa.Float(), nullable=True))
-    op.add_column('compliance_reports', sa.Column('report_json', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'sqlite'), nullable=True))
-    op.add_column('compliance_reports', sa.Column('is_deleted', sa.Boolean(), server_default='false', nullable=False))
-    op.create_index(op.f('ix_compliance_reports_is_deleted'), 'compliance_reports', ['is_deleted'], unique=False)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    cols = [c["name"] for c in inspector.get_columns("compliance_reports")]
+
+    if "risk_level" not in cols:
+        op.add_column('compliance_reports', sa.Column('risk_level', sa.String(length=50), nullable=True))
+        op.create_index(op.f('ix_compliance_reports_risk_level'), 'compliance_reports', ['risk_level'], unique=False)
+    if "executive_summary" not in cols:
+        op.add_column('compliance_reports', sa.Column('executive_summary', sa.Text(), nullable=True))
+    if "total_matches" not in cols:
+        op.add_column('compliance_reports', sa.Column('total_matches', sa.Integer(), nullable=True, server_default='0'))
+    if "total_partial_matches" not in cols:
+        op.add_column('compliance_reports', sa.Column('total_partial_matches', sa.Integer(), nullable=True, server_default='0'))
+    if "total_missing" not in cols:
+        op.add_column('compliance_reports', sa.Column('total_missing', sa.Integer(), nullable=True, server_default='0'))
+    if "processing_time_ms" not in cols:
+        op.add_column('compliance_reports', sa.Column('processing_time_ms', sa.Float(), nullable=True))
+    if "report_json" not in cols:
+        op.add_column('compliance_reports', sa.Column('report_json', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'sqlite'), nullable=True))
+    if "is_deleted" not in cols:
+        op.add_column('compliance_reports', sa.Column('is_deleted', sa.Boolean(), server_default='false', nullable=False))
+        op.create_index(op.f('ix_compliance_reports_is_deleted'), 'compliance_reports', ['is_deleted'], unique=False)
 
 
 def downgrade() -> None:

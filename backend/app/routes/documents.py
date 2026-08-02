@@ -118,24 +118,34 @@ def upload_document(
         )
 
     if document_type == DBDocumentType.REGULATION.value:
-        # Check if global regulation exists with exact same hash
-        existing_reg = db.query(Regulation).filter(Regulation.document_hash == stored_metadata.checksum).first()
-        if existing_reg:
-            logger.info("Global regulation already exists: hash=%s (version=%s)", stored_metadata.checksum, existing_reg.version)
-            # We can delete the duplicate stored file since we won't use it
+        from app.services.regulation_service import RegulationDeduplicationEngine, link_regulation_to_organization
+
+        # Run multi-strategy deduplication check (SHA-256, title/version, file size)
+        dup_reg, strategy = RegulationDeduplicationEngine.check_duplicate(
+            db,
+            file_path=stored_metadata.path,
+            filename=file.filename or stored_metadata.original_filename,
+            checksum=stored_metadata.checksum,
+            file_size=stored_metadata.size,
+        )
+
+        if dup_reg:
+            logger.info("Global regulation duplicate detected (%s): id=%s title=%r", strategy, dup_reg.id, dup_reg.title)
+            # Create organization link without duplicating storage or embeddings
+            link_regulation_to_organization(db, organization_id=organization_id, regulation_id=dup_reg.id)
             try:
                 Path(stored_metadata.path).unlink(missing_ok=True)
             except OSError:
                 pass
-            return existing_reg
-        
+            return dup_reg
+
         # Infer default act_name and version if missing
         reg_act = act_name or (file.filename.rsplit('.', 1)[0] if file.filename else "Regulation")
         reg_ver = version or "1.0"
         reg_juris = jurisdiction or "Global"
         reg_title = f"{reg_act} (v{reg_ver})" if version else (file.filename or "Regulation")
 
-        # Create new regulation version (preserving existing regulation versions)
+        # Create new global regulation entry
         regulation = Regulation(
             title=reg_title,
             act_name=reg_act,
@@ -153,6 +163,9 @@ def upload_document(
         db.add(regulation)
         db.commit()
         db.refresh(regulation)
+
+        # Link regulation to organization
+        link_regulation_to_organization(db, organization_id=organization_id, regulation_id=regulation.id)
         
         try:
             background_tasks.add_task(process_regulation, regulation.id)

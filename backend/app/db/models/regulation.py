@@ -98,6 +98,16 @@ class Regulation(Base):
         nullable=True,
     )
 
+    act_year: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    issuing_authority: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
     document_hash: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
@@ -201,3 +211,56 @@ class Regulation(Base):
 
     def __repr__(self) -> str:
         return f"<Regulation(id={self.id}, title={self.title!r}, document_hash={self.document_hash!r})>"
+
+
+from sqlalchemy import UniqueConstraint
+
+
+class OrganizationRegulation(Base):
+    """
+    Junction entity linking Organizations to Global Regulations.
+    Enables shared global regulations without duplicating storage or embeddings.
+    """
+
+    __tablename__ = "organization_regulations"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "regulation_id", name="uq_org_regulation_link"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    regulation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("regulations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    linked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    organization: Mapped["Organization"] = relationship("Organization", lazy="select")
+    regulation: Mapped["Regulation"] = relationship("Regulation", lazy="select")
+
+    def __repr__(self) -> str:
+        return f"<OrganizationRegulation(org={self.organization_id}, reg={self.regulation_id}, enabled={self.enabled})>"

@@ -10,9 +10,10 @@ from contextlib import asynccontextmanager
 import logging
 import sys
 import time
+import uuid
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.mongo import close_client as close_mongo_client
@@ -43,6 +44,7 @@ from app.routes.reports import router as reports_router
 from app.routes.pdf import router as pdf_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.jobs import router as jobs_router
+from app.routes.regulations import router as regulations_router
 from app.services.health import get_system_health
 from app.services.retrieval import is_model_loaded, preload_model
 from app.services.scraper import fetch_and_process_external_data
@@ -261,6 +263,8 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(jobs_router)
     app.include_router(jobs_router, prefix="/api/v1")
+    app.include_router(regulations_router)
+    app.include_router(regulations_router, prefix="/api/v1")
     app.include_router(documents_router, tags=["documents"])
     app.include_router(chat_router)
     app.include_router(compliance_router)
@@ -269,6 +273,11 @@ def create_app() -> FastAPI:
     app.include_router(graph_router)
     app.include_router(graph_router, prefix="/api/v1")
     app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
+
+    @app.websocket("/ws/jobs/{job_id}")
+    async def direct_ws_jobs_endpoint(websocket: WebSocket, job_id: uuid.UUID):
+        from app.routes.jobs import websocket_job_progress
+        return await websocket_job_progress(websocket, job_id)
 
 
     @app.get("/clauses/{clause_id}", tags=["clauses"])

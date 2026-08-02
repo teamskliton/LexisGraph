@@ -54,12 +54,23 @@ def update_job_progress(
         db_session.rollback()
         logger.warning("Failed updating job progress for job_id=%s", job_id)
 
+    from app.services.job_manager import job_manager
+
+    status_str = job.status.value if hasattr(job.status, "value") else str(job.status)
+    job_manager.broadcast_job_progress(
+        job_id,
+        status=status_str,
+        progress=progress,
+        current_step=current_step,
+        updated_at=job.updated_at.isoformat() if hasattr(job.updated_at, "isoformat") else str(job.updated_at),
+    )
+
     logger.info(
         "Stage completed: stage=%r progress=%s%% job_id=%s status=%s",
         current_step,
         progress,
         job_id,
-        job.status.value if hasattr(job.status, "value") else str(job.status),
+        status_str,
     )
     return job
 
@@ -398,6 +409,7 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
             report.id,
             elapsed_ms,
         )
+        job_manager.broadcast_job_completed(job_id, report.id, elapsed_ms)
 
         log_activity(
             db,
@@ -416,6 +428,7 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
         err_str = str(exc)
 
         logger.error("Job failed: job_id=%s error=%s", job_id, err_str)
+        job_manager.broadcast_job_failed(job_id, err_str)
         try:
             failed_job = db.get(ComplianceJob, job_id)
             if failed_job:

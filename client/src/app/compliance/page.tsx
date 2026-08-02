@@ -37,6 +37,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { JobProgressCard } from "@/components/compliance/JobProgressCard";
 
 import { organizationsService, Organization } from "@/services/api/organizations";
 import { documentService } from "@/services/document-service";
@@ -506,42 +507,22 @@ function CompliancePageContent() {
           </CardContent>
         </Card>
 
-        {/* ── Processing Animation Overlay ── */}
-        {isAnalyzing && (
-          <Card className="border-indigo-500/30 bg-gradient-to-br from-indigo-950/20 via-card to-background p-8 shadow-xl">
-            <div className="flex flex-col items-center justify-center text-center space-y-6">
-              <div className="relative flex items-center justify-center">
-                <div className="absolute h-24 w-24 rounded-full bg-indigo-500/20 animate-ping" />
-                <div className="h-16 w-16 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/40">
-                  <Sparkles className="h-8 w-8 text-white animate-spin" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-xl font-bold text-foreground">Executing Compliance Engine...</h3>
-                <p className="text-sm font-semibold text-indigo-400 max-w-md">
-                  Stage: {activeJob?.current_step || "Queued"} ({activeJob?.progress || 0}%)
-                </p>
-              </div>
-              <div className="w-full max-w-md space-y-2">
-                <Progress
-                  value={activeJob?.progress || 5}
-                  className="h-2.5"
-                  indicatorClassName="bg-indigo-600 transition-all duration-500"
-                />
-                <p className="text-xs text-muted-foreground text-center animate-pulse">
-                  Persisted progress tracked live in PostgreSQL...
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancelJob}
-                className="text-rose-500 hover:bg-rose-500/10 border-rose-500/30"
-              >
-                Cancel Job
-              </Button>
-            </div>
-          </Card>
+        {/* ── Real-Time Job Progress Card ── */}
+        {jobId && isAnalyzing && (
+          <JobProgressCard
+            jobId={jobId}
+            onCompleted={async (completedReportId) => {
+              try {
+                setReportId(completedReportId);
+                const rep = await complianceService.getComplianceReport(completedReportId);
+                setActiveReport(rep);
+                setIsAnalyzing(false);
+                toast.success("Analysis completed! Compliance report ready.");
+              } catch {
+                toast.error("Failed loading completed compliance report.");
+              }
+            }}
+          />
         )}
 
         {/* ── Results Section (When Active Report is Ready) ── */}

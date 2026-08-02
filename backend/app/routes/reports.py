@@ -110,6 +110,29 @@ def get_organization_reports(
 
 
 @router.get(
+    "/compare",
+    summary="Compare two compliance reports",
+)
+def compare_reports(
+    report_id_1: uuid.UUID = Query(..., description="First report ID"),
+    report_id_2: uuid.UUID = Query(..., description="Second report ID to compare against"),
+    db: Session = Depends(get_db),
+    service: ReportService = Depends(get_report_service),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """
+    Compare two compliance reports. Returns score diff, resolved findings, regressions, and recommendation changes.
+    """
+    try:
+        return service.compare_reports(db, report_id_1, report_id_2)
+    except ReportNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+
+@router.get(
     "/{report_id}",
     response_model=ReportDetailResponse,
     summary="Get complete report by ID",
@@ -126,6 +149,45 @@ def get_report(
         report = service.get_report(db, report_id)
         logger.info("Report loaded: report_id=%s", report_id)
         return ReportDetailResponse.model_validate(report)
+    except ReportNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Report with ID '{report_id}' not found.",
+        )
+
+
+@router.get(
+    "/{report_id}/findings",
+    summary="Get detailed findings list for a report",
+)
+def get_report_findings(
+    report_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: ReportService = Depends(get_report_service),
+):
+    """
+    Return clause-level findings for a compliance report.
+    """
+    try:
+        report = service.get_report(db, report_id)
+        findings = getattr(report, "findings_list", [])
+        return [
+            {
+                "id": str(f.id),
+                "report_id": str(f.report_id),
+                "policy_clause_id": f.policy_clause_id,
+                "regulation_clause_id": f.regulation_clause_id,
+                "status": f.status,
+                "confidence": f.confidence,
+                "severity": f.severity,
+                "reasoning": f.reasoning,
+                "recommendation": f.recommendation,
+                "citation": f.citation,
+                "graph_path": f.graph_path,
+                "created_at": f.created_at,
+            }
+            for f in findings
+        ]
     except ReportNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

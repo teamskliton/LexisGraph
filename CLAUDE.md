@@ -1,189 +1,317 @@
-# LexisGraph — Project Context (CLAUDE.md)
+# LexisGraph — Master Project Context & Documentation (CLAUDE.md)
 
-> **Purpose:** This file serves as a high-level context document for AI agents working on this project.
-> It summarises what has been completed so far across `/backend` and `/client`.
-> Read this before starting any new task. For deep-dive details, refer to the individual `CLAUDE.md` inside each subdirectory.
-
----
-
-## Project Overview
-
-**LexisGraph** is a legal-domain knowledge-graph platform that:
-- Ingests legal documents (PDFs, web pages) and extracts entities/relationships
-- Builds a knowledge graph in **Neo4j**
-- Stores vector embeddings in **Qdrant**
-- Persists user/org data in **PostgreSQL**
-- Serves a **FastAPI** backend consumed by a **Next.js** client
-
-**Tech Stack at a Glance**
-
-| Layer | Technology |
-|---|---|
-| Backend API | FastAPI (Python) |
-| Relational DB | PostgreSQL + SQLAlchemy 2.0 + Alembic |
-| Graph DB | Neo4j |
-| Vector Store | Qdrant |
-| Cache / Queue | Redis |
-| Document Store | MongoDB (legacy, read-only for new code) |
-| Client | Next.js 15 (App Router) + TypeScript + Tailwind CSS |
+> **Purpose:** This file serves as the definitive, single-source-of-truth context document for AI agents and developers working on **LexisGraph**.
+> It consolidates all documentation, system architecture, database design, API specifications, backend/client features, security protocols, GraphRAG pipeline details, and sprint progress till now.
 
 ---
 
-## `/backend` — Completed Tasks
+## 1. Project Overview & System Vision
 
-> Detailed documentation lives in [`backend/CLAUDE.md`](./backend/CLAUDE.md).
+**LexisGraph** is an enterprise legal-domain knowledge-graph and compliance-analysis platform. It ingests complex legal documents (regulations, statutory acts, and corporate policy files), extracts clause-level semantic structure, and performs hybrid automated compliance verification.
 
-### Database Layer
+### Core Pipeline Workflow
 
-- [x] **PostgreSQL foundation** — `app/db/session.py` with lazy-initialised SQLAlchemy 2.0 engine, connection pooling (`pool_pre_ping`, `pool_recycle`, `pool_size`), `get_db()` FastAPI dependency
-- [x] **Config system** — `app/core/config.py` reads `DATABASE_URL` (priority) or builds it from individual `POSTGRES_*` env vars
-- [x] **Alembic migration setup** — `alembic/`, `alembic.ini`, `alembic/env.py` wired to `app.core.config` as single source of truth; `target_metadata = Base.metadata` for autogenerate
-- [x] **Placeholder migration** (`0001_initial_migration_placeholder.py`) applied to seed migration history
-- [x] **DB adapters present** — `app/db/mongo.py` (legacy, untouched), `app/db/neo4j.py`, `app/db/qdrant.py`, `app/db/redis_client.py`, `app/db/postgres.py` (legacy singleton, do not modify)
+```
+┌─────────────────┐      ┌──────────────────────────┐      ┌─────────────────────────┐
+│ Upload PDF /    │ ───► │ Storage & Processing     │ ───► │ Knowledge Graph (Neo4j) │
+│ Regulation Document    │ Metadata (PostgreSQL)    │      │ & Vector Store (Qdrant) │
+└─────────────────┘      └──────────────────────────┘      └────────────┬────────────┘
+                                                                        │
+┌─────────────────┐      ┌──────────────────────────┐                   │
+│ Next.js Client  │ ◄─── │ Compliance Scoring &     │ ◄─────────────────┘
+│ Interactive UI  │      │ Vector + Graph Retrieval │
+└─────────────────┘      └──────────────────────────┘
+```
 
-### User Model & Migration
-
-- [x] **`User` SQLAlchemy model** (`app/db/models/user.py`) — UUID primary key, `email`, `username`, `full_name`, `hashed_password`, `is_active`, `is_superuser`, timezone-aware `created_at`/`updated_at`
-- [x] **Migration applied** — revision `0f0c9b648e58` ("add users table") successfully run against PostgreSQL
-
-### Documents & Processing
-
-- [x] **`Document` SQLAlchemy model** (`app/db/models/document.py`) — UUID PK, org FK, user FK, file metadata, `document_type`, `processing_status`, `progress` (int 0–100), `current_step` (str|None), `processing_started_at`, `processed_at`, `error_message`, `mongo_document_id`
-- [x] **Migrations applied:**
-  - `a1b2c3d4e5f6` — create `documents` table
-  - `b2c3d4e5f6a7` — add processing tracking columns (`processing_started_at`, `processed_at`, `error_message`, `mongo_document_id`)
-  - `c3d4e5f6a7b8` — add progress tracking columns (`progress INT DEFAULT 0`, `current_step VARCHAR(150)`)
-
-### Security
-
-- [x] **`app/core/security.py`** — password hashing via `passlib[bcrypt]` (`hash_password`, `verify_password`), JWT create/verify via `python-jose` (`create_access_token`, `verify_token`), `oauth2_scheme` (Bearer token extractor), custom exception hierarchy (`TokenError` → `TokenExpiredError` / `TokenInvalidError`)
-
-### Pydantic Schemas
-
-- [x] **`app/core/schemas.py`** — Pydantic v2 models: `UserCreate`, `UserLogin`, `UserResponse` (excludes `hashed_password`), `Token`, `TokenPayload`
-
-### Authentication Routes (`app/routes/auth.py`)
-
-- [x] **`POST /auth/register`** — validates email, hashes password, stores in PostgreSQL, returns `UserResponse` (201); raises 409 on duplicate email/username
-- [x] **`POST /auth/token`** — login by username or email, bcrypt verify, returns JWT `access_token` + `expires_in`; raises 401 on bad creds or inactive user
-- [x] **`GET /auth/me`** (protected) — validates Bearer JWT, fetches user from PostgreSQL, returns `UserResponse`; raises 403 if disabled
-
-### FastAPI Dependency
-
-- [x] **`app/core/dependencies.py`** — `get_current_user` dependency: reads Bearer header → `verify_token` → lookup user by UUID → guard for inactive account
-
-### Other Backend Routes & Services (existing / pre-built)
-
-- [x] `app/routes/documents.py` — document ingestion endpoints
-  - `POST /documents/upload` — non-blocking; 201 + background pipeline via `BackgroundTasks`
-  - `GET /documents/` — list documents in an organization
-  - `GET /documents/{id}` — get document by ID
-  - `GET /documents/{id}/status` — returns `{document_id, status, progress, current_step, error_message, ...}`; owner-only
-  - `POST /documents/{id}/retry` — re-queues FAILED document; owner-only; 409 if not FAILED
-  - `DELETE /documents/{id}` — deletes record + file
-- [x] `app/routes/graph.py` — graph query endpoints
-- [x] `app/routes/organizations.py` — organization management
-- [x] `app/routes/compliance.py` — compliance checks
-- [x] `app/routes/domain.py` — domain-specific queries
-- [x] `app/routes/export.py` — data export
-- [x] `app/routes/retrieval.py` — retrieval-augmented generation
-- [x] `app/routes/debug.py` — debug/health endpoints
-- [x] `app/services/document_processor.py` — PDF/web document processing pipeline
-- [x] `app/services/graph_builder.py` — entity/relationship extraction → Neo4j
-- [x] `app/services/knowledge_graph.py` — KG query & traversal logic
-- [x] `app/services/graph_explorer.py` — graph exploration utilities
-- [x] `app/services/llm_reasoning.py` — LLM-based reasoning layer
-- [x] `app/services/organization.py` — org CRUD logic
-- [x] `app/services/compliance.py` — compliance rule engine
-- [x] `app/services/scraper.py` — web scraping service
-- [x] `app/services/preprocessing.py` — document preprocessing utilities
-- [x] `app/services/retrieval.py` — vector similarity retrieval (Qdrant)
-- [x] `app/services/export_service.py` — export formatting
-
-### Pending (Backend)
-
-- [ ] Protect non-auth routes with `Depends(get_current_user)` where required
+1. **Document Upload & Storage:** Authenticated users upload policy or regulation documents (PDFs) which are stored on disk (`backend/storage/uploads/`) with tracking metadata stored in PostgreSQL.
+2. **Clause Extraction & Preprocessing:** Documents are parsed into discrete policy and regulation clauses, generating chunk embeddings and extracting entities/relationships.
+3. **Dual-Index Persistence:**
+   - **Knowledge Graph (Neo4j):** Document hierarchy, clauses, legal entities, cross-references, and match relationships.
+   - **Vector Store (Qdrant):** Dense semantic embeddings for clause similarity retrieval.
+4. **Hybrid Compliance Scoring:** Calculates compliance alignment (`compliant`, `partial`, `gap`) using vector semantic similarity combined with Neo4j graph context and optional LLM reasoning.
+5. **Interactive Exploration & Reporting:** Serves REST APIs consumed by a Next.js 15 frontend featuring a Graph Explorer, Compliance Viewer, and Report Exporter.
 
 ---
 
-## `/client` — Completed Tasks
+## 2. Tech Stack & Polyglot Persistence Architecture
 
-> The client is a **Next.js 15 App Router** application written in TypeScript.
+LexisGraph leverages specialized storage engines tailored for distinct workloads:
 
-### Project Setup
-
-- [x] Next.js 15 app initialised with App Router under `client/`
-- [x] TypeScript configured (`tsconfig.json`)
-- [x] Tailwind CSS + PostCSS configured
-- [x] shadcn/ui component library integrated (`components.json`)
-- [x] Global styles in `src/app/globals.css`
-- [x] Root layout (`src/app/layout.tsx`) with `ThemeProvider`
-- [x] Dark/light **theme system** — `src/components/theme-provider.tsx` wrapping `next-themes`
-
-### Authentication (Client-Side)
-
-- [x] **`src/context/auth-context.tsx`** — React context providing `user`, `token`, `login()`, `logout()`, `register()` with JWT stored client-side; protects routes by redirecting unauthenticated users
-- [x] **`src/services/auth-service.ts`** — typed wrappers around `POST /auth/token`, `POST /auth/register`, `GET /auth/me`
-- [x] **`src/services/api.ts`** — Axios instance with base URL, auto-attaches Bearer token from storage, handles 401 → logout
-- [x] **Login page** (`src/app/login/page.tsx`) — email/username + password form, error handling, redirect on success
-- [x] **Register page** (`src/app/register/page.tsx`) — full registration form with validation, redirects to login on success
-
-### Pages & Features
-
-- [x] **Home / landing page** (`src/app/page.tsx`) — entry point, redirects to dashboard if authenticated
-- [x] **Dashboard** (`src/app/dashboard/page.tsx`) — protected overview page showing graph/document stats
-- [x] **Upload page** (`src/app/upload/page.tsx`) — document upload UI calling upload/document endpoints
-- [x] **Documents page** (`src/app/documents/page.tsx`) — document listing and management
-- [x] **Organizations page** (`src/app/organizations/page.tsx`) — organization listing/management UI
-- [x] **`src/services/document-service.ts`** — typed wrappers for document CRUD and upload API calls
-
-### Component Library
-
-- [x] `src/components/ui/` — shadcn/ui primitives (buttons, inputs, cards, dialogs, etc.)
-- [x] `src/components/layout/` — shared layout components (sidebar, navbar, etc.)
-- [x] `src/components/dashboard/` — dashboard-specific components
-- [x] `src/components/graph/` — graph visualisation components
-- [x] `src/components/upload/` — upload form components
-- [x] `src/components/reports/` — report viewer components
-
-### Feature Modules (`src/features/`)
-
-- [x] `src/features/documents/` — document feature components
-- [x] `src/features/organizations/` — organization feature components
-- [x] `src/features/compliance/` — compliance feature components
-- [x] `src/features/reports/` — reports feature components
+| Layer | Technology | Primary Responsibility |
+|---|---|---|
+| **Backend API** | FastAPI (Python 3.11+) | Async REST API service, security, task orchestration |
+| **Relational DB** | PostgreSQL + SQLAlchemy 2.0 + Alembic | Business data, Users, Organizations, Document metadata, Audit logs, Settings |
+| **Graph DB** | Neo4j | Knowledge graph (Acts, Regulations, Clauses, Entities, Relationships) |
+| **Vector Store** | Qdrant | Dense vector embeddings & similarity search |
+| **Cache & Task Queue** | Redis | Session caching & asynchronous background jobs |
+| **Object / File Storage**| Local Filesystem (`backend/storage/uploads/`) | PDFs, uploaded files, generated reports |
+| **Legacy Storage** | MongoDB | Read-only legacy document store (*do not use for new features*) |
+| **Client Frontend** | Next.js 15 (App Router) + TypeScript + Tailwind CSS | Interactive dashboard, graph explorer, compliance reporting |
 
 ---
 
-## Key Constraints & Rules
+## 3. Database Architecture & Schema Design
 
-1. **Do NOT use MongoDB** for any new application data — PostgreSQL only for new data
-2. **Do NOT modify** `app/db/postgres.py` or `app/db/mongo.py` — legacy, used by other team members
-3. **Do NOT delete existing code** without explicit approval
-4. **All migrations** must be tracked in `backend/alembic/versions/` — never regenerate applied migrations
-5. **JWT secret** (`JWT_SECRET`) must always be set in production `.env`
-6. **Next.js App Router** — always use `src/app/` for new pages, not `src/pages/`
+### Polyglot Data Distribution
+
+- **PostgreSQL (`lexisgraph` DB):**
+  - `users`: User profiles, hashed passwords, roles (`is_active`, `is_superuser`), UTC timestamps.
+  - `organizations`: Organization names, tenant identification, domain metadata.
+  - `documents`: Document upload tracking, `document_type` (`REGULATION`, `POLICY`), `processing_status` (`UPLOADED`, `PROCESSING`, `PROCESSED`, `FAILED`), file path, size, MIME type, SHA256 checksum, progress % and step tracking.
+- **Neo4j Graph Model:**
+  - **Nodes:** `UserDocument`, `PolicyClause`, `DomainDocument`, `RegulationClause`, `Entity`, `Authority`
+  - **Relationships:** `HAS_CLAUSE`, `BELONGS_TO`, `HAS_ENTITY`, `MATCH`, `PARTIAL_MATCH`, `MISSING`
+- **Qdrant Vector Collections:**
+  - Dense embeddings for clauses and legal definitions with payload metadata linking back to PostgreSQL Document UUIDs and Neo4j node IDs.
+
+### Database Session & Alembic Migration Setup
+
+- **Lazy Session Initialization (`backend/app/db/session.py`):**
+  - Database connections are initialized lazily to avoid connection attempts during module imports (e.g., during Alembic autogenerate).
+  - Engine configured with `pool_pre_ping=True`, `pool_recycle=300`, `pool_size=5`, `max_overflow=10`.
+  - FastAPI dependency `get_db()` yields sessions with automatic commit/rollback and connection cleanup.
+- **Alembic Configuration (`backend/alembic/`):**
+  - `env.py` uses `app.core.config.get_database_url()` as single source of truth.
+  - Applied Migrations:
+    - `0001_initial_migration_placeholder.py`: Seed migration history.
+    - `0f0c9b648e58`: Create `users` table.
+    - `a1b2c3d4e5f6`: Create `documents` table.
+    - `b2c3d4e5f6a7`: Add processing tracking columns (`processing_started_at`, `processed_at`, `error_message`, `mongo_document_id`).
+    - `c3d4e5f6a7b8`: Add progress tracking columns (`progress INT DEFAULT 0`, `current_step VARCHAR(150)`).
 
 ---
 
-## Environment Variables Summary
+## 4. `/backend` — Architecture & Completed Features
 
-### Backend (`backend/.env`)
+Detailed documentation lives in [`backend/CLAUDE.md`](./backend/CLAUDE.md).
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | Full PostgreSQL connection string (takes priority) |
-| `POSTGRES_*` | Individual DB connection parts (fallback) |
-| `JWT_SECRET` | JWT signing secret |
-| `JWT_ALGORITHM` | Default: `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Default: `30` |
+### Directory Structure
 
-### Client (`client/.env.local`)
+```
+backend/
+├── alembic/              # Alembic migration scripts and env.py
+├── app/
+│   ├── core/             # Configuration, security, schemas, dependencies
+│   │   ├── config.py     # Pydantic environment configuration
+│   │   ├── security.py   # Password hashing (bcrypt) & JWT token utilities
+│   │   ├── schemas.py    # Pydantic schemas (User, Token, Document, etc.)
+│   │   └── dependencies.py # FastAPI dependencies (get_current_user, get_db)
+│   ├── db/               # Database drivers and models
+│   │   ├── session.py    # SQLAlchemy 2.0 lazy engine & session factory
+│   │   ├── models/       # SQLAlchemy models (user.py, document.py)
+│   │   ├── neo4j.py      # Neo4j client connection
+│   │   ├── qdrant.py     # Qdrant client connection
+│   │   ├── redis_client.py # Redis client connection
+│   │   └── postgres.py   # Legacy DB driver (DO NOT MODIFY)
+│   ├── routes/           # FastAPI REST endpoints
+│   │   ├── auth.py       # User authentication (/auth/register, /auth/token, /auth/me)
+│   │   ├── documents.py  # Document upload and management (/documents/*)
+│   │   ├── graph.py      # Neo4j graph operations & explorer
+│   │   ├── compliance.py # Compliance evaluation endpoints
+│   │   ├── retrieval.py  # Semantic search endpoints
+│   │   ├── export.py     # Report export endpoints
+│   │   └── debug.py      # System health and diagnostics
+│   └── services/         # Core business logic & GraphRAG pipeline
+│       ├── storage.py    # File storage service (validation, SHA256, pathing)
+│       ├── document_processor.py # Parsing & text extraction
+│       ├── graph_builder.py # Legal entity/relation extraction to Neo4j
+│       ├── knowledge_graph.py # Graph query & traversal service
+│       ├── retrieval.py  # Vector similarity search engine
+│       ├── compliance.py # Hybrid compliance analysis engine
+│       └── llm_reasoning.py # LLM orchestration layer (OpenRouter / Gemini)
+├── storage/              # File upload storage root (git-ignored uploads)
+└── tests/                # Pytest unit and integration test suite
+```
 
-| Variable | Purpose |
-|---|---|
-| `NEXT_PUBLIC_API_URL` | Backend base URL (e.g. `http://localhost:8000`) |
+### Security & Authentication Layer
+
+- **Password Security (`app/core/security.py`):** Bcrypt password hashing via `passlib[bcrypt]` (`hash_password`, `verify_password`).
+- **JWT Authorization:** Token creation and verification (`create_access_token`, `verify_token`) using `python-jose` with configurable algorithm (`HS256`) and expiration (`ACCESS_TOKEN_EXPIRE_MINUTES`).
+- **FastAPI Authentication Dependency (`app/core/dependencies.py`):** `get_current_user` extracts Bearer JWT from `Authorization` header, verifies claims, resolves user in PostgreSQL, and enforces active status checks.
+
+### API Endpoints Overview
+
+#### Authentication (`app/routes/auth.py`)
+- `POST /auth/register` — Registers user, hashes password, saves to PostgreSQL, returns `UserResponse` (201).
+- `POST /auth/token` — Authenticates username/email + password, returns OAuth2 JWT Bearer token.
+- `GET /auth/me` (Protected) — Returns authenticated user details.
+
+#### Document Management (`app/routes/documents.py` & `app/services/storage.py`)
+- `POST /documents/upload` — Non-blocking upload; validates PDF MIME type & size limit (50MB), computes SHA256 checksum, saves file to `storage/uploads/`, creates PostgreSQL record, and triggers async background processing.
+- `GET /documents/` — Lists documents filtered by organization, type, or status.
+- `GET /documents/{id}` — Returns document metadata.
+- `GET /documents/{id}/status` — Returns realtime progress tracking (`progress` 0-100%, `current_step`, `processing_status`).
+- `POST /documents/{id}/retry` — Re-queues failed document processing jobs.
+- `DELETE /documents/{id}` — Removes PostgreSQL record and physical storage file.
+
+#### Knowledge Graph & Compliance (`app/routes/graph.py` & `app/routes/compliance.py`)
+- `POST /graph/build` — Constructs knowledge graph from selected user policy and regulation documents.
+- `GET /graph/explorer` — Fetches root nodes and lazy expansion branches for UI visualization.
+- `GET /graph/history` — Returns build execution logs and past graph states.
+- `POST /graph/reset` — Clears active graph session state.
+- `POST /compliance/analyze` — Evaluates policy clauses against regulation clauses, outputting status (`compliant`, `partial`, `gap`), vector score, graph score, and reasoning summary.
+- `POST /retrieval/query` — Semantic search over legal clauses using Qdrant vector index.
 
 ---
 
-*Last updated: 2026-07-27*
+## 5. `/client` — Architecture & Completed Features
+
+The client is a **Next.js 15 App Router** project written in TypeScript.
+
+### Directory Structure
+
+```
+client/
+├── src/
+│   ├── app/              # Next.js App Router pages & routes
+│   │   ├── page.tsx      # Landing page / home redirect
+│   │   ├── login/        # User login page
+│   │   ├── register/     # Registration page
+│   │   ├── dashboard/    # Main analytics & graph metrics dashboard
+│   │   ├── upload/       # Document upload workspace
+│   │   ├── documents/    # Document management & status view
+│   │   └── organizations/# Organization management UI
+│   ├── components/       # Shared UI components
+│   │   ├── ui/           # shadcn/ui primitives (Button, Input, Card, Dialog)
+│   │   ├── layout/       # Navbar, Sidebar, Page Shell
+│   │   ├── dashboard/    # Metric cards & summary graphs
+│   │   ├── graph/        # Graph Explorer canvas & interaction controls
+│   │   ├── upload/       # Drag-and-drop dropzone & progress indicators
+│   │   └── reports/      # Compliance report viewers
+│   ├── context/          # React context providers
+│   │   └── auth-context.tsx # Auth state, login/logout, route protection
+│   ├── features/         # Domain-specific feature modules
+│   │   ├── documents/    # Document features
+│   │   ├── organizations/# Organization features
+│   │   ├── compliance/   # Compliance features
+│   │   └── reports/      # Reporting features
+│   └── services/         # Client API service layer
+│       ├── api.ts        # Axios instance with Bearer token interceptor & 401 handling
+│       ├── auth-service.ts # Typed auth API client
+│       └── document-service.ts # Typed document API client
+├── public/               # Static web assets
+├── components.json       # shadcn/ui configuration
+├── tsconfig.json         # TypeScript configuration
+└── tailwind.config.ts    # Tailwind CSS configuration
+```
+
+### Client Capabilities & Features
+
+- **Authentication & Authorization:** Client-side JWT management with `AuthContext` protecting routes, handling auto-login, header attachments in Axios, and auto-logout on HTTP 401.
+- **Modern Design System:** Light/Dark mode via `next-themes` and `ThemeProvider`, modern SaaS top-navigation layout, styled using Tailwind CSS and shadcn/ui.
+- **Document Management UI:** Drag-and-drop PDF upload dropzone, upload progress tracking, file status listing, retry and delete operations.
+- **Graph Explorer:** Visual representation of Neo4j knowledge graph nodes, node filtering, lazy expansion of regulation/policy clause branches, zoom/fit controls, and historical build selection.
+
+---
+
+## 6. Sprint Status & Development Roadmap
+
+### Sprint Overview
+
+| Sprint | Scope & Key Deliverables | Status |
+|---|---|---|
+| **Sprint 1 & 2** | Knowledge Graph prototype in Neo4j, Qdrant vector store setup, basic similarity scoring engine, initial React frontend setup. | ✅ Completed |
+| **Sprint 3** | **Document Management System:** PostgreSQL `Document` model, Alembic migrations, `storage.py` local storage service, async document upload API, tracking columns (`progress`, `current_step`), frontend Next.js auth & document pages. | ✅ Completed |
+| **Sprint 4 (Current/Next)** | **Automated Ingestion & Parsing Pipeline:** PDF text extraction, legal clause chunking, Named Entity Recognition (NER), automatic graph builder pipeline trigger, Qdrant auto-indexing. | 🚧 In Progress |
+| **Sprint 5 (Planned)** | **Advanced Compliance & RAG Reasoning:** Durable background task queue (Celery/Redis), LLM multi-provider fallback engine, exportable compliance audit PDF reports. | ⏳ Planned |
+
+---
+
+## 7. Key System Constraints & Developer Guidelines
+
+1. **Database Usage Rules:**
+   - **PostgreSQL ONLY** for all new application data, users, metadata, and transactional records.
+   - **Do NOT use MongoDB** for any new features. MongoDB scripts (`app/db/mongo.py`) are legacy and read-only.
+   - **Do NOT modify** `app/db/postgres.py` or `app/db/mongo.py` — legacy drivers required for backwards compatibility.
+2. **Migration Discipline:**
+   - All schema updates MUST be implemented via Alembic migrations under `backend/alembic/versions/`.
+   - Never modify or delete previously applied migration scripts.
+3. **Frontend Rules:**
+   - All new client pages MUST use the **Next.js App Router** under `client/src/app/` (never `src/pages/`).
+   - Use shadcn/ui primitives and Tailwind CSS; maintain light/dark theme compatibility.
+4. **Security Requirements:**
+   - Never commit secrets or hardcoded passwords.
+   - `JWT_SECRET` must be set in environment configuration (`.env`).
+   - All protected routes must enforce authentication via `Depends(get_current_user)`.
+
+---
+
+## 8. Environment Variables Reference
+
+### Backend Configuration (`backend/.env`)
+
+```ini
+# PostgreSQL Database Settings
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/lexisgraph
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=lexisgraph
+
+# Security & JWT
+JWT_SECRET=your_super_secret_jwt_key_here
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# External Databases & Services
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+REDIS_URL=redis://localhost:6379/0
+
+# Optional LLM Reasoning Provider
+LLM_REASONING_PROVIDER=gemini # or openrouter
+GEMINI_API_KEY=your_gemini_key
+OPENROUTER_API_KEY=your_openrouter_key
+```
+
+### Client Configuration (`client/.env.local`)
+
+```ini
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+---
+
+## 9. Essential Command Reference
+
+### Backend Execution & Migrations
+
+```bash
+cd backend
+
+# Start backend FastAPI server
+uvicorn app.main:app --reload --port 8000
+
+# Apply all database migrations
+alembic upgrade head
+
+# Autogenerate a new migration after model changes
+alembic revision --autogenerate -m "describe changes"
+
+# Run tests
+pytest
+```
+
+### Client Execution
+
+```bash
+cd client
+
+# Install dependencies
+npm install
+
+# Start Next.js development server
+npm run dev
+
+# Build production bundle
+npm run build
+```
+
+---
+
+*Last updated: August 2, 2026*
+
