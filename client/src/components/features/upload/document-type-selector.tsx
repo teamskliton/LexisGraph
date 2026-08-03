@@ -79,8 +79,8 @@ export function DocumentTypeSelector({
         {value === "REGULATION"
           ? "Regulations are legal requirements from government bodies"
           : value === "POLICY"
-          ? "Policies are internal organizational documents"
-          : "Select whether this is a regulation or internal policy"}
+            ? "Policies are internal organizational documents"
+            : "Select whether this is a regulation or internal policy"}
       </p>
     </div>
   );

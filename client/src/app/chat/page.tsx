@@ -314,11 +314,11 @@ function ChatPageContent() {
               [currentConvId]: list.map((m) =>
                 m.id === assistantMsgId
                   ? {
-                      ...m,
-                      follow_up_questions: recs.follow_up_questions,
-                      recommended_actions: recs.recommended_actions,
-                      related_documents: recs.related_documents,
-                    }
+                    ...m,
+                    follow_up_questions: recs.follow_up_questions,
+                    recommended_actions: recs.recommended_actions,
+                    related_documents: recs.related_documents,
+                  }
                   : m
               ),
             };

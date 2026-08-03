@@ -642,34 +642,32 @@ function DocumentsPageContent() {
                               justCompleted
                                 ? "bg-emerald-50/50 dark:bg-emerald-900/10 transition-colors duration-700"
                                 : isFailed
-                                ? "bg-red-50/30 dark:bg-red-900/10"
-                                : ""
+                                  ? "bg-red-50/30 dark:bg-red-900/10"
+                                  : ""
                             }
                           >
                             {/* ── Filename ── */}
                             <TableCell>
                               <div className="flex min-w-0 items-start gap-2">
                                 <div
-                                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                                    isProcessed
+                                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${isProcessed
                                       ? "bg-emerald-100 dark:bg-emerald-900/30"
                                       : isFailed
-                                      ? "bg-red-100 dark:bg-red-900/30"
-                                      : isActive
-                                      ? "bg-blue-100 dark:bg-blue-900/30"
-                                      : "bg-muted"
-                                  }`}
+                                        ? "bg-red-100 dark:bg-red-900/30"
+                                        : isActive
+                                          ? "bg-blue-100 dark:bg-blue-900/30"
+                                          : "bg-muted"
+                                    }`}
                                 >
                                   <FileText
-                                    className={`h-3.5 w-3.5 ${
-                                      isProcessed
+                                    className={`h-3.5 w-3.5 ${isProcessed
                                         ? "text-emerald-600 dark:text-emerald-400"
                                         : isFailed
-                                        ? "text-red-500"
-                                        : isActive
-                                        ? "text-blue-500"
-                                        : "text-muted-foreground"
-                                    }`}
+                                          ? "text-red-500"
+                                          : isActive
+                                            ? "text-blue-500"
+                                            : "text-muted-foreground"
+                                      }`}
                                   />
                                 </div>
                                 <div className="min-w-0 flex-1">

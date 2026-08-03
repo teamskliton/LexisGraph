@@ -32,7 +32,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
 
   const processingTime =
     report?.processing_time_seconds !== null &&
-    report?.processing_time_seconds !== undefined
+      report?.processing_time_seconds !== undefined
       ? `${report.processing_time_seconds.toFixed(1)}s`
       : "N/A";
 
