@@ -1,0 +1,106 @@
+﻿/* ==========================================================================
+   LexisGraph Design System — Spacing & Radius
+   Base: 8px | Scale: 4, 8, 12, 16, 24, 32, 40, 48, 64, 96
+   ========================================================================== */
+
+:root {
+  /* Spacing Scale */
+  --space-0:    0px;
+  --space-1:    4px;
+  --space-2:    8px;
+  --space-3:    12px;
+  --space-4:    16px;
+  --space-5:    20px;
+  --space-6:    24px;
+  --space-8:    32px;
+  --space-10:   40px;
+  --space-12:   48px;
+  --space-16:   64px;
+  --space-24:   96px;
+  --space-32:   128px;
+
+  /* Border Radius */
+  --radius-none:   0px;
+  --radius-xs:     4px;    /* Small tags, badges */
+  --radius-sm:     8px;    /* Inputs, small buttons */
+  --radius-md:     10px;   /* Buttons */
+  --radius-input:  10px;   /* Form inputs */
+  --radius-btn:    10px;   /* Buttons */
+  --radius-card:   16px;   /* Cards */
+  --radius-dialog: 20px;   /* Dialogs / modals */
+  --radius-sheet:  20px;   /* Sheets / drawers */
+  --radius-lg:     16px;
+  --radius-xl:     20px;
+  --radius-2xl:    24px;
+  --radius-3xl:    32px;
+  --radius-full:   9999px; /* Pills / avatars */
+
+  /* shadcn base radius (maps to our system) */
+  --radius:        0.625rem; /* 10px */
+
+  /* Content Width */
+  --width-xs:    480px;
+  --width-sm:    640px;
+  --width-md:    768px;
+  --width-lg:    1024px;
+  --width-xl:    1280px;
+  --width-2xl:   1440px;
+  --width-prose: 72ch;   /* Optimal reading width */
+
+  /* Layout Dimensions */
+  --sidebar-width:          260px;
+  --sidebar-collapsed-width: 72px;
+  --topbar-height:           56px;
+  --banner-height:           40px;
+  --page-padding-x:          24px;
+  --page-padding-y:          24px;
+  --section-gap:             48px;
+  --card-padding:            24px;
+  --card-padding-sm:         16px;
+
+  /* Transition Timings */
+  --duration-fast:     100ms;
+  --duration-hover:    150ms;
+  --duration-base:     200ms;
+  --duration-slow:     250ms;
+  --duration-drawer:   300ms;
+  --duration-page:     250ms;
+
+  /* Easing */
+  --ease-default:   cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:       cubic-bezier(0, 0, 0.2, 1);
+  --ease-in:        cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-snappy:    cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* -------------------------------------------------------------------------
+   Utility Classes — Spacing
+   ------------------------------------------------------------------------- */
+
+.page-container {
+  width: 100%;
+  max-width: var(--width-2xl);
+  margin-inline: auto;
+  padding-inline: var(--page-padding-x);
+}
+
+.section-container {
+  width: 100%;
+  max-width: var(--width-xl);
+  margin-inline: auto;
+  padding-inline: var(--page-padding-x);
+  padding-block: var(--section-gap);
+}
+
+.content-width {
+  width: 100%;
+  max-width: var(--width-lg);
+  margin-inline: auto;
+}
+
+.prose-width {
+  width: 100%;
+  max-width: var(--width-prose);
+  margin-inline: auto;
+}

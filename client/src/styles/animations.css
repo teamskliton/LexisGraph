@@ -1,0 +1,282 @@
+﻿/* ==========================================================================
+   LexisGraph Design System — Animations & Motion
+   Timings aligned with Framer Motion defaults
+   ========================================================================== */
+
+/* -------------------------------------------------------------------------
+   Keyframes
+   ------------------------------------------------------------------------- */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-left {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-right {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scale-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.95); }
+}
+
+@keyframes enter-up {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Skeleton pulse */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* Spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Streaming text cursor */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* Subtle float for illustrations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+/* Ping / ripple */
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* Glow pulse */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: var(--glow-sm-primary); }
+  50%       { box-shadow: var(--glow-primary); }
+}
+
+/* Shimmer (skeleton) */
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+/* Progress indeterminate */
+@keyframes progress-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+/* Typing indicator dots */
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30%            { transform: translateY(-4px); opacity: 1; }
+}
+
+/* -------------------------------------------------------------------------
+   Animation Utility Classes
+   Aligned with Framer Motion: ease=[0.4, 0, 0.2, 1]
+   ------------------------------------------------------------------------- */
+
+.animate-enter {
+  animation: enter-up var(--duration-slow) var(--ease-default) both;
+}
+
+.animate-fade {
+  animation: fade-in var(--duration-base) var(--ease-out) both;
+}
+
+.animate-fade-out {
+  animation: fade-out var(--duration-base) var(--ease-in) both;
+}
+
+.animate-scale {
+  animation: scale-in var(--duration-base) var(--ease-spring) both;
+}
+
+.animate-slide-up {
+  animation: slide-up var(--duration-slow) var(--ease-default) both;
+}
+
+.animate-slide-down {
+  animation: slide-down var(--duration-slow) var(--ease-default) both;
+}
+
+.animate-slide-left {
+  animation: slide-left var(--duration-slow) var(--ease-default) both;
+}
+
+.animate-slide-right {
+  animation: slide-right var(--duration-slow) var(--ease-default) both;
+}
+
+.animate-float {
+  animation: float 4s var(--ease-default) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-ping {
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.animate-glow {
+  animation: glow-pulse 2s var(--ease-default) infinite;
+}
+
+/* Stagger children */
+.stagger > * {
+  animation: enter-up var(--duration-slow) var(--ease-default) both;
+}
+
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+/* -------------------------------------------------------------------------
+   Skeleton Loading
+   ------------------------------------------------------------------------- */
+
+.loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 25%,
+    var(--border)         50%,
+    var(--surface-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.dark .loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 25%,
+    rgba(148,163,184,0.10) 50%,
+    var(--surface-muted) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* Skeleton shape variants */
+.skeleton-text {
+  height: 1em;
+  width: 100%;
+  border-radius: var(--radius-xs);
+}
+
+.skeleton-title {
+  height: 1.5em;
+  width: 60%;
+  border-radius: var(--radius-xs);
+}
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.skeleton-card {
+  height: 120px;
+  width: 100%;
+  border-radius: var(--radius-card);
+}
+
+.skeleton-chart {
+  height: 200px;
+  width: 100%;
+  border-radius: var(--radius-card);
+}
+
+/* Typing indicator */
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  animation: typing-dot 1.4s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Streaming text cursor */
+.streaming-cursor::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: var(--primary);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+/* -------------------------------------------------------------------------
+   Reduced Motion Accessibility
+   ------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .loading-skeleton {
+    animation: skeleton-pulse 2s ease-in-out infinite;
+    background: var(--surface-muted);
+  }
+}
