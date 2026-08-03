@@ -102,9 +102,8 @@ export const ReportComparisonModal: React.FC<ReportComparisonModalProps> = ({
             </span>
           </Card>
 
-          <Card className={`p-4 border flex flex-col justify-between ${
-            isImproved ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-rose-500/10 border-rose-500/30'
-          }`}>
+          <Card className={`p-4 border flex flex-col justify-between ${isImproved ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-rose-500/10 border-rose-500/30'
+            }`}>
             <span className="text-xs font-semibold text-slate-300">Score Difference</span>
             <div className="flex items-center gap-2 mt-1">
               {isImproved ? (
@@ -128,9 +127,8 @@ export const ReportComparisonModal: React.FC<ReportComparisonModalProps> = ({
             size="sm"
             variant={activeTab === 'resolved' ? 'default' : 'ghost'}
             onClick={() => setActiveTab('resolved')}
-            className={`text-xs h-8 px-3 rounded-lg ${
-              activeTab === 'resolved' ? 'bg-emerald-600 text-white' : 'text-slate-400'
-            }`}
+            className={`text-xs h-8 px-3 rounded-lg ${activeTab === 'resolved' ? 'bg-emerald-600 text-white' : 'text-slate-400'
+              }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-400" />
             Resolved ({data.resolved_findings?.length || 0})
@@ -140,9 +138,8 @@ export const ReportComparisonModal: React.FC<ReportComparisonModalProps> = ({
             size="sm"
             variant={activeTab === 'regressions' ? 'default' : 'ghost'}
             onClick={() => setActiveTab('regressions')}
-            className={`text-xs h-8 px-3 rounded-lg ${
-              activeTab === 'regressions' ? 'bg-rose-600 text-white' : 'text-slate-400'
-            }`}
+            className={`text-xs h-8 px-3 rounded-lg ${activeTab === 'regressions' ? 'bg-rose-600 text-white' : 'text-slate-400'
+              }`}
           >
             <AlertTriangle className="w-3.5 h-3.5 mr-1 text-rose-400" />
             Regressions ({data.regression_findings?.length || 0})
@@ -152,9 +149,8 @@ export const ReportComparisonModal: React.FC<ReportComparisonModalProps> = ({
             size="sm"
             variant={activeTab === 'new' ? 'default' : 'ghost'}
             onClick={() => setActiveTab('new')}
-            className={`text-xs h-8 px-3 rounded-lg ${
-              activeTab === 'new' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-            }`}
+            className={`text-xs h-8 px-3 rounded-lg ${activeTab === 'new' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+              }`}
           >
             <FileCheck className="w-3.5 h-3.5 mr-1 text-indigo-400" />
             New Items ({data.new_findings?.length || 0})

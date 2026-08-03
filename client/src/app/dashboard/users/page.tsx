@@ -199,13 +199,12 @@ export function UserManagementContent() {
                     </td>
 
                     <td className="p-4">
-                      <Badge className={`text-[10px] uppercase font-mono ${
-                        member.role === 'ORGANIZATION_ADMIN' || member.role === 'SUPER_ADMIN'
+                      <Badge className={`text-[10px] uppercase font-mono ${member.role === 'ORGANIZATION_ADMIN' || member.role === 'SUPER_ADMIN'
                           ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
                           : member.role === 'MANAGER'
-                          ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
-                          : 'bg-slate-800 text-slate-300 border-slate-700'
-                      }`}>
+                            ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}>
                         <Shield className="w-3 h-3 mr-1" />
                         {member.role.replace('_', ' ')}
                       </Badge>

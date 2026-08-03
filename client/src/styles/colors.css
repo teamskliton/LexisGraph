@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    LexisGraph Design System — Color Tokens
    Enterprise Legal AI Platform
    ========================================================================== */
@@ -11,6 +11,7 @@
   /* Core Background Layers */
   --background:            #F6F8FB;
   --surface:               #FFFFFF;
+  --surface-elevated:      #FAFBFD;
   --surface-raised:        #FAFBFD;
   --surface-muted:         #F1F5F9;
   --surface-overlay:       rgba(255, 255, 255, 0.85);
@@ -152,6 +153,7 @@
   /* Core Background Layers */
   --background:            #020817;
   --surface:               #0F172A;
+  --surface-elevated:      #111827;
   --surface-raised:        #111827;
   --surface-muted:         #1E293B;
   --surface-overlay:       rgba(15,23,42,0.90);

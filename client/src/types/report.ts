@@ -58,3 +58,4 @@ export interface ReportFilterParams {
   idSearch?: string;
   sortOrder?: 'newest' | 'oldest';
 }
+

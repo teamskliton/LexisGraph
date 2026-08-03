@@ -53,7 +53,7 @@ export default function OrganizationsPage() {
     if (!window.confirm("Are you sure you want to delete this organization? This action cannot be undone.")) {
       return;
     }
-    
+
     try {
       await organizationsService.deleteOrganization(id);
       setOrganizations(organizations.filter(org => org.id !== id));
@@ -67,7 +67,7 @@ export default function OrganizationsPage() {
   const handleSubmit = async (data: OrganizationCreate | OrganizationUpdate) => {
     try {
       setIsSubmitting(true);
-      
+
       if (editingOrg) {
         // Update
         const updatedOrg = await organizationsService.updateOrganization(editingOrg.id, data as OrganizationUpdate);
@@ -79,7 +79,7 @@ export default function OrganizationsPage() {
         setOrganizations([newOrg, ...organizations]);
         toast.success("Organization created successfully.");
       }
-      
+
       setIsDialogOpen(false);
     } catch (error) {
       console.error("Failed to save organization:", error);

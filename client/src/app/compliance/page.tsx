@@ -564,8 +564,8 @@ function CompliancePageContent() {
                       (activeReport.overall_score ?? 0) >= 80
                         ? "bg-emerald-500"
                         : (activeReport.overall_score ?? 0) >= 50
-                        ? "bg-amber-500"
-                        : "bg-rose-500"
+                          ? "bg-amber-500"
+                          : "bg-rose-500"
                     }
                   />
                   <p className="text-xs text-muted-foreground">
@@ -602,25 +602,22 @@ function CompliancePageContent() {
                   <div className="flex h-2 rounded-full overflow-hidden bg-muted">
                     <div
                       style={{
-                        width: `${
-                          ((reportDetails?.compliant_count ?? 0) / (reportDetails?.total_regulation_clauses || 1)) * 100
-                        }%`,
+                        width: `${((reportDetails?.compliant_count ?? 0) / (reportDetails?.total_regulation_clauses || 1)) * 100
+                          }%`,
                       }}
                       className="bg-emerald-500"
                     />
                     <div
                       style={{
-                        width: `${
-                          ((reportDetails?.partially_compliant_count ?? 0) / (reportDetails?.total_regulation_clauses || 1)) * 100
-                        }%`,
+                        width: `${((reportDetails?.partially_compliant_count ?? 0) / (reportDetails?.total_regulation_clauses || 1)) * 100
+                          }%`,
                       }}
                       className="bg-amber-500"
                     />
                     <div
                       style={{
-                        width: `${
-                          ((reportDetails?.non_compliant_count ?? 0) / (reportDetails?.total_regulation_clauses || 1)) * 100
-                        }%`,
+                        width: `${((reportDetails?.non_compliant_count ?? 0) / (reportDetails?.total_regulation_clauses || 1)) * 100
+                          }%`,
                       }}
                       className="bg-rose-500"
                     />

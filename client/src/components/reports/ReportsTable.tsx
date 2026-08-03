@@ -139,7 +139,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
 
               const processingTime =
                 report?.processing_time_seconds !== null &&
-                report?.processing_time_seconds !== undefined
+                  report?.processing_time_seconds !== undefined
                   ? `${report.processing_time_seconds.toFixed(1)}s`
                   : "—";
 
@@ -201,15 +201,14 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                   {/* Risk Level */}
                   <TableCell>
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider ${
-                        riskLevel === "LOW"
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider ${riskLevel === "LOW"
                           ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/30"
                           : riskLevel === "HIGH"
-                          ? "bg-orange-500/10 text-orange-600 border border-orange-500/30"
-                          : riskLevel === "CRITICAL"
-                          ? "bg-red-500/10 text-red-600 border border-red-500/30"
-                          : "bg-amber-500/10 text-amber-600 border border-amber-500/30"
-                      }`}
+                            ? "bg-orange-500/10 text-orange-600 border border-orange-500/30"
+                            : riskLevel === "CRITICAL"
+                              ? "bg-red-500/10 text-red-600 border border-red-500/30"
+                              : "bg-amber-500/10 text-amber-600 border border-amber-500/30"
+                        }`}
                     >
                       {riskLevel}
                     </span>

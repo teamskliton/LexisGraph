@@ -22,7 +22,7 @@ export const ReportMetadata: React.FC<ReportMetadataProps> = ({ report }) => {
 
   const processingTime =
     report.processing_time_seconds !== null &&
-    report.processing_time_seconds !== undefined
+      report.processing_time_seconds !== undefined
       ? `${report.processing_time_seconds.toFixed(2)} seconds`
       : "N/A";
 
