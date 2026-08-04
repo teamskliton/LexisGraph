@@ -107,38 +107,66 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-background">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
+      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
-          <div className="flex items-center gap-2 md:gap-6">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push("/dashboard")}>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
+          {/* Logo + Nav */}
+          <div className="flex items-center gap-6">
+            <div
+              className="flex items-center gap-2 cursor-pointer shrink-0"
+              onClick={() => router.push("/dashboard")}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-sm shadow-indigo-600/25">
                 <Layers className="h-4 w-4 text-white" />
               </div>
-              <span className="font-bold tracking-tight text-foreground">
+              <span className="font-semibold tracking-tight text-foreground">
                 LexisGraph
               </span>
             </div>
 
-            <nav className="hidden md:flex items-center gap-1 text-xs font-medium">
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-foreground font-semibold" onClick={() => router.push("/dashboard")}>
+            {/* Separator */}
+            <div className="hidden md:block h-5 w-px bg-border" />
+
+            <nav className="hidden md:flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs font-semibold text-foreground"
+                onClick={() => router.push("/dashboard")}
+              >
                 Dashboard
               </Button>
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => router.push("/organizations")}>
-                <Building2 className="h-3.5 w-3.5 mr-1.5" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => router.push("/organizations")}
+              >
+                <Building2 className="h-3.5 w-3.5" />
                 Organizations
               </Button>
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => router.push("/documents")}>
-                <FileText className="h-3.5 w-3.5 mr-1.5" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => router.push("/documents")}
+              >
+                <FileText className="h-3.5 w-3.5" />
                 Documents
               </Button>
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => router.push("/reports")}>
-                <FileCheck className="h-3.5 w-3.5 mr-1.5" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => router.push("/reports")}
+              >
+                <FileCheck className="h-3.5 w-3.5" />
                 Reports
               </Button>
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          {/* Right actions */}
+          <div className="flex items-center gap-3">
             <ThemeToggle />
             <Button
               variant="outline"
@@ -146,7 +174,7 @@ function DashboardContent() {
               onClick={logout}
               className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-3.5 w-3.5" />
               <span>Sign out</span>
             </Button>
           </div>
@@ -156,17 +184,19 @@ function DashboardContent() {
       {/* Main Container */}
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
         {/* Welcome & Action Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-6">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               Executive Dashboard
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Welcome back, <span className="font-semibold text-indigo-600">{user?.full_name}</span>. Here is your live compliance analysis overview.
+            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+              Welcome back,{" "}
+              <span className="font-semibold text-primary">{user?.full_name}</span>.
+              {" "}Here is your live compliance analysis overview.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -174,8 +204,10 @@ function DashboardContent() {
               disabled={isLoading || isRefreshing}
               className="gap-1.5 cursor-pointer text-xs"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-primary" : ""}`} />
-              <span>Refresh Data</span>
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-primary" : ""}`}
+              />
+              <span>Refresh</span>
             </Button>
 
             <Button
@@ -185,15 +217,15 @@ function DashboardContent() {
               className="gap-1.5 cursor-pointer text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/50"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>Create Organization</span>
+              <span>New Organization</span>
             </Button>
 
             <Button
               onClick={() => router.push("/compliance")}
               size="sm"
-              className="gap-1.5 shadow-sm cursor-pointer"
+              className="gap-1.5 cursor-pointer"
             >
-              <Zap className="h-4 w-4" />
+              <Zap className="h-3.5 w-3.5" />
               <span>New Analysis</span>
             </Button>
           </div>
@@ -201,19 +233,19 @@ function DashboardContent() {
 
         {/* Error Alert State */}
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="rounded-xl border border-danger/20 bg-danger-subtle p-4 text-danger dark:border-danger/30 dark:bg-danger/10 dark:text-red-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+              <AlertTriangle className="h-4.5 w-4.5 text-danger dark:text-red-400 mt-0.5 shrink-0" />
               <div>
-                <h3 className="text-sm font-semibold">Backend API Error</h3>
-                <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{error}</p>
+                <h3 className="text-sm font-semibold text-danger dark:text-red-300">API Connection Error</h3>
+                <p className="text-xs text-danger/80 dark:text-red-400 mt-0.5 leading-relaxed">{error}</p>
               </div>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => fetchStats(false)}
-              className="gap-2 border-red-300 text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/50 shrink-0"
+              className="gap-1.5 border-danger/30 text-danger hover:bg-danger/10 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/50 shrink-0 cursor-pointer"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>Retry</span>
@@ -223,10 +255,14 @@ function DashboardContent() {
 
         {/* Active Real-Time Jobs Banner */}
         {activeJobs.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-              Active Compliance Jobs In Progress ({activeJobs.length})
-            </h2>
+          <div className="space-y-3">
+            {/* Section overline label */}
+            <div className="flex items-center gap-2">
+              <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Active Jobs ({activeJobs.length})
+              </h2>
+            </div>
             {activeJobs.map((job) => (
               <JobProgressCard
                 key={job.id}
@@ -270,76 +306,90 @@ function DashboardContent() {
           </div>
 
           {/* User Profile & Quick Links */}
-          <Card className="md:col-span-1 border-border/60 shadow-sm flex flex-col justify-between">
-            <CardHeader className="border-b border-border/40 pb-3">
-              <CardTitle className="text-base font-bold text-foreground">User Identity</CardTitle>
-              <CardDescription>Authenticated session details</CardDescription>
+          <Card className="md:col-span-1 flex flex-col">
+            <CardHeader className="border-b border-border/40 px-5 pt-5 pb-3">
+              <CardTitle className="text-sm font-semibold text-foreground">User Identity</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Authenticated session details</p>
             </CardHeader>
-            <CardContent className="space-y-3.5 pt-4 text-sm">
+
+            <CardContent className="flex-1 px-5 py-4 space-y-3">
+              {/* Username */}
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-500 border border-indigo-500/25 flex items-center justify-center shrink-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
                   <UserIcon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Username</p>
-                  <p className="text-xs font-medium text-foreground truncate">{user?.username}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Username</p>
+                  <p className="text-xs font-medium text-foreground truncate mt-0.5">{user?.username}</p>
                 </div>
               </div>
 
+              {/* Email */}
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-violet-500/10 text-violet-500 border border-violet-500/25 flex items-center justify-center shrink-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
                   <Mail className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Email</p>
-                  <p className="text-xs font-medium text-foreground truncate">{user?.email}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Email</p>
+                  <p className="text-xs font-medium text-foreground truncate mt-0.5">{user?.email}</p>
                 </div>
               </div>
 
+              {/* Role */}
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/25 flex items-center justify-center shrink-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
                   <ShieldAlert className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Role</p>
-                  <p className="text-xs font-medium text-foreground">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Role</p>
+                  <p className="text-xs font-medium text-foreground mt-0.5">
                     {user?.is_superuser ? "System Administrator" : "Compliance Analyst"}
                   </p>
                 </div>
               </div>
 
+              {/* Member Since */}
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                   <Calendar className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Member Since</p>
-                  <p className="text-xs font-medium text-foreground">
-                    {user?.created_at ? new Date(user.created_at).toLocaleDateString(undefined, {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    }) : "N/A"}
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Member Since</p>
+                  <p className="text-xs font-medium text-foreground mt-0.5">
+                    {user?.created_at
+                      ? new Date(user.created_at).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : "N/A"}
                   </p>
                 </div>
               </div>
             </CardContent>
 
-            <CardFooter className="bg-muted/30 border-t border-border/40 py-2.5 text-center text-[11px] text-muted-foreground flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-              <span>Quick Navigation:</span>
-              <div className="flex gap-1.5 flex-wrap">
-                <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 font-medium text-indigo-600 dark:text-indigo-400" onClick={() => setIsOrgDialogOpen(true)}>
-                  + Create Org
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2" onClick={() => router.push("/organizations")}>
-                  Organizations
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2" onClick={() => router.push("/reports")}>
-                  Reports
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2" onClick={() => router.push("/documents")}>
-                  Documents
-                </Button>
+            <CardFooter className="px-5 py-3">
+              <div className="flex w-full flex-col gap-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground mb-0.5">Quick Navigation</p>
+                <div className="flex gap-1 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] px-2.5 font-medium text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+                    onClick={() => setIsOrgDialogOpen(true)}
+                  >
+                    + Create Org
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => router.push("/organizations")}>
+                    Organizations
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => router.push("/reports")}>
+                    Reports
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => router.push("/documents")}>
+                    Documents
+                  </Button>
+                </div>
               </div>
             </CardFooter>
           </Card>

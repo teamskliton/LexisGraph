@@ -30,12 +30,16 @@ export const SectionHeader = React.memo<SectionHeaderProps>(
         <div className="space-y-0.5">
           <Heading
             id={titleId}
-            className="text-lg font-semibold tracking-tight text-foreground sm:text-xl"
+            className={cn(
+              // Premium section titles: semibold, tight tracking, crisp size
+              "text-base font-semibold tracking-tight text-foreground",
+              "sm:text-lg leading-snug"
+            )}
           >
             {title}
           </Heading>
           {description && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               {description}
             </p>
           )}

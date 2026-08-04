@@ -5,10 +5,23 @@ import { RiskBreakdown } from "@/types/dashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShieldAlert, ShieldCheck, AlertTriangle, AlertOctagon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface RiskBreakdownChartProps {
   data?: RiskBreakdown;
   isLoading: boolean;
+}
+
+interface RiskItem {
+  label: string;
+  count: number;
+  barColor: string;
+  iconColor: string;
+  iconBg: string;
+  badgeBg: string;
+  badgeText: string;
+  hoverRing: string;
+  icon: React.ReactNode;
 }
 
 export const RiskBreakdownChart: React.FC<RiskBreakdownChartProps> = ({
@@ -17,67 +30,91 @@ export const RiskBreakdownChart: React.FC<RiskBreakdownChartProps> = ({
 }) => {
   if (isLoading || !data) {
     return (
-      <Card className="border-border/60 shadow-sm">
-        <CardHeader className="pb-2">
-          <Skeleton className="h-5 w-44" />
+      <Card>
+        <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="h-8 w-8 rounded-lg" />
+            <Skeleton className="h-4 w-36" />
+          </div>
         </CardHeader>
-        <CardContent className="py-4">
-          <Skeleton className="h-40 w-full" />
+        <CardContent className="py-5 px-5">
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-lg" />
+            ))}
+          </div>
         </CardContent>
       </Card>
     );
   }
 
-  const items = [
+  const items: RiskItem[] = [
     {
       label: "Low Risk",
       count: data.low,
-      color: "bg-emerald-500",
-      icon: <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />,
-      badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400",
+      barColor: "bg-emerald-500",
+      iconColor: "text-emerald-600 dark:text-emerald-400",
+      iconBg: "bg-emerald-500/10",
+      badgeBg: "bg-emerald-500/10",
+      badgeText: "text-emerald-700 dark:text-emerald-400",
+      hoverRing: "hover:ring-1 hover:ring-emerald-500/30",
+      icon: <ShieldCheck className="h-3.5 w-3.5" />,
     },
     {
       label: "Medium Risk",
       count: data.medium,
-      color: "bg-amber-500",
-      icon: <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />,
-      badge: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400",
+      barColor: "bg-amber-500",
+      iconColor: "text-amber-600 dark:text-amber-400",
+      iconBg: "bg-amber-500/10",
+      badgeBg: "bg-amber-500/10",
+      badgeText: "text-amber-700 dark:text-amber-400",
+      hoverRing: "hover:ring-1 hover:ring-amber-500/30",
+      icon: <ShieldAlert className="h-3.5 w-3.5" />,
     },
     {
       label: "High Risk",
       count: data.high,
-      color: "bg-orange-500",
-      icon: <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />,
-      badge: "bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-400",
+      barColor: "bg-orange-500",
+      iconColor: "text-orange-600 dark:text-orange-400",
+      iconBg: "bg-orange-500/10",
+      badgeBg: "bg-orange-500/10",
+      badgeText: "text-orange-700 dark:text-orange-400",
+      hoverRing: "hover:ring-1 hover:ring-orange-500/30",
+      icon: <AlertTriangle className="h-3.5 w-3.5" />,
     },
     {
-      label: "Critical Risk",
+      label: "Critical",
       count: data.critical,
-      color: "bg-red-500",
-      icon: <AlertOctagon className="h-3.5 w-3.5 text-red-500" />,
-      badge: "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400",
+      barColor: "bg-rose-500",
+      iconColor: "text-rose-600 dark:text-rose-400",
+      iconBg: "bg-rose-500/10",
+      badgeBg: "bg-rose-500/10",
+      badgeText: "text-rose-700 dark:text-rose-400",
+      hoverRing: "hover:ring-1 hover:ring-rose-500/40",
+      icon: <AlertOctagon className="h-3.5 w-3.5" />,
     },
   ];
 
   const total = items.reduce((acc, curr) => acc + curr.count, 0);
 
   return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="pb-3 border-b border-border/40">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+    <Card>
+      {/* Header */}
+      <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
             <ShieldAlert className="h-4 w-4" />
           </div>
-          <CardTitle className="text-base font-bold text-foreground">
+          <CardTitle className="text-sm font-semibold text-foreground">
             Risk Level Breakdown
           </CardTitle>
         </div>
       </CardHeader>
 
-      <CardContent className="pt-4 space-y-3">
+      <CardContent className="py-5 px-5">
         {total === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-8">
-            No risk evaluation metrics available.
+          <p className="text-xs text-muted-foreground text-center py-10">
+            No risk evaluation metrics available yet.
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
@@ -87,18 +124,40 @@ export const RiskBreakdownChart: React.FC<RiskBreakdownChartProps> = ({
               return (
                 <div
                   key={idx}
-                  className="rounded-lg border border-border/50 p-3 space-y-1.5 bg-muted/20 hover:bg-muted/40 transition-colors"
+                  className={cn(
+                    "group rounded-lg border border-border/50 bg-muted/20 p-3.5 space-y-2",
+                    "transition-all duration-200 ease-out",
+                    "hover:-translate-y-0.5 hover:bg-muted/40 hover:border-border",
+                    item.hoverRing
+                  )}
                 >
+                  {/* Icon + label row */}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                      {item.icon}
-                      {item.label}
-                    </span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.badge}`}>
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn("shrink-0", item.iconColor)}>
+                        {item.icon}
+                      </span>
+                      <span className="text-xs font-medium text-muted-foreground leading-none">
+                        {item.label}
+                      </span>
+                    </div>
+                    {/* Percentage badge */}
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded",
+                        item.badgeBg,
+                        item.badgeText
+                      )}
+                    >
                       {pct}%
                     </span>
                   </div>
-                  <div className="text-xl font-extrabold font-mono text-foreground">
+
+                  {/* Count — large, prominent */}
+                  <div className={cn(
+                    "text-2xl font-bold tabular-nums tracking-tight leading-none",
+                    item.iconColor
+                  )}>
                     {item.count}
                   </div>
                 </div>
