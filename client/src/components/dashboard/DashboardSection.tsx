@@ -39,7 +39,7 @@ export const DashboardSection = React.memo<DashboardSectionProps>(
         aria-labelledby={titleId}
         className={cn(
           "w-full space-y-4",
-          asCard && "rounded-xl border border-border bg-card p-4 shadow-xs sm:p-6 text-card-foreground",
+          asCard && "rounded-xl border border-(--card-border,var(--border)) bg-card p-4 shadow-(--shadow-card) sm:p-6 text-card-foreground transition-all duration-200",
           className
         )}
         {...props}

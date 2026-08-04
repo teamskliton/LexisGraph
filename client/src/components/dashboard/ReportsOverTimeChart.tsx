@@ -17,12 +17,18 @@ export const ReportsOverTimeChart: React.FC<ReportsOverTimeChartProps> = ({
 }) => {
   if (isLoading) {
     return (
-      <Card className="border-border/60 shadow-sm">
-        <CardHeader className="pb-2">
-          <Skeleton className="h-5 w-44" />
+      <Card>
+        <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="h-8 w-8 rounded-lg" />
+              <Skeleton className="h-4 w-44" />
+            </div>
+            <Skeleton className="h-4 w-4 rounded" />
+          </div>
         </CardHeader>
-        <CardContent className="py-4">
-          <Skeleton className="h-40 w-full" />
+        <CardContent className="px-5 pb-5 pt-6">
+          <Skeleton className="h-40 w-full rounded-lg" />
         </CardContent>
       </Card>
     );
@@ -31,41 +37,45 @@ export const ReportsOverTimeChart: React.FC<ReportsOverTimeChartProps> = ({
   const maxVal = Math.max(...data.map((d) => d.count), 1);
 
   return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="pb-3 border-b border-border/40">
+    <Card>
+      {/* Header */}
+      <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
               <TrendingUp className="h-4 w-4" />
             </div>
-            <CardTitle className="text-base font-bold text-foreground">
+            <CardTitle className="text-sm font-semibold text-foreground">
               Reports Generated Over Time
             </CardTitle>
           </div>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Calendar className="h-4 w-4 text-muted-foreground/60 shrink-0" />
         </div>
       </CardHeader>
 
-      <CardContent className="pt-6">
+      <CardContent className="px-5 pb-5 pt-6">
         {data.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-8">
+          <p className="text-xs text-muted-foreground text-center py-12">
             No report history recorded over time.
           </p>
         ) : (
-          <div className="flex items-end justify-around gap-2 h-36 pt-4 border-b border-border/40 px-2">
+          <div className="flex items-end justify-around gap-1.5 h-40 border-b border-border/30 px-1">
             {data.map((item, idx) => {
-              const heightPct = Math.max(12, Math.round((item.count / maxVal) * 100));
+              const heightPct = Math.max(10, Math.round((item.count / maxVal) * 100));
 
               return (
-                <div key={idx} className="flex flex-col items-center gap-1 flex-1 group">
-                  <span className="text-[10px] font-bold font-mono text-muted-foreground group-hover:text-primary transition-colors">
+                <div key={idx} className="flex flex-col items-center gap-1 flex-1 group/bar">
+                  {/* Count label — appears above bar */}
+                  <span className="text-[10px] font-semibold font-mono tabular-nums text-muted-foreground/60 group-hover/bar:text-indigo-500 transition-colors duration-150">
                     {item.count}
                   </span>
+                  {/* Bar */}
                   <div
-                    className="w-full max-w-[28px] bg-indigo-500/80 group-hover:bg-indigo-600 dark:bg-indigo-600 dark:group-hover:bg-indigo-500 rounded-t-md transition-all duration-500"
+                    className="w-full max-w-[22px] rounded-t-[3px] bg-indigo-500/70 group-hover/bar:bg-indigo-500 dark:bg-indigo-500/60 dark:group-hover/bar:bg-indigo-400 transition-all duration-300 ease-out"
                     style={{ height: `${heightPct}%` }}
                   />
-                  <span className="text-[10px] text-muted-foreground truncate w-full text-center mt-1">
+                  {/* X-axis label */}
+                  <span className="text-[9px] text-muted-foreground/60 truncate w-full text-center mt-1.5 leading-none">
                     {item.label}
                   </span>
                 </div>
