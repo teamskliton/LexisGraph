@@ -12,8 +12,10 @@ import {
   getExternalDocuments,
   runComplianceCheck,
   triggerFetch,
-  buildGraph
+  buildGraph,
+  getLatestGraphJob
 } from '../api/endpoints';
+import KnowledgeGraphOverview from '../components/graph/KnowledgeGraphOverview';
 import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
@@ -241,6 +243,11 @@ export default function Dashboard() {
   const complianceQuery = useQuery({
     queryKey: ['dashboard-compliance'],
     queryFn: async () => (await runComplianceCheck()).data,
+    retry: false
+  });
+  const graphJobQuery = useQuery({
+    queryKey: ['latest-graph-job'],
+    queryFn: async () => (await getLatestGraphJob()).data,
     retry: false
   });
 
@@ -500,6 +507,17 @@ export default function Dashboard() {
               <ShieldCheck size={14} /> Compliance
             </Button>
           </div>
+        </div>
+      </section>
+
+      {/* ── Knowledge Graph Overview ─────────────────────── */}
+      <section className="grid gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-1">
+          <KnowledgeGraphOverview
+            stats={statsQuery.data ?? null}
+            graphJobData={graphJobQuery.data ?? null}
+            onExplore={() => navigate('/graph-explorer')}
+          />
         </div>
       </section>
     </div>

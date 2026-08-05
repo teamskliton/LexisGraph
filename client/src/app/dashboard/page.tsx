@@ -8,7 +8,11 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { dashboardService } from "@/services/dashboard-service";
 import { DashboardStatsResponse } from "@/types/dashboard";
 import { OrganizationDialog } from "@/components/features/organizations/OrganizationDialog";
-import { organizationsService, OrganizationCreate, OrganizationUpdate } from "@/services/api/organizations";
+import {
+  organizationsService,
+  OrganizationCreate,
+  OrganizationUpdate,
+} from "@/services/api/organizations";
 
 // Dashboard Components
 import { DashboardKpiCards } from "@/components/dashboard/DashboardKpiCards";
@@ -18,17 +22,23 @@ import { ReportsOverTimeChart } from "@/components/dashboard/ReportsOverTimeChar
 import { RiskBreakdownChart } from "@/components/dashboard/RiskBreakdownChart";
 import { OrgScoresChart } from "@/components/dashboard/OrgScoresChart";
 import { RecentReportsWidget } from "@/components/dashboard/RecentReportsWidget";
+import { AiComplianceInsightsCard } from "@/components/dashboard/AiComplianceInsightsCard";
 import { JobProgressCard } from "@/components/compliance/JobProgressCard";
+import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
 import { complianceService, ComplianceJob } from "@/services/api/compliance";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   LogOut,
-  User as UserIcon,
-  Mail,
-  ShieldAlert,
-  Calendar,
+  ShieldCheck,
   Layers,
   RefreshCw,
   AlertTriangle,
@@ -37,8 +47,67 @@ import {
   FileCheck,
   Zap,
   Plus,
+  BarChart3,
+  Users,
+  Network,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+// ─── Executive Summary helper ─────────────────────────────────────────────────
+
+interface PostureSummary {
+  postureLabel: string;
+  postureColor: string;
+  summaryText: string;
+}
+
+function buildPostureSummary(stats: DashboardStatsResponse): PostureSummary {
+  const score = stats.kpis.average_compliance_score;
+  const total = stats.kpis.total_compliance_reports;
+  const critical = stats.risk_breakdown?.critical ?? 0;
+  const high = stats.risk_breakdown?.high ?? 0;
+  const highRisk = critical + high;
+
+  if (total === 0) {
+    return {
+      postureLabel: "Getting Started",
+      postureColor: "text-muted-foreground",
+      summaryText:
+        "No compliance reports generated yet. Create an organization and run your first analysis to begin monitoring your regulatory posture.",
+    };
+  }
+
+  let postureLabel: string;
+  let postureColor: string;
+
+  if (score >= 85) {
+    postureLabel = "Compliant";
+    postureColor = "text-emerald-600 dark:text-emerald-400";
+  } else if (score >= 70) {
+    postureLabel = "Needs Attention";
+    postureColor = "text-amber-600 dark:text-amber-400";
+  } else {
+    postureLabel = "At Risk";
+    postureColor = "text-rose-600 dark:text-rose-400";
+  }
+
+  let summaryText = `Portfolio-wide compliance score is ${score}%.`;
+
+  if (critical > 0) {
+    summaryText += ` ${critical} critical ${critical === 1 ? "issue requires" : "issues require"
+      } immediate review.`;
+  } else if (highRisk > 0) {
+    summaryText += ` ${highRisk} high-risk ${highRisk === 1 ? "item requires" : "items require"
+      } review.`;
+  } else {
+    summaryText += " No critical risks detected across your portfolio.";
+  }
+
+  return { postureLabel, postureColor, summaryText };
+}
+
+// ─── Dashboard Content ────────────────────────────────────────────────────────
 
 function DashboardContent() {
   const { user, logout } = useAuth();
@@ -49,13 +118,11 @@ function DashboardContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Organization dialog state
   const [isOrgDialogOpen, setIsOrgDialogOpen] = useState(false);
   const [isSubmittingOrg, setIsSubmittingOrg] = useState(false);
 
   const [activeJobs, setActiveJobs] = useState<ComplianceJob[]>([]);
 
-  // Fetch Live Dashboard Stats & Active Running Jobs
   const fetchStats = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setIsRefreshing(true);
     else setIsLoading(true);
@@ -67,12 +134,17 @@ function DashboardContent() {
         complianceService.listComplianceJobs().catch(() => []),
       ]);
       setStats(data);
-      const runningJobs = (jobsData || []).filter((j) => j.status === "QUEUED" || j.status === "RUNNING");
+      const runningJobs = (jobsData || []).filter(
+        (j) => j.status === "QUEUED" || j.status === "RUNNING"
+      );
       setActiveJobs(runningJobs);
       if (isManualRefresh) toast.success("Dashboard metrics updated.");
     } catch (err: unknown) {
       console.error("Error fetching dashboard statistics:", err);
-      const apiError = err as { response?: { data?: { detail?: string } }; message?: string };
+      const apiError = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
       const message =
         apiError.response?.data?.detail ||
         apiError.message ||
@@ -89,10 +161,14 @@ function DashboardContent() {
     fetchStats();
   }, [fetchStats]);
 
-  const handleCreateOrgSubmit = async (data: OrganizationCreate | OrganizationUpdate) => {
+  const handleCreateOrgSubmit = async (
+    data: OrganizationCreate | OrganizationUpdate
+  ) => {
     try {
       setIsSubmittingOrg(true);
-      await organizationsService.createOrganization(data as OrganizationCreate);
+      await organizationsService.createOrganization(
+        data as OrganizationCreate
+      );
       toast.success("Organization created successfully.");
       setIsOrgDialogOpen(false);
       fetchStats(false);
@@ -104,9 +180,22 @@ function DashboardContent() {
     }
   };
 
+  // Derived summary
+  const posture =
+    !isLoading && stats ? buildPostureSummary(stats) : null;
+
+  // User initials for avatar
+  const initials =
+    user?.full_name
+      ?.split(" ")
+      .slice(0, 2)
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase() ?? "?";
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Top Navbar */}
+      {/* ── Top Navbar ── */}
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
           {/* Logo + Nav */}
@@ -123,7 +212,6 @@ function DashboardContent() {
               </span>
             </div>
 
-            {/* Separator */}
             <div className="hidden md:block h-5 w-px bg-border" />
 
             <nav className="hidden md:flex items-center gap-0.5">
@@ -162,6 +250,15 @@ function DashboardContent() {
                 <FileCheck className="h-3.5 w-3.5" />
                 Reports
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => router.push("/knowledge-graph")}
+              >
+                <Network className="h-3.5 w-3.5" />
+                Knowledge Graph
+              </Button>
             </nav>
           </div>
 
@@ -181,22 +278,51 @@ function DashboardContent() {
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* ── Main ── */}
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
-        {/* Welcome & Action Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-6">
-          <div>
+
+        {/* ── Header: Title + Executive Summary + Actions ── */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-border/40 pb-6">
+          <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               Executive Dashboard
             </h1>
-            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-              Welcome back,{" "}
-              <span className="font-semibold text-primary">{user?.full_name}</span>.
-              {" "}Here is your live compliance analysis overview.
-            </p>
+
+            {/* Executive summary — dynamic from data */}
+            <div className="mt-2 space-y-0.5">
+              {isLoading ? (
+                <>
+                  <Skeleton className="h-3.5 w-24 rounded" />
+                  <Skeleton className="h-4 w-96 rounded mt-1" />
+                </>
+              ) : posture ? (
+                <>
+                  <span
+                    className={cn(
+                      "text-[11px] font-bold uppercase tracking-[0.08em]",
+                      posture.postureColor
+                    )}
+                  >
+                    ● {posture.postureLabel}
+                  </span>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                    {posture.summaryText}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Welcome back,{" "}
+                  <span className="font-semibold text-primary">
+                    {user?.full_name}
+                  </span>
+                  .
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Button
               variant="outline"
               size="sm"
@@ -205,7 +331,8 @@ function DashboardContent() {
               className="gap-1.5 cursor-pointer text-xs"
             >
               <RefreshCw
-                className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-primary" : ""}`}
+                className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-primary" : ""
+                  }`}
               />
               <span>Refresh</span>
             </Button>
@@ -231,14 +358,18 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* Error Alert State */}
+        {/* ── Error Alert ── */}
         {error && (
           <div className="rounded-xl border border-danger/20 bg-danger-subtle p-4 text-danger dark:border-danger/30 dark:bg-danger/10 dark:text-red-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-4.5 w-4.5 text-danger dark:text-red-400 mt-0.5 shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-danger dark:text-red-400 mt-0.5 shrink-0" />
               <div>
-                <h3 className="text-sm font-semibold text-danger dark:text-red-300">API Connection Error</h3>
-                <p className="text-xs text-danger/80 dark:text-red-400 mt-0.5 leading-relaxed">{error}</p>
+                <h3 className="text-sm font-semibold text-danger dark:text-red-300">
+                  API Connection Error
+                </h3>
+                <p className="text-xs text-danger/80 dark:text-red-400 mt-0.5 leading-relaxed">
+                  {error}
+                </p>
               </div>
             </div>
             <Button
@@ -253,10 +384,9 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Active Real-Time Jobs Banner */}
+        {/* ── Active Jobs Banner ── */}
         {activeJobs.length > 0 && (
           <div className="space-y-3">
-            {/* Section overline label */}
             <div className="flex items-center gap-2">
               <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -273,21 +403,43 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* 1. Live KPI Cards (5 Cards) */}
+        {/* ── AI Compliance Insights & Knowledge Graph Overview ── */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <AiComplianceInsightsCard
+              isLoading={isLoading}
+              activeJobs={activeJobs}
+              recentReports={stats?.recent_reports}
+              riskBreakdown={stats?.risk_breakdown}
+              kpis={stats?.kpis}
+            />
+          </div>
+          <div className="lg:col-span-1">
+            <KnowledgeGraphOverview
+              kpis={stats?.kpis}
+              isLoading={isLoading}
+              onExplore={() => router.push("/knowledge-graph")}
+            />
+          </div>
+        </div>
+
+        {/* ── 1. KPI Cards ── */}
         <DashboardKpiCards kpis={stats?.kpis} isLoading={isLoading} />
 
-        {/* 2. Charts Grid (4 Live Analytics Charts) */}
+        {/* ── 2. Charts Grid ── */}
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Chart 1: Compliance Score Distribution */}
-          <ComplianceScoreChart data={stats?.score_distribution} isLoading={isLoading} />
-
-          {/* Chart 2: Reports Generated Per Month */}
-          <ReportsOverTimeChart data={stats?.reports_over_time} isLoading={isLoading} />
-
-          {/* Chart 3: Risk Level Breakdown */}
-          <RiskBreakdownChart data={stats?.risk_breakdown} isLoading={isLoading} />
-
-          {/* Chart 4: Average Score Per Organization */}
+          <ComplianceScoreChart
+            data={stats?.score_distribution}
+            isLoading={isLoading}
+          />
+          <ReportsOverTimeChart
+            data={stats?.reports_over_time}
+            isLoading={isLoading}
+          />
+          <RiskBreakdownChart
+            data={stats?.risk_breakdown}
+            isLoading={isLoading}
+          />
           <OrgScoresChart
             data={stats?.org_scores}
             isLoading={isLoading}
@@ -295,99 +447,186 @@ function DashboardContent() {
           />
         </div>
 
-        {/* 3. Recent Reports Widget */}
-        <RecentReportsWidget reports={stats?.recent_reports} isLoading={isLoading} />
+        {/* ── 3. Recent Reports ── */}
+        <RecentReportsWidget
+          reports={stats?.recent_reports}
+          isLoading={isLoading}
+        />
 
-        {/* 3. Recent Activity Feed & User Identity Panel */}
+        {/* ── 4. Activity Timeline + Workspace Summary ── */}
         <div className="grid gap-6 md:grid-cols-3">
-          {/* Recent Activity List */}
+          {/* Activity timeline — 2/3 width */}
           <div className="md:col-span-2">
-            <RecentActivityList activities={stats?.recent_activity || []} isLoading={isLoading} />
+            <RecentActivityList
+              activities={stats?.recent_activity || []}
+              isLoading={isLoading}
+            />
           </div>
 
-          {/* User Profile & Quick Links */}
+          {/* ── Workspace Summary ── */}
           <Card className="md:col-span-1 flex flex-col">
-            <CardHeader className="border-b border-border/40 px-5 pt-5 pb-3">
-              <CardTitle className="text-sm font-semibold text-foreground">User Identity</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Authenticated session details</p>
+            {/* Identity header */}
+            <CardHeader className="border-b border-border/40 px-5 pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                {/* Initials avatar */}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-sm select-none">
+                  {initials}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate leading-tight">
+                    {user?.full_name ?? "—"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                    {user?.email}
+                  </p>
+                </div>
+              </div>
             </CardHeader>
 
             <CardContent className="flex-1 px-5 py-4 space-y-3">
-              {/* Username */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                  <UserIcon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Username</p>
-                  <p className="text-xs font-medium text-foreground truncate mt-0.5">{user?.username}</p>
-                </div>
-              </div>
-
-              {/* Email */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Email</p>
-                  <p className="text-xs font-medium text-foreground truncate mt-0.5">{user?.email}</p>
-                </div>
-              </div>
-
               {/* Role */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                  <ShieldAlert className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Role</p>
-                  <p className="text-xs font-medium text-foreground mt-0.5">
-                    {user?.is_superuser ? "System Administrator" : "Compliance Analyst"}
-                  </p>
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Role
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-[10px] font-semibold">
+                  {user?.is_superuser ? "Administrator" : "Compliance Analyst"}
+                </span>
               </div>
 
-              {/* Member Since */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <Calendar className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Member Since</p>
-                  <p className="text-xs font-medium text-foreground mt-0.5">
-                    {user?.created_at
-                      ? new Date(user.created_at).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })
-                      : "N/A"}
-                  </p>
-                </div>
+              {/* Member since */}
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Member since
+                </span>
+                <span className="text-[11px] font-medium text-foreground tabular-nums">
+                  {user?.created_at
+                    ? new Date(user.created_at).toLocaleDateString("en-US", {
+                      month: "short",
+                      year: "numeric",
+                    })
+                    : "—"}
+                </span>
+              </div>
+
+              {/* Workspace */}
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Workspace
+                </span>
+                <span className="text-[11px] font-medium text-foreground">
+                  LexisGraph Cloud
+                </span>
+              </div>
+
+              {/* Compliance posture */}
+              <div className="rounded-lg bg-muted/40 border border-border/40 px-3.5 py-3 space-y-1.5 mt-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                  Compliance Posture
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-24 rounded" />
+                ) : stats && stats.kpis.average_compliance_score > 0 ? (
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className={cn(
+                        "text-2xl font-bold tabular-nums tracking-tight leading-none",
+                        stats.kpis.average_compliance_score >= 85
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : stats.kpis.average_compliance_score >= 70
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-rose-600 dark:text-rose-400"
+                      )}
+                    >
+                      {stats.kpis.average_compliance_score}%
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      avg. score
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    No reports yet
+                  </span>
+                )}
+              </div>
+
+              {/* Platform stats — compact 3-column */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {
+                    label: "Orgs",
+                    value: stats?.kpis.total_organizations ?? 0,
+                    icon: <Users className="h-3 w-3" />,
+                  },
+                  {
+                    label: "Reports",
+                    value: stats?.kpis.total_compliance_reports ?? 0,
+                    icon: <BarChart3 className="h-3 w-3" />,
+                  },
+                  {
+                    label: "Policies",
+                    value: stats?.kpis.total_policies ?? 0,
+                    icon: <ShieldCheck className="h-3 w-3" />,
+                  },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="rounded-md bg-muted/30 px-2 py-2.5 text-center border border-border/30"
+                  >
+                    {isLoading ? (
+                      <Skeleton className="h-5 w-8 mx-auto rounded mb-1" />
+                    ) : (
+                      <p className="text-base font-bold tabular-nums text-foreground leading-none">
+                        {s.value}
+                      </p>
+                    )}
+                    <p className="text-[9px] text-muted-foreground mt-1 font-medium uppercase tracking-wider">
+                      {s.label}
+                    </p>
+                  </div>
+                ))}
               </div>
             </CardContent>
 
+            {/* Quick actions */}
             <CardFooter className="px-5 py-3">
               <div className="flex w-full flex-col gap-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground mb-0.5">Quick Navigation</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                  Quick Actions
+                </p>
                 <div className="flex gap-1 flex-wrap">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-[11px] px-2.5 font-medium text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+                    className="h-7 text-[11px] px-2.5 font-medium text-primary border-primary/20 hover:bg-primary/5"
                     onClick={() => setIsOrgDialogOpen(true)}
                   >
-                    + Create Org
+                    + New Org
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => router.push("/organizations")}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[11px] px-2.5"
+                    onClick={() => router.push("/organizations")}
+                  >
                     Organizations
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => router.push("/reports")}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[11px] px-2.5"
+                    onClick={() => router.push("/reports")}
+                  >
                     Reports
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => router.push("/documents")}>
-                    Documents
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[11px] px-2.5"
+                    onClick={() => router.push("/compliance")}
+                  >
+                    Run Analysis
                   </Button>
                 </div>
               </div>
