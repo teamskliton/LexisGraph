@@ -22,7 +22,7 @@ import { ReportsOverTimeChart } from "@/components/dashboard/ReportsOverTimeChar
 import { RiskBreakdownChart } from "@/components/dashboard/RiskBreakdownChart";
 import { OrgScoresChart } from "@/components/dashboard/OrgScoresChart";
 import { RecentReportsWidget } from "@/components/dashboard/RecentReportsWidget";
-import { AiComplianceInsightsCard } from "@/components/dashboard/AiComplianceInsightsCard";
+import { AIExecutiveBrief } from "@/components/dashboard/AIExecutiveBrief";
 import { JobProgressCard } from "@/components/compliance/JobProgressCard";
 import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
 import { complianceService, ComplianceJob } from "@/services/api/compliance";
@@ -403,18 +403,19 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ── AI Compliance Insights & Knowledge Graph Overview ── */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <AiComplianceInsightsCard
+        {/* ── AI Executive Brief & Knowledge Graph Overview ── */}
+        <div className="grid gap-6 lg:grid-cols-3 items-stretch">
+          <div className="lg:col-span-2 flex flex-col">
+            <AIExecutiveBrief
               isLoading={isLoading}
               activeJobs={activeJobs}
               recentReports={stats?.recent_reports}
               riskBreakdown={stats?.risk_breakdown}
               kpis={stats?.kpis}
+              onViewFullAnalysis={() => router.push("/reports")}
             />
           </div>
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 flex flex-col">
             <KnowledgeGraphOverview
               kpis={stats?.kpis}
               isLoading={isLoading}

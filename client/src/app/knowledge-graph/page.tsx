@@ -34,7 +34,7 @@ function KnowledgeGraphExplorerContent() {
   const [filterType, setFilterType] = useState<"all" | "document" | "policy" | "regulation">("all");
   const [selectedNode, setSelectedNode] = useState<{
     id: string;
-    type: "Document" | "Policy" | "Regulation";
+    type: string;
     title: string;
     status: string;
     details: string;
