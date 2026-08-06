@@ -61,3 +61,37 @@ export interface DashboardStatsResponse {
   org_scores: OrgScoreAnalyticsItem[];
   recent_reports: RecentReportItem[];
 }
+
+export type RecommendationPriority = "Critical" | "High" | "Medium" | "Low";
+
+export type RecommendationType =
+  | "Critical Compliance Gap"
+  | "Policy Update"
+  | "New Regulation"
+  | "Upcoming Deadline"
+  | "Knowledge Graph Improvement"
+  | "Low Confidence Analysis"
+  | "Recently Improved Compliance";
+
+export interface ExecutiveRecommendation {
+  id: string;
+  priority: RecommendationPriority;
+  type: RecommendationType;
+  title: string;
+  explanation: string;
+  actionLabel: string;
+  actionUrl?: string;
+  confidence: number;
+  affectedOrganization?: string;
+  regulation?: string;
+  onAction?: () => void;
+}
+
+export interface ExecutiveAIRecommendationsProps {
+  recommendations?: ExecutiveRecommendation[];
+  summary?: string;
+  isLoading?: boolean;
+  onRecommendationAction?: (recommendation: ExecutiveRecommendation) => void;
+  className?: string;
+}
+
