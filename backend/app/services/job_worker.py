@@ -14,6 +14,7 @@ from app.compliance.models import ComplianceJob, ComplianceJobStatus, Compliance
 from app.db.models import Document, Organization, Regulation
 from app.db.session import get_session
 from app.services.activity_service import log_activity
+from app.services.job_manager import job_manager
 
 logger = logging.getLogger(__name__)
 

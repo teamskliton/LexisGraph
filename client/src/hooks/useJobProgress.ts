@@ -103,7 +103,8 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
       setConnectionType('sse');
       console.log(`[useJobProgress] Fallback: Connecting SSE stream for job ${targetJobId}`);
 
-      const sseUrl = `/api/v1/jobs/${targetJobId}/stream?token=${encodeURIComponent(token)}`;
+      const apiHost = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+      const sseUrl = `${apiHost.replace(/\/$/, '')}/jobs/${targetJobId}/stream?token=${encodeURIComponent(token)}`;
       const es = new EventSource(sseUrl);
       sseRef.current = es;
 

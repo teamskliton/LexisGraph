@@ -127,9 +127,12 @@ export const complianceService = {
   },
 
   listComplianceReports: async (organizationId?: string): Promise<ComplianceReport[]> => {
-    const params = organizationId ? { organization_id: organizationId } : undefined;
-    const response = await api.get("/compliance/reports", { params });
-    return response.data;
+    if (organizationId) {
+      const response = await api.get(`/reports/organization/${organizationId}`);
+      return response.data;
+    }
+    const response = await api.get("/reports");
+    return response.data?.items || response.data || [];
   },
 
   deleteComplianceReport: async (reportId: string): Promise<void> => {
