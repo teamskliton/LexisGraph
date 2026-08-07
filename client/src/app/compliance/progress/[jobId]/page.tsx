@@ -1,27 +1,34 @@
-// /compliance/reports/[id] — Analysis Details Workspace Page Route
-// Displays comprehensive 9-section analysis review workspace.
+// /compliance/progress/[jobId] — Live Analysis Monitor Page Route
+// Route: /compliance/progress/[jobId]
+// Displays real-time 3-column enterprise execution dashboard.
 
 "use client";
 
 import React, { use } from "react";
+import { useSearchParams } from "next/navigation";
 import { Layers, LogOut } from "lucide-react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 
-import { AnalysisDetailsWorkspace } from "@/components/compliance/AnalysisDetailsWorkspace";
+import { LiveAnalysisMonitor } from "@/components/compliance/LiveAnalysisMonitor";
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ jobId: string }>;
 }
 
-function AnalysisDetailsPageContent({ reportId }: { reportId: string }) {
+function AnalysisProgressContent({ jobId }: { jobId: string }) {
   const { logout } = useAuth();
+  const searchParams = useSearchParams();
+
+  const orgId = searchParams.get("org") || undefined;
+  const policyId = searchParams.get("policy") || undefined;
+  const regId = searchParams.get("reg") || undefined;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-12">
-      {/* Top Navbar */}
+      {/* Navbar Header */}
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
           <div className="flex items-center gap-2">
@@ -36,7 +43,7 @@ function AnalysisDetailsPageContent({ reportId }: { reportId: string }) {
               variant="outline"
               size="sm"
               onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground text-xs"
+              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
             >
               <LogOut className="h-4 w-4" />
               <span>Sign out</span>
@@ -45,20 +52,25 @@ function AnalysisDetailsPageContent({ reportId }: { reportId: string }) {
         </div>
       </header>
 
-      {/* Main Workspace Body */}
+      {/* Main Body */}
       <main className="p-6 md:p-10">
-        <AnalysisDetailsWorkspace reportId={reportId} />
+        <LiveAnalysisMonitor
+          jobId={jobId}
+          orgId={orgId}
+          policyId={policyId}
+          regId={regId}
+        />
       </main>
     </div>
   );
 }
 
-export default function AnalysisDetailsPage({ params }: PageProps) {
+export default function AnalysisProgressPage({ params }: PageProps) {
   const resolvedParams = use(params);
 
   return (
     <ProtectedRoute>
-      <AnalysisDetailsPageContent reportId={resolvedParams.id} />
+      <AnalysisProgressContent jobId={resolvedParams.jobId} />
     </ProtectedRoute>
   );
 }
