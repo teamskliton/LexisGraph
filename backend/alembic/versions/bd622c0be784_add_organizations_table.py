@@ -26,7 +26,7 @@ def upgrade() -> None:
     sa.Column('description', sa.String(length=500), nullable=True),
     sa.Column('industry', sa.String(length=100), nullable=True),
     sa.Column('website', sa.String(length=255), nullable=True),
-    sa.Column('logo_url', sa.String(length=500), nullable=True),
+    sa.Column('logo_url', sa.Text(), nullable=True),
     sa.Column('created_by', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),

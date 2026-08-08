@@ -132,6 +132,31 @@ def compare_reports(
         )
 
 
+def verify_user_organization_access(db: Session, user_id: Optional[uuid.UUID], organization_id: uuid.UUID) -> bool:
+    if not user_id:
+        return True
+    from app.db.models.organization import Organization
+    from app.db.models.rbac import OrganizationMember, MemberStatus
+    from sqlalchemy import or_, select
+
+    member_org_ids = db.scalars(
+        select(OrganizationMember.organization_id).where(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.status == MemberStatus.ACTIVE,
+        )
+    ).all()
+
+    org = db.query(Organization).filter(
+        Organization.id == organization_id,
+        or_(
+            Organization.created_by == user_id,
+            Organization.id.in_(member_org_ids) if member_org_ids else False,
+        )
+    ).first()
+
+    return org is not None
+
+
 @router.get(
     "/{report_id}",
     response_model=ReportDetailResponse,
@@ -141,12 +166,19 @@ def get_report(
     report_id: uuid.UUID,
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
+    current_user: Optional[User] = Depends(get_current_user),
 ) -> ReportDetailResponse:
     """
     Return the complete report details by ID directly from PostgreSQL.
+    Enforces organization access authorization.
     """
     try:
         report = service.get_report(db, report_id)
+        if current_user and not verify_user_organization_access(db, current_user.id, report.organization_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's compliance report.",
+            )
         logger.info("Report loaded: report_id=%s", report_id)
         return ReportDetailResponse.model_validate(report)
     except ReportNotFoundError:
@@ -164,30 +196,71 @@ def get_report_findings(
     report_id: uuid.UUID,
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
-    Return clause-level findings for a compliance report.
+    Return clause-level findings for a compliance report with organization access verification.
     """
     try:
         report = service.get_report(db, report_id)
+        if current_user and not verify_user_organization_access(db, current_user.id, report.organization_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's compliance report findings.",
+            )
         findings = getattr(report, "findings_list", [])
-        return [
-            {
-                "id": str(f.id),
-                "report_id": str(f.report_id),
-                "policy_clause_id": f.policy_clause_id,
-                "regulation_clause_id": f.regulation_clause_id,
-                "status": f.status,
-                "confidence": f.confidence,
-                "severity": f.severity,
-                "reasoning": f.reasoning,
-                "recommendation": f.recommendation,
-                "citation": f.citation,
-                "graph_path": f.graph_path,
-                "created_at": f.created_at,
-            }
-            for f in findings
-        ]
+        if findings:
+            return [
+                {
+                    "id": str(f.id),
+                    "report_id": str(f.report_id),
+                    "policy_clause_id": f.policy_clause_id,
+                    "regulation_clause_id": f.regulation_clause_id,
+                    "status": f.status,
+                    "confidence": f.confidence,
+                    "severity": f.severity,
+                    "reasoning": f.reasoning,
+                    "recommendation": f.recommendation,
+                    "citation": f.citation,
+                    "graph_path": f.graph_path,
+                    "created_at": f.created_at,
+                }
+                for f in findings
+            ]
+
+        # Fallback: Extract from report_json or summary JSON if findings_list is empty
+        extracted = []
+        details_data = None
+        if report.report_json and isinstance(report.report_json, dict):
+            details_data = report.report_json
+        elif report.summary:
+            try:
+                import json
+                details_data = json.loads(report.summary)
+            except Exception:
+                pass
+
+        if details_data and isinstance(details_data, dict):
+            clauses = details_data.get("evaluated_clauses", [])
+            for idx, c in enumerate(clauses):
+                st = (c.get("status") or "NON_COMPLIANT").upper()
+                sev = "HIGH" if st == "NON_COMPLIANT" else ("MEDIUM" if st == "PARTIALLY_COMPLIANT" else "LOW")
+                extracted.append({
+                    "id": f"finding-{report.id}-{idx}",
+                    "report_id": str(report.id),
+                    "policy_clause_id": c.get("policy_clause_id") or "POL-CLAUSE",
+                    "regulation_clause_id": c.get("regulation_clause_id") or "REG-CLAUSE",
+                    "status": st,
+                    "confidence": c.get("similarity_score", 0.85),
+                    "severity": sev,
+                    "reasoning": c.get("reasoning"),
+                    "recommendation": c.get("recommendation"),
+                    "citation": c.get("regulation_text"),
+                    "matched_policy_text": c.get("matched_policy_text"),
+                    "graph_path": None,
+                    "created_at": report.created_at,
+                })
+        return extracted
     except ReportNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -210,6 +283,13 @@ def delete_report(
     Soft delete a compliance report by ID.
     """
     user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000000")
+    if current_user:
+        report = service.get_report(db, report_id)
+        if not verify_user_organization_access(db, current_user.id, report.organization_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to delete this organization's report.",
+            )
     success = service.delete_report(db, report_id, user_id)
     if not success:
         raise HTTPException(

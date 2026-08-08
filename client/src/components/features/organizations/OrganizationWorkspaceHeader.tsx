@@ -41,6 +41,62 @@ function deriveStatus(score: number | null | undefined) {
   return { label: "Critical Risk", badgeClass: "bg-danger/10 text-danger border-danger/25 font-semibold", icon: <ShieldX className="h-3.5 w-3.5" /> };
 }
 
+function OrgHeaderAvatar({ name, logoUrl }: { name: string; logoUrl?: string }) {
+  const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [logoUrl]);
+
+  const isValidUrl =
+    logoUrl &&
+    typeof logoUrl === "string" &&
+    logoUrl.trim().length > 0 &&
+    (logoUrl.startsWith("http://") ||
+      logoUrl.startsWith("https://") ||
+      logoUrl.startsWith("data:") ||
+      logoUrl.startsWith("/"));
+
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
+  const displayInitials = initials || name.slice(0, 2).toUpperCase() || "OG";
+
+  const hue =
+    name.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
+
+  if (isValidUrl && !imgError) {
+    return (
+      <div className="relative h-12 w-12 shrink-0 rounded-xl border border-border/60 bg-background overflow-hidden flex items-center justify-center shadow-2xs">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={logoUrl}
+          alt={name}
+          onError={() => setImgError(true)}
+          className="h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border/40 text-base font-extrabold select-none shadow-2xs"
+      style={{
+        background: `hsl(${hue} 45% 93%)`,
+        color: `hsl(${hue} 60% 30%)`,
+        borderColor: `hsl(${hue} 40% 80%)`,
+      }}
+    >
+      {displayInitials}
+    </div>
+  );
+}
+
 export const OrganizationWorkspaceHeader = memo(function OrganizationWorkspaceHeader({
   organization,
   complianceScore,
@@ -54,13 +110,6 @@ export const OrganizationWorkspaceHeader = memo(function OrganizationWorkspaceHe
   const updatedDate = organization.updated_at
     ? format(new Date(organization.updated_at), "MMM d, yyyy")
     : "Recently";
-
-  const initials = organization.name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
 
   return (
     <div className="border-b border-border/40 bg-background/95 backdrop-blur-md sticky top-0 z-20">
@@ -102,17 +151,7 @@ export const OrganizationWorkspaceHeader = memo(function OrganizationWorkspaceHe
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 pt-1">
           <div className="flex items-start gap-3.5 min-w-0 flex-1">
             {/* Logo / Avatar Fallback */}
-            {organization.logo_url ? (
-              <img
-                src={organization.logo_url}
-                alt={organization.name}
-                className="h-12 w-12 rounded-xl border border-border object-cover shrink-0 shadow-2xs"
-              />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-base border border-primary/20 shrink-0 shadow-2xs">
-                {initials || <Building2 className="h-6 w-6" />}
-              </div>
-            )}
+            <OrgHeaderAvatar name={organization.name} logoUrl={organization.logo_url} />
 
             <div className="space-y-1 min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">

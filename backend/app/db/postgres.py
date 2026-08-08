@@ -50,10 +50,17 @@ def get_engine():
 
 
 def test_connection() -> bool:
-    """Execute a trivial query to verify PostgreSQL reachability."""
+    """Execute a trivial query to verify PostgreSQL reachability and ensure schema compatibility."""
     try:
-        with get_engine().connect() as conn:
+        engine = get_engine()
+        with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+            try:
+                conn.execute(text("ALTER TABLE organizations ALTER COLUMN logo_url TYPE TEXT;"))
+                conn.commit()
+                logger.info("Migrated organizations.logo_url column to TEXT in PostgreSQL")
+            except Exception as e:
+                logger.debug("organizations.logo_url column alter check: %s", e)
         logger.info("PostgreSQL connectivity OK")
         return True
     except OperationalError as exc:

@@ -1,11 +1,7 @@
-// /compliance/progress/[jobId] — Live Analysis Monitor Page Route
-// Route: /compliance/progress/[jobId]
-// Displays real-time 3-column enterprise execution dashboard.
-
 "use client";
 
-import React, { use } from "react";
-import { useSearchParams } from "next/navigation";
+import React, { Suspense } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { Layers, LogOut } from "lucide-react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -14,13 +10,14 @@ import { Button } from "@/components/ui/button";
 
 import { LiveAnalysisMonitor } from "@/components/compliance/LiveAnalysisMonitor";
 
-interface PageProps {
-  params: Promise<{ jobId: string }>;
-}
-
-function AnalysisProgressContent({ jobId }: { jobId: string }) {
+function AnalysisProgressContent() {
   const { logout } = useAuth();
+  const params = useParams();
   const searchParams = useSearchParams();
+
+  const jobId = Array.isArray(params?.jobId)
+    ? params.jobId[0]
+    : (params?.jobId as string) || "";
 
   const orgId = searchParams.get("org") || undefined;
   const policyId = searchParams.get("policy") || undefined;
@@ -65,12 +62,12 @@ function AnalysisProgressContent({ jobId }: { jobId: string }) {
   );
 }
 
-export default function AnalysisProgressPage({ params }: PageProps) {
-  const resolvedParams = use(params);
-
+export default function AnalysisProgressPage() {
   return (
     <ProtectedRoute>
-      <AnalysisProgressContent jobId={resolvedParams.jobId} />
+      <Suspense fallback={<div className="p-10 text-center text-sm text-muted-foreground">Loading analysis monitor...</div>}>
+        <AnalysisProgressContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/context/auth-context";
@@ -48,6 +48,9 @@ const DEFAULT_FILTERS: FilterState = {
 function ReportsPageContent() {
   const { logout } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const reportQueryId = searchParams.get("report");
+  const orgQueryId = searchParams.get("org");
 
   // ---------- State ----------
   const [reports, setReports] = useState<ReportItemResponse[]>([]);
@@ -60,6 +63,14 @@ function ReportsPageContent() {
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+
+  useEffect(() => {
+    if (reportQueryId) {
+      router.replace(`/compliance/reports/${reportQueryId}`);
+    } else if (orgQueryId) {
+      setFilters((prev) => ({ ...prev, organizationId: orgQueryId }));
+    }
+  }, [reportQueryId, orgQueryId, router]);
 
   // Dropdown filter options
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
@@ -367,7 +378,9 @@ function ReportsPageContent() {
 export default function ReportsPage() {
   return (
     <ProtectedRoute>
-      <ReportsPageContent />
+      <Suspense fallback={<div className="p-10 text-center text-sm text-muted-foreground">Loading reports...</div>}>
+        <ReportsPageContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }

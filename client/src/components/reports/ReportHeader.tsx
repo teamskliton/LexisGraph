@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { ReportDetailResponse } from "@/types/report";
 import { ReportStatusBadge } from "./ReportStatusBadge";
@@ -15,6 +16,7 @@ import {
   Check,
   Download,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +35,7 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
   onDownloadPdf,
   isDownloadingPdf = false,
 }) => {
+  const router = useRouter();
   const [copied, setCopied] = React.useState(false);
 
   const reportId = report?.id || "";
@@ -83,21 +86,56 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
         <div className="flex items-center gap-3">
           <ReportStatusBadge status={status} className="text-sm px-3 py-1" />
 
+          {reportId && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
+                className="gap-1.5 text-xs font-semibold cursor-pointer text-indigo-600 dark:text-indigo-400 border-indigo-500/30 shadow-2xs"
+              >
+                <FileCheck className="h-4 w-4 text-indigo-500" />
+                <span>View Findings</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/compliance/reports/${reportId}/recommendations`)}
+                className="gap-1.5 text-xs font-semibold cursor-pointer text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-2xs"
+              >
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                <span>Recommendations</span>
+              </Button>
+            </>
+          )}
+
           {onDownloadPdf && (
             <Button
               onClick={onDownloadPdf}
               disabled={isDownloadingPdf}
               size="sm"
-              className="gap-2 cursor-pointer shadow-sm"
+              className="gap-2 cursor-pointer shadow-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
             >
               {isDownloadingPdf ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              <span>{isDownloadingPdf ? "Generating PDF..." : "Download PDF"}</span>
+              <span>{isDownloadingPdf ? "Downloading PDF..." : "Download PDF"}</span>
             </Button>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toast.info("DOCX report export is currently unavailable.")}
+            className="gap-1.5 text-xs text-muted-foreground cursor-pointer"
+            title="DOCX export is currently unavailable"
+          >
+            <FileText className="h-4 w-4" />
+            <span>Export DOCX</span>
+          </Button>
         </div>
       </div>
 

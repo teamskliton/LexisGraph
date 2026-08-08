@@ -85,6 +85,14 @@ export const reportService = {
     window.URL.revokeObjectURL(url);
   },
   /**
+   * Fetch clause-level findings for a report from GET /reports/{id}/findings
+   */
+  getReportFindings: async (reportId: string): Promise<any[]> => {
+    const response = await api.get<any[]>(`/reports/${reportId}/findings`);
+    return response.data;
+  },
+
+  /**
    * Soft delete a compliance report via DELETE /reports/{id}
    */
   deleteReport: async (reportId: string): Promise<void> => {

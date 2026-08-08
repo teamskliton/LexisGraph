@@ -77,7 +77,7 @@ class OrganizationBase(BaseModel):
     description: str | None = Field(None, max_length=500, description="Organization description")
     industry: str | None = Field(None, max_length=100, description="Industry the organization operates in")
     website: str | None = Field(None, max_length=255, description="Organization website URL")
-    logo_url: str | None = Field(None, max_length=500, description="URL to the organization logo")
+    logo_url: str | None = Field(None, max_length=50000, description="URL or data string to the organization logo")
 
 
 class OrganizationCreate(OrganizationBase):
@@ -99,7 +99,7 @@ class OrganizationUpdate(BaseModel):
     description: str | None = Field(None, max_length=500, description="Organization description")
     industry: str | None = Field(None, max_length=100, description="Industry the organization operates in")
     website: str | None = Field(None, max_length=255, description="Organization website URL")
-    logo_url: str | None = Field(None, max_length=500, description="URL to the organization logo")
+    logo_url: str | None = Field(None, max_length=50000, description="URL or data string to the organization logo")
 
 
 class OrganizationResponse(OrganizationBase):

@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, ForeignKey
+from sqlalchemy import String, Text, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -74,7 +74,7 @@ class Organization(Base):
     )
 
     logo_url: Mapped[str | None] = mapped_column(
-        String(500),
+        Text,
         nullable=True,
     )
 
