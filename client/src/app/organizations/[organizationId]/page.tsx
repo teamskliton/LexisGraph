@@ -59,8 +59,14 @@ function OrganizationWorkspaceContent({ organizationId }: { organizationId: stri
       setOrganization(updated);
       toast.success("Organization updated successfully.");
       setIsEditDialogOpen(false);
-    } catch {
-      toast.error("Failed to update organization.");
+    } catch (err: any) {
+      console.error("Failed to update organization:", err);
+      const detail =
+        err?.response?.data?.detail ||
+        (Array.isArray(err?.response?.data?.detail) ? err.response.data.detail[0]?.msg : null) ||
+        err?.message ||
+        "Failed to update organization.";
+      toast.error(`Error: ${detail}`);
     } finally {
       setIsSubmittingEdit(false);
     }

@@ -1,31 +1,25 @@
 "use client";
 
-import React, { Suspense } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import React from "react";
+import { useParams } from "next/navigation";
 import { Layers, LogOut } from "lucide-react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 
-import { LiveAnalysisMonitor } from "@/components/compliance/LiveAnalysisMonitor";
+import { FindingsWorkspace } from "@/components/compliance/FindingsWorkspace";
 
-function AnalysisProgressContent() {
+function FindingsPageContent() {
   const { logout } = useAuth();
   const params = useParams();
-  const searchParams = useSearchParams();
-
-  const jobId = Array.isArray(params?.jobId)
-    ? params.jobId[0]
-    : (params?.jobId as string) || "";
-
-  const orgId = searchParams.get("org") || undefined;
-  const policyId = searchParams.get("policy") || undefined;
-  const regId = searchParams.get("reg") || undefined;
+  const reportId = Array.isArray(params?.id)
+    ? params.id[0]
+    : (params?.id as string) || "";
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-12">
-      {/* Navbar Header */}
+      {/* Top Navbar */}
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
           <div className="flex items-center gap-2">
@@ -40,7 +34,7 @@ function AnalysisProgressContent() {
               variant="outline"
               size="sm"
               onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
+              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground text-xs"
             >
               <LogOut className="h-4 w-4" />
               <span>Sign out</span>
@@ -49,25 +43,18 @@ function AnalysisProgressContent() {
         </div>
       </header>
 
-      {/* Main Body */}
+      {/* Main Workspace Body */}
       <main className="p-6 md:p-10">
-        <LiveAnalysisMonitor
-          jobId={jobId}
-          orgId={orgId}
-          policyId={policyId}
-          regId={regId}
-        />
+        <FindingsWorkspace reportId={reportId} />
       </main>
     </div>
   );
 }
 
-export default function AnalysisProgressPage() {
+export default function FindingsPage() {
   return (
     <ProtectedRoute>
-      <Suspense fallback={<div className="p-10 text-center text-sm text-muted-foreground">Loading analysis monitor...</div>}>
-        <AnalysisProgressContent />
-      </Suspense>
+      <FindingsPageContent />
     </ProtectedRoute>
   );
 }

@@ -3,7 +3,8 @@
 
 "use client";
 
-import React, { use } from "react";
+import React from "react";
+import { useParams } from "next/navigation";
 import { Layers, LogOut } from "lucide-react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -12,12 +13,12 @@ import { Button } from "@/components/ui/button";
 
 import { AnalysisDetailsWorkspace } from "@/components/compliance/AnalysisDetailsWorkspace";
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-function AnalysisDetailsPageContent({ reportId }: { reportId: string }) {
+function AnalysisDetailsPageContent() {
   const { logout } = useAuth();
+  const params = useParams();
+  const reportId = Array.isArray(params?.id)
+    ? params.id[0]
+    : (params?.id as string) || "";
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-12">
@@ -53,12 +54,10 @@ function AnalysisDetailsPageContent({ reportId }: { reportId: string }) {
   );
 }
 
-export default function AnalysisDetailsPage({ params }: PageProps) {
-  const resolvedParams = use(params);
-
+export default function AnalysisDetailsPage() {
   return (
     <ProtectedRoute>
-      <AnalysisDetailsPageContent reportId={resolvedParams.id} />
+      <AnalysisDetailsPageContent />
     </ProtectedRoute>
   );
 }

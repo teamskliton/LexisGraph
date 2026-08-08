@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { ReportItemResponse } from "@/types/report";
 import { ReportStatusBadge } from "./ReportStatusBadge";
@@ -15,8 +16,9 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Eye, FileCheck, Copy, Check, Inbox } from "lucide-react";
+import { Eye, FileCheck, Copy, Check, Inbox, ShieldAlert, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { reportService } from "@/services/reportService";
 
 interface ReportsTableProps {
   reports: ReportItemResponse[];
@@ -74,7 +76,26 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
   onViewReport,
   onDeleteReport,
 }) => {
+  const router = useRouter();
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
+
+  const handleDownloadPdf = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (downloadingId === id) return;
+    setDownloadingId(id);
+    try {
+      toast.info("Downloading PDF report...");
+      await reportService.downloadReportPdf(id);
+      toast.success("PDF report downloaded.");
+    } catch (err: any) {
+      console.error(`Failed to download PDF for report ${id}:`, err);
+      const detail = err?.response?.data?.detail || "Unable to download the report PDF.";
+      toast.error(typeof detail === "string" ? detail : "Unable to download the report PDF.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const handleCopyId = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -240,6 +261,30 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                       >
                         <Eye className="h-3.5 w-3.5" />
                         <span>View</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
+                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5 text-indigo-500" />
+                        <span>Findings</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => handleDownloadPdf(reportId, e)}
+                        disabled={downloadingId === reportId}
+                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs"
+                        title="Download PDF Report"
+                      >
+                        {downloadingId === reportId ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
+                        <span>PDF</span>
                       </Button>
                       {onDeleteReport && (
                         <Button

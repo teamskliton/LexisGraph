@@ -67,11 +67,10 @@ class ReportService:
         """
         stmt = select(ComplianceReport).where(ComplianceReport.is_deleted == False)
 
-        if user_id:
-            stmt = stmt.where(ComplianceReport.created_by == user_id)
-
         if organization_id:
             stmt = stmt.where(ComplianceReport.organization_id == organization_id)
+        elif user_id:
+            stmt = stmt.where(ComplianceReport.created_by == user_id)
 
         if regulation_id:
             stmt = stmt.where(ComplianceReport.regulation_id == regulation_id)

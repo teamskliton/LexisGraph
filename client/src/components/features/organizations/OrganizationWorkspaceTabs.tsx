@@ -39,6 +39,7 @@ import { DocumentTable } from "@/components/features/documents/DocumentTable";
 import { DocumentGrid } from "@/components/features/documents/DocumentGrid";
 import { PolicyCenter } from "@/components/features/documents/PolicyCenter";
 import { RegulationLibrary } from "@/components/features/documents/RegulationLibrary";
+import { OrganizationReportsWorkspace } from "./OrganizationReportsWorkspace";
 import type { OrganizationDocumentExtended } from "@/components/features/documents/documents-types";
 
 export type OrganizationTab =
@@ -207,93 +208,8 @@ function KnowledgeGraphTabSection() {
   );
 }
 
-function ReportsTabSection({ organizationId }: { organizationId: string }) {
-  const router = useRouter();
-  const [reports, setReports] = useState<ComplianceReport[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    setIsLoading(true);
-
-    complianceService.listComplianceReports(organizationId)
-      .then((data) => {
-        if (active) setReports(data || []);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-
-    return () => { active = false; };
-  }, [organizationId]);
-
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {[...Array(3)].map((_, i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-          Compliance Reports ({reports.length})
-        </h3>
-        <Button variant="outline" size="xs" onClick={() => router.push("/reports")} className="cursor-pointer text-xs">
-          Reports Center
-        </Button>
-      </div>
-
-      {reports.length === 0 ? (
-        <Card className="border border-dashed border-border/60 bg-muted/10 py-12 text-center space-y-3">
-          <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto" />
-          <h3 className="text-sm font-semibold text-foreground">No reports generated yet</h3>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Run an AI analysis scan to generate structured compliance audit reports.
-          </p>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {reports.map((rep) => (
-            <Card key={rep.id} className="border border-border/50 bg-card p-3.5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="text-center px-2 py-1 rounded bg-muted/50 border border-border/40 shrink-0">
-                  <span className="text-xs font-bold text-emerald-500 tabular-nums block leading-none">
-                    {rep.overall_score != null ? `${rep.overall_score}%` : "85%"}
-                  </span>
-                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">
-                    Score
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground truncate">
-                    Compliance Report #{rep.id.substring(0, 8)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    Generated {format(new Date(rep.created_at), "MMM d, yyyy")} • Risk: {rep.risk_level || "Low"}
-                  </p>
-                </div>
-              </div>
-
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => router.push(`/reports?report=${rep.id}`)}
-                className="text-xs gap-1 cursor-pointer shrink-0"
-              >
-                <ExternalLink className="h-3 w-3" /> Open Report
-              </Button>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+function ReportsTabSection({ organizationId, organizationName }: { organizationId: string; organizationName?: string }) {
+  return <OrganizationReportsWorkspace organizationId={organizationId} organizationName={organizationName} />;
 }
 
 // ─── Main OrganizationWorkspaceTabs Bar & Orchestrator ───────────────────────
@@ -356,7 +272,7 @@ export const OrganizationWorkspaceTabs = memo(function OrganizationWorkspaceTabs
           <KnowledgeGraphTabSection />
         )}
         {activeTab === "reports" && (
-          <ReportsTabSection organizationId={organization.id} />
+          <ReportsTabSection organizationId={organization.id} organizationName={organization.name} />
         )}
       </div>
     </div>

@@ -44,6 +44,14 @@ def download_report_pdf(
     # 1. Fetch report from PostgreSQL
     try:
         report = service.get_report(db, report_id)
+        from app.routes.reports import verify_user_organization_access
+        if current_user and not verify_user_organization_access(db, current_user.id, report.organization_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to download this organization's report PDF.",
+            )
+    except HTTPException:
+        raise
     except ReportNotFoundError:
         logger.warning("PDF export requested for non-existent report_id: %s", report_id)
         raise HTTPException(

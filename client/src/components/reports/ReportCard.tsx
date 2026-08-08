@@ -1,13 +1,14 @@
-"use client";
-
-import React from "react";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { ReportItemResponse } from "@/types/report";
 import { ReportStatusBadge } from "./ReportStatusBadge";
 import { ReportScoreBadge } from "./ReportScoreBadge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, FileText, Clock, Calendar, Eye, FileCheck } from "lucide-react";
+import { Building2, FileText, Clock, Calendar, Eye, FileCheck, ShieldAlert, Sparkles, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { reportService } from "@/services/reportService";
 
 interface ReportCardProps {
   report: ReportItemResponse;
@@ -20,11 +21,31 @@ export const ReportCard: React.FC<ReportCardProps> = ({
   orgName,
   onViewReport,
 }) => {
+  const router = useRouter();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
   const reportId = report?.id || "";
   const orgId = report?.organization_id || "";
   const regId = report?.regulation_document_id || (report as any)?.regulation_id || "";
   const polId = report?.policy_document_id || "";
   const status = report?.report_status || (report as any)?.status || "PENDING";
+
+  const handleDownloadPdf = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!reportId || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    try {
+      toast.info("Downloading PDF report...");
+      await reportService.downloadReportPdf(reportId);
+      toast.success("PDF report downloaded.");
+    } catch (err: any) {
+      console.error(`Failed to download PDF for report ${reportId}:`, err);
+      const detail = err?.response?.data?.detail || "Unable to download the report PDF.";
+      toast.error(typeof detail === "string" ? detail : "Unable to download the report PDF.");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const formattedDate = report?.created_at
     ? format(new Date(report.created_at), "MMM d, yyyy • HH:mm")
@@ -99,10 +120,47 @@ export const ReportCard: React.FC<ReportCardProps> = ({
         </div>
       </CardContent>
 
-      <CardFooter className="p-4 pt-0">
+      <CardFooter className="p-4 pt-0 flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 w-full">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
+            className="flex-1 text-xs gap-1 cursor-pointer text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+          >
+            <ShieldAlert className="h-3.5 w-3.5 text-indigo-500" />
+            <span>Findings</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => router.push(`/compliance/reports/${reportId}/recommendations`)}
+            className="flex-1 text-xs gap-1 cursor-pointer text-amber-600 dark:text-amber-400 border-amber-500/30"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            <span>Recs</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={handleDownloadPdf}
+            disabled={isDownloadingPdf}
+            className="h-7 px-2 text-xs cursor-pointer"
+            title="Download PDF Report"
+          >
+            {isDownloadingPdf ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </div>
+
         <Button
           onClick={() => onViewReport(reportId)}
-          className="w-full gap-2 cursor-pointer"
+          className="w-full gap-2 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
           size="sm"
         >
           <Eye className="h-4 w-4" />

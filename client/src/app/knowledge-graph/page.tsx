@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/context/auth-context";
@@ -29,9 +29,17 @@ import { cn } from "@/lib/utils";
 function KnowledgeGraphExplorerContent() {
   const { logout } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get("search") || searchParams.get("q") || "";
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [filterType, setFilterType] = useState<"all" | "document" | "policy" | "regulation">("all");
+
+  useEffect(() => {
+    if (initialSearch) {
+      setSearchQuery(initialSearch);
+    }
+  }, [initialSearch]);
   const [selectedNode, setSelectedNode] = useState<{
     id: string;
     type: string;
@@ -393,7 +401,9 @@ function KnowledgeGraphExplorerContent() {
 export default function KnowledgeGraphPage() {
   return (
     <ProtectedRoute>
-      <KnowledgeGraphExplorerContent />
+      <Suspense fallback={<div className="p-10 text-center text-sm text-muted-foreground">Loading Knowledge Graph...</div>}>
+        <KnowledgeGraphExplorerContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }
