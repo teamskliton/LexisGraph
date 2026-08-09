@@ -1,8 +1,15 @@
 from asyncio import to_thread
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_current_user, get_optional_current_user
+from app.db.models import User, Organization
+from app.db.models.rbac import OrganizationMember, MemberStatus
+from app.db.session import get_db
 
 from app.services.graph_builder import build_graph, create_similarity_edges
 from app.services.graph_explorer import (
@@ -24,6 +31,27 @@ from app.services.knowledge_graph import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _validate_org_access(db: Session, organization_id: uuid.UUID, current_user: User) -> None:
+    """Ensure user is owner, active member, or superuser of the organization."""
+    if getattr(current_user, "is_superuser", False):
+        return
+    org = db.get(Organization, organization_id)
+    if not org:
+        raise HTTPException(status_code=404, detail=f"Organization {organization_id} not found")
+    if org.created_by == current_user.id:
+        return
+    member = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == organization_id,
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.status == MemberStatus.ACTIVE,
+    ).first()
+    if not member:
+        raise HTTPException(
+            status_code=403,
+            detail=f"User is not authorized to access Knowledge Graph for organization {organization_id}",
+        )
 
 
 class KnowledgeGraphRequest(BaseModel):
@@ -200,13 +228,51 @@ async def build_similarity_endpoint() -> dict:
 @router.get("/graph-view")
 async def graph_view(
     max_documents: int = Query(12, ge=1, le=50),
-    max_clauses: int = Query(120, ge=1, le=500),
+    max_clauses: int = Query(120, ge=0, le=500),
     max_similarity_edges: int = Query(180, ge=0, le=1000),
     knowledge_graph_only: bool = Query(False),
     build_id: str | None = Query(default=None),
+    organization_id: uuid.UUID | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
 ) -> dict:
+    if not organization_id and current_user:
+        from app.db.models.rbac import OrganizationMember, MemberStatus
+        from sqlalchemy import or_, select
+
+        member_org_ids = db.scalars(
+            select(OrganizationMember.organization_id).where(
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        ).all()
+        user_org = db.query(Organization).filter(
+            or_(
+                Organization.created_by == current_user.id,
+                Organization.id.in_(member_org_ids) if member_org_ids else False,
+            )
+        ).first()
+        if user_org:
+            organization_id = user_org.id
+
+    if organization_id:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required for organization graph access")
+        _validate_org_access(db, organization_id, current_user)
+
     try:
-        return await to_thread(get_graph_snapshot, max_documents, max_clauses, max_similarity_edges, knowledge_graph_only, build_id)
+        return await to_thread(
+            get_graph_snapshot,
+            max_documents=max_documents,
+            max_clauses=max_clauses,
+            max_similarity_edges=max_similarity_edges,
+            knowledge_graph_only=knowledge_graph_only,
+            build_id=build_id,
+            organization_id=str(organization_id) if organization_id else None,
+            db=db,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.exception("Graph view failed")
         raise HTTPException(status_code=500, detail="Graph view failed") from exc

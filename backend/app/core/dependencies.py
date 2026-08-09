@@ -91,3 +91,21 @@ def get_current_user(
         )
 
     return user
+
+
+from fastapi.security import OAuth2PasswordBearer
+
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
+
+
+def get_optional_current_user(
+    token: str | None = Depends(optional_oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    """Return authenticated User if token is present and valid, else None."""
+    if not token:
+        return None
+    try:
+        return get_current_user(token=token, db=db)
+    except HTTPException:
+        return None

@@ -166,3 +166,32 @@ class TestRBACAndMultiTenancy:
         logs = db_session.query(AuditLog).filter_by(organization_id=test_org.id).all()
         assert len(logs) >= 1
         assert logs[0].action == "POLICY_UPLOADED"
+
+    def test_organization_graph_authorization(self, db_session, owner_user, invited_user, test_org):
+        from app.routes.graph import router as graph_router
+        from app.services.graph_view import get_graph_snapshot
+        from unittest.mock import patch
+
+        app = FastAPI()
+        app.include_router(graph_router)
+
+        def _get_db_override():
+            yield db_session
+
+        app.dependency_overrides[get_db] = _get_db_override
+
+        # 1. Authorized Owner access -> 200 OK
+        from app.core.dependencies import get_optional_current_user
+        app.dependency_overrides[get_optional_current_user] = lambda: owner_user
+
+        client = TestClient(app)
+        dummy_snapshot = {"status": "ok", "nodes": [], "edges": [], "meta": {"documents": 0, "clauses": 0, "has_clause_edges": 0, "similarity_edges": 0}}
+        with patch("app.routes.graph.get_graph_snapshot", return_value=dummy_snapshot):
+            resp = client.get(f"/graph-view?organization_id={test_org.id}")
+            assert resp.status_code == 200
+
+        # 2. Unauthorized User access -> 403 Forbidden
+        app.dependency_overrides[get_optional_current_user] = lambda: invited_user
+        with patch("app.routes.graph.get_graph_snapshot", return_value=dummy_snapshot):
+            resp = client.get(f"/graph-view?organization_id={test_org.id}")
+            assert resp.status_code == 403
