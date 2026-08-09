@@ -33,14 +33,10 @@ import { OrganizationOverviewTab } from "./OrganizationOverviewTab";
 
 import { Organization, organizationsService } from "@/services/api/organizations";
 import { documentService } from "@/services/document-service";
-import { regulationsApi, GlobalRegulation } from "@/services/api/regulations";
-import { complianceService, ComplianceReport, ComplianceJob } from "@/services/api/compliance";
-import { DocumentTable } from "@/components/features/documents/DocumentTable";
-import { DocumentGrid } from "@/components/features/documents/DocumentGrid";
+import { complianceService, ComplianceJob } from "@/services/api/compliance";
 import { PolicyCenter } from "@/components/features/documents/PolicyCenter";
 import { RegulationLibrary } from "@/components/features/documents/RegulationLibrary";
 import { OrganizationReportsWorkspace } from "./OrganizationReportsWorkspace";
-import type { OrganizationDocumentExtended } from "@/components/features/documents/documents-types";
 
 export type OrganizationTab =
   | "overview"
@@ -91,7 +87,6 @@ function AnalysesTabSection({ organizationId }: { organizationId: string }) {
 
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
 
     complianceService.listComplianceJobs(organizationId)
       .then((data) => {
@@ -175,7 +170,7 @@ function AnalysesTabSection({ organizationId }: { organizationId: string }) {
   );
 }
 
-function KnowledgeGraphTabSection() {
+function KnowledgeGraphTabSection({ organizationId }: { organizationId: string }) {
   const router = useRouter();
 
   return (
@@ -192,7 +187,7 @@ function KnowledgeGraphTabSection() {
             </CardDescription>
           </div>
         </div>
-        <Button size="sm" onClick={() => router.push("/knowledge-graph")} className="cursor-pointer text-xs font-semibold gap-1.5">
+        <Button size="sm" onClick={() => router.push(`/knowledge-graph?organization_id=${organizationId}`)} className="cursor-pointer text-xs font-semibold gap-1.5">
           <ExternalLink className="h-3.5 w-3.5" /> Full Visual Explorer
         </Button>
       </div>
@@ -269,7 +264,7 @@ export const OrganizationWorkspaceTabs = memo(function OrganizationWorkspaceTabs
           <AnalysesTabSection organizationId={organization.id} />
         )}
         {activeTab === "knowledge-graph" && (
-          <KnowledgeGraphTabSection />
+          <KnowledgeGraphTabSection organizationId={organization.id} />
         )}
         {activeTab === "reports" && (
           <ReportsTabSection organizationId={organization.id} organizationName={organization.name} />

@@ -201,14 +201,22 @@ def _store_in_qdrant(processed: dict, document: Document | Regulation) -> int:
 
 def _build_neo4j_graph(processed: dict, document: Document | Regulation) -> dict:
     """Build Document + Clause nodes and HAS_CLAUSE edges in Neo4j."""
+    org_id = str(document.organization_id) if hasattr(document, "organization_id") and document.organization_id else None
+    doc_type = str(getattr(document, "document_type", "POLICY").value if hasattr(getattr(document, "document_type", None), "value") else getattr(document, "document_type", "POLICY"))
+    checksum = str(getattr(document, "checksum", "")) if getattr(document, "checksum", None) else None
+
     result = build_graph(
         processed,
         pg_document_id=str(document.id),
         source_type="user",
+        organization_id=org_id,
+        document_type=doc_type,
+        checksum=checksum,
     )
     logger.info(
-        "Neo4j graph built: document_id=%s result=%s",
+        "Neo4j graph built: document_id=%s org_id=%s result=%s",
         document.id,
+        org_id,
         result,
     )
     return result

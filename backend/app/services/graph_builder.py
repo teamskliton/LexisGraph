@@ -67,15 +67,21 @@ def _upsert_document_node(
     title: str,
     domain: str,
     source_type: str = "user",
+    organization_id: str | None = None,
+    document_type: str = "POLICY",
+    checksum: str | None = None,
 ) -> None:
     """MERGE a Document node keyed by the PostgreSQL UUID."""
     run_query(
         """
         MERGE (d:Document {id: $id})
-        SET d.title       = $title,
-            d.domain      = $domain,
-            d.source_type = $source_type,
-            d.pg_document_id = $pg_document_id
+        SET d.title           = $title,
+            d.domain          = $domain,
+            d.source_type     = $source_type,
+            d.pg_document_id  = $pg_document_id,
+            d.organization_id = $organization_id,
+            d.document_type   = $document_type,
+            d.checksum        = $checksum
         """,
         {
             "id": pg_document_id,
@@ -83,10 +89,16 @@ def _upsert_document_node(
             "domain": domain,
             "source_type": source_type,
             "pg_document_id": pg_document_id,
+            "organization_id": organization_id,
+            "document_type": document_type,
+            "checksum": checksum,
         },
         write=True,
     )
-    logger.info("Neo4j Document node upserted: id=%s title=%r", pg_document_id, title)
+    logger.info(
+        "Neo4j Document node upserted: id=%s title=%r org_id=%s doc_type=%s",
+        pg_document_id, title, organization_id, document_type,
+    )
 
 
 def _upsert_clause_nodes_batch(clause_rows: list[dict]) -> int:
@@ -147,6 +159,9 @@ def build_graph(
     *,
     pg_document_id: str,
     source_type: str = "user",
+    organization_id: str | None = None,
+    document_type: str = "POLICY",
+    checksum: str | None = None,
 ) -> dict:
     """Build Document + Clause nodes and HAS_CLAUSE edges in Neo4j.
 
@@ -159,6 +174,12 @@ def build_graph(
         The PostgreSQL UUID of the parent document (used as Neo4j node id).
     source_type:
         Label stored on both Document and Clause nodes (default ``"user"``).
+    organization_id:
+        UUID string of the parent organization.
+    document_type:
+        Type of document (e.g. ``"POLICY"`` or ``"REGULATION"``).
+    checksum:
+        SHA-256 digest of the document content.
 
     Returns
     -------
@@ -173,8 +194,8 @@ def build_graph(
     clauses = processed.get("clauses") or []
 
     logger.info(
-        "[GRAPH] Building graph: pg_document_id=%s title=%r clauses=%s",
-        pg_document_id, title, len(clauses),
+        "[GRAPH] Building graph: pg_document_id=%s title=%r org_id=%s doc_type=%s clauses=%s",
+        pg_document_id, title, organization_id, document_type, len(clauses),
     )
 
     # 1. Upsert Document node
@@ -183,6 +204,9 @@ def build_graph(
         title=title,
         domain=domain,
         source_type=source_type,
+        organization_id=organization_id,
+        document_type=document_type,
+        checksum=checksum,
     )
 
     # 2. Build clause rows

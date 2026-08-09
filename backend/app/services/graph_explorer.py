@@ -188,26 +188,54 @@ def get_graph_root(build_id: str | None = None) -> dict:
 
 
 def get_document_view(document_id: str, build_id: str | None = None, limit: int = _POLICY_CLAUSE_LIMIT) -> dict:
-    build = _resolve_build(build_id)
-    build_id = build["build_id"]
-    rows = run_query(
-        """
-        MATCH (u:UserDocument {id: $document_id, kg_build_id: $build_id})-[:HAS_CLAUSE]->(c:PolicyClause)
-        RETURN u.id AS document_id,
-               c.id AS id,
-               'PolicyClause' AS kind,
-               coalesce(c.text, 'Untitled clause') AS label,
-               coalesce(c.source_id, 'P') AS short_label,
-               c.source_id AS source_id,
-               coalesce(c.text, '') AS text,
-               coalesce(c.type, '') AS clause_type,
-               '' AS document_title,
-               '' AS domain
-        ORDER BY coalesce(c.source_id, c.id)
-        LIMIT $limit
-        """,
-        {"build_id": build_id, "document_id": document_id, "limit": limit},
-    )
+    rows = []
+    metadata = {}
+    try:
+        build = _resolve_build(build_id)
+        b_id = build["build_id"]
+        metadata = _build_metadata(build)
+        rows = run_query(
+            """
+            MATCH (u:UserDocument {id: $document_id, kg_build_id: $build_id})-[:HAS_CLAUSE]->(c:PolicyClause)
+            RETURN u.id AS document_id,
+                   c.id AS id,
+                   'PolicyClause' AS kind,
+                   coalesce(c.text, 'Untitled clause') AS label,
+                   coalesce(c.source_id, 'P') AS short_label,
+                   c.source_id AS source_id,
+                   coalesce(c.text, '') AS text,
+                   coalesce(c.type, '') AS clause_type,
+                   '' AS document_title,
+                   '' AS domain
+            ORDER BY coalesce(c.source_id, c.id)
+            LIMIT $limit
+            """,
+            {"build_id": b_id, "document_id": document_id, "limit": limit},
+        )
+    except Exception:
+        pass
+
+    if not rows:
+        rows = run_query(
+            """
+            MATCH (d:Document)-[:HAS_CLAUSE]->(c:Clause)
+            WHERE d.id = $document_id OR d.checksum = $document_id OR d.title = $document_id
+            RETURN d.id AS document_id,
+                   c.id AS id,
+                   'Clause' AS kind,
+                   coalesce(c.text, 'Untitled clause') AS label,
+                   c.id AS short_label,
+                   c.id AS source_id,
+                   coalesce(c.text, '') AS text,
+                   coalesce(c.type, '') AS clause_type,
+                   coalesce(d.title, '') AS document_title,
+                   '' AS domain
+            ORDER BY c.id
+            LIMIT $limit
+            """,
+            {"document_id": document_id, "limit": limit},
+        )
+
     nodes = [_node_payload(row) for row in rows]
     edges = [
         {
@@ -218,7 +246,7 @@ def get_document_view(document_id: str, build_id: str | None = None, limit: int 
         }
         for row in rows
     ]
-    return {"status": "ok", "nodes": nodes, "edges": edges, "metadata": _build_metadata(build)}
+    return {"status": "ok", "nodes": nodes, "edges": edges, "metadata": metadata}
 
 
 def get_clause_view(clause_id: str, build_id: str | None = None, limit: int = _REGULATION_MATCH_LIMIT) -> dict:
