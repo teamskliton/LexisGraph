@@ -16,10 +16,11 @@ export interface GlobalRegulation {
 }
 
 export const regulationsApi = {
-  listRegulations: async (organizationId?: string, search?: string): Promise<GlobalRegulation[]> => {
+  listRegulations: async (organizationId?: string, search?: string, onlyLinked?: boolean): Promise<GlobalRegulation[]> => {
     const params: Record<string, string> = {};
     if (organizationId) params.organization_id = organizationId;
     if (search) params.search = search;
+    if (onlyLinked) params.only_linked = 'true';
     const response = await api.get('/regulations', { params });
     return response.data;
   },

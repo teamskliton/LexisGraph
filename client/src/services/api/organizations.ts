@@ -28,6 +28,30 @@ export interface OrganizationUpdate {
   logo_url?: string;
 }
 
+export interface InvitationDetailsResponse {
+  token: string;
+  organization_id: string;
+  organization_name: string;
+  role: string;
+  email?: string | null;
+  inviter_name: string;
+  expires_at: string;
+  is_valid: boolean;
+}
+
+export interface CreateInvitationResponse {
+  message: string;
+  token: string;
+  expires_at: string;
+  invite_link: string;
+}
+
+export interface AcceptInvitationResponse {
+  message: string;
+  organization_id: string;
+  organization_name: string;
+}
+
 export const organizationsService = {
   getOrganizations: async (): Promise<Organization[]> => {
     const response = await api.get("/organizations/");
@@ -51,5 +75,26 @@ export const organizationsService = {
 
   deleteOrganization: async (id: string): Promise<void> => {
     await api.delete(`/organizations/${id}`);
+  },
+
+  createInvitation: async (
+    organizationId: string,
+    data: { email?: string; role: string }
+  ): Promise<CreateInvitationResponse> => {
+    const response = await api.post<CreateInvitationResponse>(
+      `/organizations/${organizationId}/invitations`,
+      data
+    );
+    return response.data;
+  },
+
+  getInvitationDetails: async (token: string): Promise<InvitationDetailsResponse> => {
+    const response = await api.get<InvitationDetailsResponse>(`/organizations/invitations/token/${token}`);
+    return response.data;
+  },
+
+  acceptInvitation: async (token: string): Promise<AcceptInvitationResponse> => {
+    const response = await api.post<AcceptInvitationResponse>("/organizations/invitations/accept", { token });
+    return response.data;
   },
 };

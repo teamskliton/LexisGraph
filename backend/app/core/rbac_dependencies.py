@@ -19,10 +19,14 @@ from app.db.session import get_db
 logger = logging.getLogger(__name__)
 
 ROLE_RANK = {
+    UserRole.VIEWER: 1,
     UserRole.EMPLOYEE: 1,
+    UserRole.REVIEWER: 2,
     UserRole.MANAGER: 2,
-    UserRole.ORGANIZATION_ADMIN: 3,
-    UserRole.SUPER_ADMIN: 4,
+    UserRole.LEGAL_ANALYST: 3,
+    UserRole.ADMIN: 4,
+    UserRole.ORGANIZATION_ADMIN: 4,
+    UserRole.SUPER_ADMIN: 5,
 }
 
 
@@ -38,7 +42,7 @@ def get_user_org_role(
 
     org = db.get(Organization, organization_id)
     if org and org.created_by == user_id:
-        return UserRole.ORGANIZATION_ADMIN
+        return UserRole.ADMIN
 
     member = db.execute(
         select(OrganizationMember).where(
@@ -54,7 +58,8 @@ def get_user_org_role(
         return member.role if isinstance(member.role, UserRole) else UserRole(member.role)
 
     # Fallback default role for org creator / existing user
-    return UserRole.EMPLOYEE
+    return UserRole.VIEWER
+
 
 
 def require_min_role(min_role: UserRole):

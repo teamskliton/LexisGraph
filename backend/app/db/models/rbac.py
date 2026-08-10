@@ -17,10 +17,17 @@ from app.db.session import Base
 class UserRole(str, enum.Enum):
     """Role-Based Access Control hierarchy."""
 
+    ADMIN = "ADMIN"
+    LEGAL_ANALYST = "LEGAL_ANALYST"
+    REVIEWER = "REVIEWER"
+    VIEWER = "VIEWER"
+
+    # Legacy & Alias Compatibility
     SUPER_ADMIN = "SUPER_ADMIN"
     ORGANIZATION_ADMIN = "ORGANIZATION_ADMIN"
     MANAGER = "MANAGER"
     EMPLOYEE = "EMPLOYEE"
+
 
 
 class MemberStatus(str, enum.Enum):
@@ -122,9 +129,9 @@ class OrganizationInvitation(Base):
         index=True,
     )
 
-    email: Mapped[str] = mapped_column(
+    email: Mapped[str | None] = mapped_column(
         String(320),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 

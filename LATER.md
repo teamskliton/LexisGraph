@@ -338,6 +338,47 @@ Immutable organization activity history.
 
 ---
 
+### 20. Outbound SMTP Invitation Email Delivery & Ownership Transfer
+
+**Future capability:**
+- Real outbound SMTP / SES email sending service for team invitations (currently secure invitation tokens are generated and stored in PostgreSQL).
+- Formal Organization Ownership Transfer workflow from current owner/admin to another team member.
+
+*Do NOT implement now. Invitation tokens are securely managed via backend APIs.*
+
+---
+
+### 21. Policy Version History, Comparison & Approval Workflows
+
+**Future capability:**
+- Full multi-version policy history tracking with side-by-side clause diff comparison across policy versions.
+- Formal legal sign-off and multi-stage policy approval workflows.
+- Automated document retention and archival policies.
+
+*Do NOT implement now. Document timestamps, upload tracking, and processing metadata are fully supported via DB.*
+
+---
+
+### 22. Document Prompt-Injection Defense & Granular AI Audit Logs
+
+**Future capability:**
+- Content isolation and prompt-injection filtering for untrusted uploaded legal documents.
+- Granular per-query AI audit logging with token usage, vector distance distribution, and graph hop metrics.
+- Multi-agent orchestration and team-shared AI conversation threads with role-based thread permissions.
+
+---
+
+### 23. Outbound SMTP Email Delivery Infrastructure for Organization Invitations
+
+**Future capability:**
+- Outbound transactional SMTP/SES/SendGrid integration for delivering email invitations directly to users' inboxes.
+- Custom email templates with organization branding, legal disclaimers, and click-tracking metrics.
+- Unsubscribe & email bounce webhook handlers.
+
+*Do NOT implement now. Secure shareable invitation links (`/invite/{token}`) with Web Share API and single-use backend token validation are fully supported.*
+
+---
+
 ## RULE FOR FUTURE AI AGENTS
 
 Before implementing any feature:

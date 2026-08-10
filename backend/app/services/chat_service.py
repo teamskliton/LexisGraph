@@ -258,8 +258,8 @@ def process_chat_request(
     Process AI Legal Assistant chat request with persistent PostgreSQL memory & recommendations (batch mode).
     """
     # 1. Organization access verification
-    org = db.get(Organization, payload.organization_id)
-    if org is None or org.created_by != current_user.id:
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, current_user.id, payload.organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found or access denied",
@@ -436,8 +436,8 @@ async def stream_chat_request(
     start_time = time.perf_counter()
 
     # 1. Organization access verification
-    org = db.get(Organization, payload.organization_id)
-    if org is None or org.created_by != current_user.id:
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, current_user.id, payload.organization_id):
         yield f"event: error\ndata: {json.dumps({'message': 'Organization not found or access denied'})}\n\n"
         return
 

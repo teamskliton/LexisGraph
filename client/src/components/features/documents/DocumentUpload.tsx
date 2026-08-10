@@ -1,7 +1,3 @@
-// DocumentUpload — Drag & drop upload modal for Workspace Documents
-// Features: Drag & Drop zone, Browse Files, Category selector, Upload Progress,
-// Cancel/Retry Upload, Multiple Files, Accepted types (PDF, DOCX, TXT).
-
 "use client";
 
 import { useState, useRef, useCallback } from "react";
@@ -25,18 +21,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { documentService, validateFile } from "@/services/document-service";
 import type { DocumentCategory, OrganizationDocumentExtended } from "./documents-types";
-
-interface UploadingFile {
-  id: string;
-  name: string;
-  size: string;
-  file_type: "pdf" | "docx" | "txt";
-  category: DocumentCategory;
-  progress: number;
-  status: "uploading" | "completed" | "error";
-}
 
 interface DocumentUploadProps {
   open: boolean;
@@ -49,39 +37,27 @@ export function DocumentUpload({
   open,
   onOpenChange,
   onUploadSuccess,
-  organizationId = "org-001",
+  organizationId = "",
 }: DocumentUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<DocumentCategory>("Policy");
-  const [fileList, setFileList] = useState<UploadingFile[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [progress, setProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const processFiles = useCallback((files: FileList | File[]) => {
-    const validExtensions = [".pdf", ".docx", ".txt"];
-    const newItems: UploadingFile[] = [];
-
-    Array.from(files).forEach((file) => {
-      const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-      if (!validExtensions.includes(ext)) return;
-
-      const fileType = ext === ".pdf" ? "pdf" : ext === ".docx" ? "docx" : "txt";
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-
-      newItems.push({
-        id: "upload-" + Math.random().toString(36).substring(2, 9),
-        name: file.name,
-        size: sizeMB,
-        file_type: fileType,
-        category: selectedCategory,
-        progress: 0,
-        status: "uploading",
-      });
-    });
-
-    setFileList((prev) => [...prev, ...newItems]);
-  }, [selectedCategory]);
+  const handleFileSelect = (file: File) => {
+    const check = validateFile(file);
+    if (!check.valid) {
+      setError(check.error || "Invalid file selected.");
+      toast.error(check.error || "Invalid file selected.");
+      return;
+    }
+    setError(null);
+    setSelectedFile(file);
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -96,83 +72,90 @@ export function DocumentUpload({
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files?.length) {
-      processFiles(e.dataTransfer.files);
+      handleFileSelect(e.dataTransfer.files[0]);
     }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      processFiles(e.target.files);
-    }
-  };
-
-  const removeFile = (id: string) => {
-    setFileList((prev) => prev.filter((f) => f.id !== id));
   };
 
   const startUpload = async () => {
-    setIsUploading(true);
-
-    for (let p = 10; p <= 100; p += 20) {
-      await new Promise((r) => setTimeout(r, 150));
-      setFileList((prev) =>
-        prev.map((f) =>
-          f.status === "uploading" ? { ...f, progress: p, status: p === 100 ? "completed" : "uploading" } : f
-        )
-      );
+    if (!selectedFile || !organizationId) {
+      if (!organizationId) toast.error("Please select an organization first.");
+      return;
     }
 
-    const createdDocs: OrganizationDocumentExtended[] = fileList.map((f) => ({
-      id: "doc-" + Math.random().toString(36).substring(2, 9),
-      organizationId,
-      name: f.name,
-      category: f.category,
-      file_size: f.size,
-      file_type: f.file_type,
-      version: "v1.0",
-      uploaded_at: new Date().toISOString(),
-      uploaded_by: "Current User",
-      status: "Parsing",
-      tags: [f.category, "New Upload"],
-    }));
+    setIsUploading(true);
+    setProgress(10);
+    setError(null);
 
-    onUploadSuccess(createdDocs);
-    setIsUploading(false);
-    setFileList([]);
-    onOpenChange(false);
+    try {
+      const docType = selectedCategory === "Regulation" ? "REGULATION" : "POLICY";
+      const uploadedDoc = await documentService.uploadDocument({
+        organizationId,
+        documentType: docType,
+        file: selectedFile,
+        onUploadProgress: (p) => setProgress(p),
+      });
+
+      toast.success(`Uploaded ${uploadedDoc.original_filename || selectedFile.name}`);
+
+      const createdDoc: OrganizationDocumentExtended = {
+        id: uploadedDoc.id,
+        organizationId: uploadedDoc.organization_id || organizationId,
+        name: uploadedDoc.original_filename || selectedFile.name,
+        category: selectedCategory,
+        file_size: `${(uploadedDoc.file_size / (1024 * 1024)).toFixed(1)} MB`,
+        file_type: "pdf",
+        version: "v1.0",
+        uploaded_at: uploadedDoc.created_at || new Date().toISOString(),
+        uploaded_by: "Current User",
+        status: "Processing",
+        tags: [selectedCategory],
+      };
+
+      onUploadSuccess([createdDoc]);
+      setSelectedFile(null);
+      setProgress(0);
+      onOpenChange(false);
+    } catch (err: any) {
+      console.error("Failed to upload document:", err);
+      const msg = err?.response?.data?.detail || "Failed to upload document.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderUp className="h-5 w-5 text-primary" />
-            Upload Documents
+            Upload Document
           </DialogTitle>
           <DialogDescription>
-            Upload company policies, statutory regulations, or supporting notes (PDF, DOCX, TXT up to 25MB each).
+            Upload a company policy or statutory regulation (PDF format up to 50MB).
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           {/* Category Selector */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Select Document Category</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["Policy", "Regulation", "Supporting Document"] as DocumentCategory[]).map((cat) => (
+            <Label className="text-xs font-semibold text-foreground">Document Type</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["Policy", "Regulation"] as DocumentCategory[]).map((cat) => (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => setSelectedCategory(cat)}
                   className={cn(
-                    "p-2 text-xs font-medium rounded-lg border transition-all text-center cursor-pointer",
+                    "p-2.5 text-xs font-semibold rounded-lg border transition-all text-center cursor-pointer",
                     selectedCategory === cat
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background text-muted-foreground border-border hover:text-foreground"
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                      : "bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted/30"
                   )}
                 >
-                  {cat}
+                  {cat === "Policy" ? "Company Policy" : "Statutory Regulation"}
                 </button>
               ))}
             </div>
@@ -194,66 +177,63 @@ export function DocumentUpload({
             <input
               ref={fileInputRef}
               type="file"
-              multiple
-              accept=".pdf,.docx,.txt"
-              onChange={handleFileSelect}
+              accept=".pdf"
+              onChange={(e) => e.target.files?.length && handleFileSelect(e.target.files[0])}
               className="hidden"
             />
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
               <Upload className="h-6 w-6" />
             </div>
             <p className="text-sm font-semibold text-foreground">
-              Click to browse or drag and drop files here
+              Click to browse or drag & drop PDF policy file
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Supports PDF, DOCX, TXT files
+              Supports PDF documents up to 50MB
             </p>
           </div>
 
-          {/* File Queue List */}
-          {fileList.length > 0 && (
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              <p className="text-xs font-semibold text-foreground">
-                Selected Files ({fileList.length})
-              </p>
-              {fileList.map((f) => (
-                <div
-                  key={f.id}
-                  className="p-2.5 rounded-lg border border-border/50 bg-card space-y-1 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="h-4 w-4 text-primary shrink-0" />
-                      <span className="font-semibold text-foreground truncate max-w-xs">
-                        {f.name}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">({f.size})</span>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      {f.status === "completed" && (
-                        <CheckCircle2 className="h-4 w-4 text-success" />
-                      )}
-                      {f.status === "error" && (
-                        <AlertCircle className="h-4 w-4 text-danger" />
-                      )}
-                      {!isUploading && (
-                        <button
-                          type="button"
-                          onClick={() => removeFile(f.id)}
-                          className="text-muted-foreground hover:text-foreground p-1"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isUploading && (
-                    <Progress value={f.progress} className="h-1.5" />
-                  )}
+          {/* Selected File */}
+          {selectedFile && (
+            <div className="p-3 rounded-lg border border-border/50 bg-card space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-semibold text-foreground truncate max-w-xs">
+                    {selectedFile.name}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    ({(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)
+                  </span>
                 </div>
-              ))}
+
+                {!isUploading && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFile(null)}
+                    className="text-muted-foreground hover:text-foreground p-1 cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {isUploading && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Uploading file & initiating pipeline...</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <Progress value={progress} className="h-1.5" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
         </div>
@@ -264,15 +244,15 @@ export function DocumentUpload({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isUploading}
-            className="cursor-pointer"
+            className="cursor-pointer text-xs"
           >
             Cancel
           </Button>
           <Button
             type="button"
             onClick={startUpload}
-            disabled={fileList.length === 0 || isUploading}
-            className="cursor-pointer gap-1.5 font-semibold"
+            disabled={!selectedFile || isUploading}
+            className="cursor-pointer gap-1.5 font-semibold text-xs"
           >
             {isUploading ? (
               <>

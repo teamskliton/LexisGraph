@@ -152,6 +152,16 @@ async def lifespan(_: FastAPI):
     try:
         if test_postgres_connection():
             logger.info("Startup check: PostgreSQL connectivity OK")
+            try:
+                from sqlalchemy import text
+                from app.db.postgres import get_engine
+                engine = get_engine()
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE organization_invitations ALTER COLUMN email DROP NOT NULL;"))
+                    conn.commit()
+                logger.info("Startup check: Applied ALTER TABLE organization_invitations email DROP NOT NULL")
+            except Exception as migrate_err:
+                logger.debug("Organization invitations column alter skipped/already applied: %s", migrate_err)
         else:
             logger.warning("Startup check: PostgreSQL connectivity FAILED")
     except Exception:  # noqa: BLE001

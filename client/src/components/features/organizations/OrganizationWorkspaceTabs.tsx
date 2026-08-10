@@ -38,13 +38,19 @@ import { PolicyCenter } from "@/components/features/documents/PolicyCenter";
 import { RegulationLibrary } from "@/components/features/documents/RegulationLibrary";
 import { OrganizationReportsWorkspace } from "./OrganizationReportsWorkspace";
 
+import { Users, Settings as SettingsIcon } from "lucide-react";
+import { UserManagementContent } from "@/app/dashboard/users/page";
+import { OrganizationSettingsContent } from "@/app/dashboard/settings/page";
+
 export type OrganizationTab =
   | "overview"
   | "policies"
   | "regulations"
   | "analyses"
   | "knowledge-graph"
-  | "reports";
+  | "reports"
+  | "team"
+  | "settings";
 
 interface OrganizationWorkspaceTabsProps {
   organization: Organization;
@@ -68,7 +74,10 @@ const TABS: TabDef[] = [
   { id: "analyses", label: "Analyses", icon: <Zap className="h-4 w-4 text-warning" /> },
   { id: "knowledge-graph", label: "Knowledge Graph", icon: <Network className="h-4 w-4 text-purple-400" /> },
   { id: "reports", label: "Reports", icon: <BarChart3 className="h-4 w-4 text-primary" /> },
+  { id: "team", label: "Team", icon: <Users className="h-4 w-4 text-indigo-400" /> },
+  { id: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4 text-slate-400" /> },
 ];
+
 
 // ─── Sub-Tab Content Components ───────────────────────────────────────────────
 
@@ -268,6 +277,12 @@ export const OrganizationWorkspaceTabs = memo(function OrganizationWorkspaceTabs
         )}
         {activeTab === "reports" && (
           <ReportsTabSection organizationId={organization.id} organizationName={organization.name} />
+        )}
+        {activeTab === "team" && (
+          <UserManagementContent />
+        )}
+        {activeTab === "settings" && (
+          <OrganizationSettingsContent />
         )}
       </div>
     </div>

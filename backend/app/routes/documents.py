@@ -16,15 +16,15 @@ from app.core.dependencies import get_current_user
 from app.core.schemas import DocumentResponse, DocumentStatusResponse, RegulationResponse
 from app.db.models import Document, DocumentType as DBDocumentType, Organization, ProcessingStatus, User, Regulation
 from app.db.session import get_db
-from app.services.document_processor import process_document, process_regulation
+from typing import Union, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query
+from sqlalchemy import select
 from app.services.activity_service import log_activity
-from typing import Union
 from app.services.storage import store_document, StorageError, InvalidMimeTypeError, FileTooLargeError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
-
 
 def _validate_organization_ownership(
     db: Session,
@@ -32,36 +32,19 @@ def _validate_organization_ownership(
     user_id: uuid.UUID,
 ) -> Organization:
     """
-    Validate that the organization exists and is owned by the given user.
-
-    Parameters
-    ----------
-    db : Session
-        Database session.
-    organization_id : uuid.UUID
-        UUID of the organization to validate.
-    user_id : uuid.UUID
-        UUID of the user who should own the organization.
-
-    Returns
-    -------
-    Organization
-        The validated organization.
-
-    Raises
-    ------
-    HTTPException
-        If the organization is not found or not owned by the user.
+    Validate that the organization exists and the user has access to it.
     """
-    org = db.query(Organization).filter(
-        Organization.id == organization_id,
-        Organization.created_by == user_id,
-    ).first()
-
-    if not org:
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, user_id, organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found or you don't have access to it.",
+        )
+    org = db.get(Organization, organization_id)
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found.",
         )
     return org
 
@@ -243,63 +226,68 @@ def upload_document(
 )
 def list_documents(
     organization_id: uuid.UUID,
+    document_type: Optional[str] = Query(None, description="Optional filter by document type: POLICY or REGULATION"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[Document]:
+) -> list[Union[Document, dict]]:
     """
-    List all documents in an organization.
-
-    - **organization_id**: UUID of the organization whose documents to list
-
-    The authenticated user must own the organization.
-    Only documents belonging to the specified organization are returned.
+    List organization-scoped policies and linked global regulations.
     """
-    # Validate organization ownership
     org = _validate_organization_ownership(db, organization_id, current_user.id)
 
-    documents = db.query(Document).filter(
-        Document.organization_id == org.id
+    # 1. Fetch organization-owned policy documents
+    policies = db.query(Document).filter(
+        Document.organization_id == org.id,
+        Document.document_type == DBDocumentType.POLICY,
     ).order_by(Document.created_at.desc()).all()
-    
-    # Also fetch all global regulations
-    regulations = db.query(Regulation).order_by(Regulation.created_at.desc()).all()
-    
-    # To maintain frontend backward compatibility, we convert regulations into
-    # dictionaries that look like DocumentResponse, injecting the requested org_id.
-    combined = []
-    
-    for doc in documents:
-        combined.append(doc)
-        
-    for reg in regulations:
-        reg_dict = {
-            "id": reg.id,
-            "organization_id": org.id,
-            "uploaded_by": reg.uploaded_by,
-            "original_filename": reg.original_filename,
-            "stored_filename": reg.stored_filename,
-            "file_path": reg.file_path,
-            "file_size": reg.file_size,
-            "mime_type": reg.mime_type,
-            "checksum": reg.document_hash,
-            "document_type": DBDocumentType.REGULATION.value,
-            "processing_status": reg.processing_status,
-            "progress": reg.progress,
-            "current_step": reg.current_step,
-            "processing_started_at": reg.processing_started_at,
-            "processed_at": reg.processed_at,
-            "error_message": reg.error_message,
-            "created_at": reg.created_at,
-            "updated_at": reg.updated_at,
-        }
-        combined.append(reg_dict)
 
-    # Sort combined by created_at desc
+    if document_type == DBDocumentType.POLICY.value:
+        return policies
+
+    # 2. Fetch linked global regulations for this organization
+    from app.db.models.regulation import OrganizationRegulation
+    linked_reg_ids = db.scalars(
+        select(OrganizationRegulation.regulation_id).where(
+            OrganizationRegulation.organization_id == org.id,
+            OrganizationRegulation.enabled.is_(True),
+        )
+    ).all()
+
+    linked_regs = []
+    if linked_reg_ids:
+        regs = db.query(Regulation).filter(Regulation.id.in_(linked_reg_ids)).order_by(Regulation.created_at.desc()).all()
+        for reg in regs:
+            reg_dict = {
+                "id": reg.id,
+                "organization_id": org.id,
+                "uploaded_by": reg.uploaded_by,
+                "original_filename": reg.original_filename,
+                "stored_filename": reg.stored_filename,
+                "file_path": reg.file_path,
+                "file_size": reg.file_size,
+                "mime_type": reg.mime_type,
+                "checksum": reg.document_hash,
+                "document_type": DBDocumentType.REGULATION.value,
+                "processing_status": reg.processing_status,
+                "progress": reg.progress,
+                "current_step": reg.current_step,
+                "processing_started_at": reg.processing_started_at,
+                "processed_at": reg.processed_at,
+                "error_message": reg.error_message,
+                "created_at": reg.created_at,
+                "updated_at": reg.updated_at,
+            }
+            linked_regs.append(reg_dict)
+
+    if document_type == DBDocumentType.REGULATION.value:
+        return linked_regs
+
+    # Combine policies + linked regulations, ordered by created_at desc
+    combined = list(policies) + linked_regs
     combined.sort(
         key=lambda x: x.created_at if hasattr(x, "created_at") else x["created_at"],
-        reverse=True
+        reverse=True,
     )
-
     return combined
 
 
