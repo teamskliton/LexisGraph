@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -113,19 +113,20 @@ def get_organization(
 ) -> Organization:
     """
     Get a specific organization by its ID.
-    User can only access their own organizations.
+    User can access owned or member organizations.
     """
-    org = db.query(Organization).filter(
-        Organization.id == organization_id,
-        Organization.created_by == current_user.id
-    ).first()
-    
-    if not org:
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, current_user.id, organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found or you don't have access to it."
         )
-        
+    org = db.get(Organization, organization_id)
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found."
+        )
     return org
 
 
@@ -142,17 +143,19 @@ def update_organization(
 ) -> Organization:
     """
     Update an existing organization.
-    Only the owner can update their organization.
+    Only the owner or admin can update their organization.
     """
-    org = db.query(Organization).filter(
-        Organization.id == organization_id,
-        Organization.created_by == current_user.id
-    ).first()
-    
-    if not org:
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, current_user.id, organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found or you don't have access to it."
+        )
+    org = db.get(Organization, organization_id)
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found."
         )
         
     update_data = data.model_dump(exclude_unset=True)
@@ -191,6 +194,8 @@ def delete_organization(
             detail="Organization not found or you don't have access to it."
         )
         
+    db.delete(org)
+    db.commit()
     logger.info("Organization deleted: id=%s by user=%s", organization_id, current_user.id)
     return None
 
@@ -204,8 +209,8 @@ from app.services import audit_service
 
 
 class InviteUserRequest(BaseModel):
-    email: EmailStr = Field(..., description="Email address to invite")
-    role: UserRole = Field(UserRole.EMPLOYEE, description="Assigned role")
+    email: Optional[EmailStr] = Field(None, description="Email address to invite (optional for shareable link)")
+    role: UserRole = Field(UserRole.VIEWER, description="Assigned role")
 
 
 class AcceptInviteRequest(BaseModel):
@@ -214,6 +219,46 @@ class AcceptInviteRequest(BaseModel):
 
 class UpdateMemberRoleRequest(BaseModel):
     role: UserRole = Field(..., description="New role to assign")
+
+
+@router.get(
+    "/invitations/token/{token}",
+    summary="Get invitation details by token (Public endpoint)",
+)
+def get_invitation_by_token(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to inspect an invitation token before accepting."""
+    from datetime import datetime, timezone
+
+    inv = db.query(OrganizationInvitation).filter(
+        OrganizationInvitation.token == token
+    ).first()
+
+    if not inv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invitation token.")
+
+    exp = inv.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+
+    if exp < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation token has expired.")
+
+    org = db.get(Organization, inv.organization_id)
+    inviter = db.get(User, inv.invited_by)
+
+    return {
+        "token": token,
+        "organization_id": str(inv.organization_id),
+        "organization_name": org.name if org else "Organization Workspace",
+        "role": inv.role.value if hasattr(inv.role, "value") else str(inv.role),
+        "email": inv.email,
+        "inviter_name": inviter.full_name if inviter else "Team Administrator",
+        "expires_at": inv.expires_at,
+        "is_valid": True,
+    }
 
 
 @router.get(
@@ -230,7 +275,7 @@ def list_organization_members(
         OrganizationMember.organization_id == organization_id
     ).all()
 
-    # Also include owner as ORGANIZATION_ADMIN if not in members table
+    # Also include owner as ADMIN if not in members table
     org = db.get(Organization, organization_id)
     result = []
     seen_users = set()
@@ -256,7 +301,7 @@ def list_organization_members(
                 "user_id": str(owner.id),
                 "full_name": owner.full_name,
                 "email": owner.email,
-                "role": UserRole.ORGANIZATION_ADMIN.value,
+                "role": UserRole.ADMIN.value,
                 "status": MemberStatus.ACTIVE.value,
                 "joined_at": org.created_at,
                 "last_active": owner.updated_at,
@@ -265,9 +310,65 @@ def list_organization_members(
     return result
 
 
+@router.get(
+    "/{organization_id}/invitations",
+    summary="List pending organization invitations",
+)
+def list_organization_invitations(
+    organization_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all pending invitation tokens for an organization."""
+    from datetime import datetime, timezone
+
+    invitations = db.query(OrganizationInvitation).filter(
+        OrganizationInvitation.organization_id == organization_id,
+        OrganizationInvitation.expires_at > datetime.now(timezone.utc),
+    ).all()
+
+    return [
+        {
+            "id": str(inv.id),
+            "organization_id": str(inv.organization_id),
+            "email": inv.email,
+            "role": inv.role.value if hasattr(inv.role, "value") else str(inv.role),
+            "token": inv.token,
+            "created_at": inv.created_at,
+            "expires_at": inv.expires_at,
+            "invited_by": str(inv.invited_by),
+        }
+        for inv in invitations
+    ]
+
+
+@router.delete(
+    "/{organization_id}/invitations/{invitation_id}",
+    summary="Cancel a pending organization invitation",
+)
+def cancel_organization_invitation(
+    organization_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel and delete a pending invitation token."""
+    inv = db.query(OrganizationInvitation).filter(
+        OrganizationInvitation.id == invitation_id,
+        OrganizationInvitation.organization_id == organization_id,
+    ).first()
+
+    if inv:
+        db.delete(inv)
+        db.commit()
+
+    return {"message": "Invitation cancelled successfully"}
+
+
+
 @router.post(
     "/{organization_id}/invitations",
-    summary="Invite user to organization by email",
+    summary="Invite user to organization by email or shareable link",
 )
 def invite_user(
     organization_id: uuid.UUID,
@@ -275,7 +376,7 @@ def invite_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Generate secure invitation token for inviting a user by email."""
+    """Generate secure invitation token for inviting a user by email or via shareable link."""
     import secrets
     from datetime import datetime, timedelta, timezone
 
@@ -285,11 +386,12 @@ def invite_user(
 
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    email_to_store = data.email.strip() if (data.email and str(data.email).strip()) else None
 
     invitation = OrganizationInvitation(
         id=uuid.uuid4(),
         organization_id=organization_id,
-        email=data.email,
+        email=email_to_store,
         role=data.role,
         token=token,
         expires_at=expires_at,
@@ -307,11 +409,13 @@ def invite_user(
         entity_id=str(invitation.id),
     )
 
+    msg = f"Invitation created for {data.email}" if data.email else "Shareable invitation link generated"
+
     return {
-        "message": f"Invitation sent to {data.email}",
+        "message": msg,
         "token": token,
         "expires_at": expires_at,
-        "invite_link": f"/dashboard/invitations?token={token}",
+        "invite_link": f"/invite/{token}",
     }
 
 
@@ -340,6 +444,8 @@ def accept_invitation(
 
     if exp < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation token has expired.")
+
+    org = db.get(Organization, inv.organization_id)
 
     # Check if membership exists
     member = db.query(OrganizationMember).filter(
@@ -373,7 +479,11 @@ def accept_invitation(
         entity_id=str(member.id),
     )
 
-    return {"message": "Invitation accepted successfully", "organization_id": str(inv.organization_id)}
+    return {
+        "message": "Invitation accepted successfully",
+        "organization_id": str(inv.organization_id),
+        "organization_name": org.name if org else "Organization Workspace",
+    }
 
 
 @router.put(

@@ -64,7 +64,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(profile);
       
       toast.success("Successfully logged in!");
-      router.push("/dashboard");
+
+      const postAuthRedirect = typeof window !== "undefined" ? localStorage.getItem("post_auth_redirect") : null;
+      if (postAuthRedirect) {
+        localStorage.removeItem("post_auth_redirect");
+        router.push(postAuthRedirect);
+      } else {
+        router.push("/dashboard");
+      }
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
       const errorMsg = axiosError.response?.data?.detail || "Invalid credentials. Please try again.";

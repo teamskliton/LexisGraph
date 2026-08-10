@@ -313,6 +313,18 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
             <Button
               variant="outline"
               size="sm"
+              onClick={() => {
+                const q = encodeURIComponent(`Explain why this finding (${finding.id}) exists and what should be done.`);
+                router.push(`/ai-assistant?findingId=${finding.id}&question=${q}`);
+              }}
+              className="text-xs cursor-pointer gap-1.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Explain with AI
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => router.push(`/compliance/reports/${finding.report_id}`)}
               className="text-xs cursor-pointer gap-1"
             >

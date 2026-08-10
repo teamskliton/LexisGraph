@@ -223,6 +223,7 @@ def list_global_regulations(
     db: Session,
     organization_id: uuid.UUID | None = None,
     search_query: str | None = None,
+    only_linked: bool = False,
 ) -> List[dict[str, Any]]:
     """List all global regulations with link status for organization."""
     stmt = select(Regulation)
@@ -254,6 +255,10 @@ def list_global_regulations(
 
     result = []
     for reg in regulations:
+        is_linked = reg.id in linked_ids
+        if only_linked and not is_linked:
+            continue
+
         result.append({
             "id": reg.id,
             "title": reg.title,
@@ -267,7 +272,7 @@ def list_global_regulations(
             "file_size": reg.file_size,
             "processing_status": reg.processing_status.value if hasattr(reg.processing_status, "value") else str(reg.processing_status),
             "created_at": reg.created_at,
-            "is_linked": reg.id in linked_ids,
+            "is_linked": is_linked,
         })
 
     return result

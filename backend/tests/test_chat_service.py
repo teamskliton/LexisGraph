@@ -34,6 +34,7 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual(req.organization_id, self.org_id)
         self.assertEqual(req.conversation_id, "conv-123")
 
+    @patch("app.routes.reports.verify_user_organization_access", return_value=True)
     @patch("app.services.chat_service.log_activity")
     @patch("app.services.chat_service._resolve_reasoning")
     @patch("app.services.chat_service.retrieve_context")
@@ -42,6 +43,7 @@ class ChatServiceTest(unittest.TestCase):
         mock_retrieve,
         mock_resolve,
         mock_log,
+        mock_verify,
     ):
         db = MagicMock()
         def _mock_get(model_cls, entity_id):
@@ -87,12 +89,14 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual(response.sources[0].clause_number, "clause-101")
         self.assertEqual(response.sources[0].search_source, "Both")
 
+    @patch("app.routes.reports.verify_user_organization_access", return_value=True)
     @patch("app.services.chat_service.log_activity")
     @patch("app.services.chat_service.retrieve_context")
     def test_process_chat_request_low_evidence_fallback(
         self,
         mock_retrieve,
         mock_log,
+        mock_verify,
     ):
         db = MagicMock()
         def _mock_get(model_cls, entity_id):
@@ -121,9 +125,9 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual(response.sources, [])
         self.assertTrue(len(response.conversation_id) > 0)
 
-    def test_process_chat_request_org_not_found(self):
+    @patch("app.routes.reports.verify_user_organization_access", return_value=False)
+    def test_process_chat_request_org_not_found(self, mock_verify):
         db = MagicMock()
-        db.get.return_value = None
 
         payload = ChatRequest(
             question="What is the retention period?",

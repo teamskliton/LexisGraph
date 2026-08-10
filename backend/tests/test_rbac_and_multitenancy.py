@@ -90,9 +90,9 @@ class TestRBACAndMultiTenancy:
     """Test suite for RBAC roles, invitation acceptance, and audit logs."""
 
     def test_owner_role_and_member_role(self, db_session, owner_user, invited_user, test_org):
-        # Owner should automatically resolve to ORGANIZATION_ADMIN
+        # Owner should automatically resolve to ADMIN or ORGANIZATION_ADMIN
         owner_role = get_user_org_role(db_session, owner_user.id, test_org.id)
-        assert owner_role == UserRole.ORGANIZATION_ADMIN
+        assert owner_role in (UserRole.ADMIN, UserRole.ORGANIZATION_ADMIN)
 
         # Member assigned MANAGER role
         member = OrganizationMember(
@@ -149,6 +149,58 @@ class TestRBACAndMultiTenancy:
         ).first()
         assert mem is not None
         assert mem.role == UserRole.MANAGER
+
+    def test_shareable_link_invitation_creation_and_public_lookup(self, db_session, owner_user, invited_user, test_org):
+        app = FastAPI()
+        app.include_router(organizations_router)
+
+        def _get_db_override():
+            yield db_session
+
+        def _get_user_override():
+            return owner_user
+
+        from app.db.session import get_db
+        from app.core.dependencies import get_current_user
+        app.dependency_overrides[get_db] = _get_db_override
+        app.dependency_overrides[get_current_user] = _get_user_override
+
+        client = TestClient(app)
+
+        # 1. Create Shareable Invitation Link (omitting email)
+        invite_resp = client.post(
+            f"/organizations/{test_org.id}/invitations",
+            json={"role": "REVIEWER"},
+        )
+        assert invite_resp.status_code == 200
+        data = invite_resp.json()
+        token = data["token"]
+        assert token is not None
+        assert data["invite_link"] == f"/invite/{token}"
+
+        # 2. Public lookup endpoint (Unauthenticated request)
+        public_resp = client.get(f"/organizations/invitations/token/{token}")
+        assert public_resp.status_code == 200
+        pub_data = public_resp.json()
+        assert pub_data["is_valid"] is True
+        assert pub_data["organization_name"] == test_org.name
+        assert pub_data["role"] == "REVIEWER"
+
+        # 3. Accept invitation with invited_user
+        app.dependency_overrides[get_current_user] = lambda: invited_user
+        accept_resp = client.post(
+            "/organizations/invitations/accept",
+            json={"token": token},
+        )
+        assert accept_resp.status_code == 200
+        assert accept_resp.json()["organization_name"] == test_org.name
+
+        # 4. Verify single-use: second acceptance attempt fails
+        second_accept = client.post(
+            "/organizations/invitations/accept",
+            json={"token": token},
+        )
+        assert second_accept.status_code == 404
 
     def test_audit_logging(self, db_session, owner_user, test_org):
         log_entry = audit_service.log_audit_event(

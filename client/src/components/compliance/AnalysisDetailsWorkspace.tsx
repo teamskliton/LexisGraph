@@ -418,6 +418,16 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
             <Button
               variant="outline"
               size="sm"
+              onClick={() => router.push(`/ai-assistant?reportId=${report.id}&question=${encodeURIComponent(`Summarize the major compliance risks in report #${report.id.slice(0, 8)}.`)}`)}
+              className="text-xs cursor-pointer gap-1.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+              aria-label="Analyze report with AI Assistant"
+            >
+              <Sparkles className="h-4 w-4" aria-hidden="true" /> Analyze Report with AI
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={scrollToReport}
               className="text-xs cursor-pointer gap-1.5"
               aria-label="Scroll to executive report section"

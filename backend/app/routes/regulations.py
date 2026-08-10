@@ -70,13 +70,19 @@ class GlobalRegulationResponse(BaseModel):
 def list_regulations(
     organization_id: Optional[uuid.UUID] = Query(None, description="Organization ID to include link status"),
     search: Optional[str] = Query(None, description="Search query string"),
+    only_linked: bool = Query(False, description="Filter only regulations linked to the organization"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Return all shared global regulations in the repository, showing link status for the specified organization.
     """
-    return regulation_service.list_global_regulations(db, organization_id=organization_id, search_query=search)
+    return regulation_service.list_global_regulations(
+        db,
+        organization_id=organization_id,
+        search_query=search,
+        only_linked=only_linked,
+    )
 
 
 @router.get(
