@@ -18,9 +18,14 @@ import {
   BarChart3,
   Network,
   XCircle,
+  UserCheck,
+  Clock,
+  RotateCcw,
+  CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { useAuth } from "@/context/auth-context";
 import { reportService } from "@/services/reportService";
 import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
 import { Card } from "@/components/ui/card";
@@ -59,11 +64,45 @@ function deriveSeverityBadge(severity?: string, status?: string) {
   };
 }
 
+function deriveLifecycleBadge(lifecycleStatus?: string) {
+  const st = (lifecycleStatus || "OPEN").toUpperCase();
+
+  switch (st) {
+    case "IN_REVIEW":
+      return {
+        label: "IN REVIEW",
+        className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+      };
+    case "REMEDIATION":
+      return {
+        label: "REMEDIATION",
+        className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+      };
+    case "RESOLVED":
+      return {
+        label: "RESOLVED",
+        className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+      };
+    case "REOPENED":
+      return {
+        label: "REOPENED",
+        className: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
+      };
+    default:
+      return {
+        label: "OPEN",
+        className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+      };
+  }
+}
+
 export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
   const router = useRouter();
+  const { user } = useAuth();
 
   // Data State
   const [findings, setFindings] = useState<FindingItem[]>([]);
+  const [organizationId, setOrganizationId] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,13 +110,13 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [sortOrder, setSortOrder] = useState<"severity_desc" | "severity_asc" | "score_asc" | "score_desc">("severity_desc");
+  const [sortOrder, setSortOrder] = useState<"severity_desc" | "severity_asc" | "score_asc" | "score_desc" | "updated_desc">("severity_desc");
 
   // Drawer State
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Fetch Findings
+  // Fetch Findings & Report Details
   const fetchFindings = useCallback(async () => {
     const isUUID = !!reportId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(reportId);
     if (!isUUID) {
@@ -89,8 +128,14 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
     setError(null);
 
     try {
-      const data = await reportService.getReportFindings(reportId);
+      const [data, reportRes] = await Promise.all([
+        reportService.getReportFindings(reportId),
+        reportService.getReportById(reportId).catch(() => null),
+      ]);
       setFindings(data || []);
+      if (reportRes?.organization_id) {
+        setOrganizationId(String(reportRes.organization_id));
+      }
     } catch (err: any) {
       console.error(`Error loading findings for report ${reportId}:`, err);
       const rawDetail = err?.response?.data?.detail;
@@ -118,17 +163,14 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
   // Derived Metrics
   const metrics = useMemo(() => {
     const total = findings.length;
-    const high = findings.filter(
-      (f) => (f.severity || "").toUpperCase() === "HIGH" || (f.status || "").toUpperCase() === "NON_COMPLIANT"
+    const open = findings.filter(
+      (f) => (f.lifecycle_status || "OPEN").toUpperCase() === "OPEN" || (f.lifecycle_status || "").toUpperCase() === "REOPENED"
     ).length;
-    const medium = findings.filter(
-      (f) => (f.severity || "").toUpperCase() === "MEDIUM" || (f.status || "").toUpperCase() === "PARTIALLY_COMPLIANT"
-    ).length;
-    const low = findings.filter(
-      (f) => (f.severity || "").toUpperCase() === "LOW" || (f.status || "").toUpperCase() === "COMPLIANT"
-    ).length;
+    const inReview = findings.filter((f) => (f.lifecycle_status || "").toUpperCase() === "IN_REVIEW").length;
+    const remediation = findings.filter((f) => (f.lifecycle_status || "").toUpperCase() === "REMEDIATION").length;
+    const resolved = findings.filter((f) => (f.lifecycle_status || "").toUpperCase() === "RESOLVED").length;
 
-    return { total, high, medium, low };
+    return { total, open, inReview, remediation, resolved };
   }, [findings]);
 
   // Filter & Sort Findings
@@ -142,7 +184,8 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           const matchReg = (f.citation || f.regulation_clause_id || "").toLowerCase().includes(q);
           const matchPol = (f.matched_policy_text || f.policy_clause_id || "").toLowerCase().includes(q);
           const matchReason = (f.reasoning || "").toLowerCase().includes(q);
-          if (!matchId && !matchReg && !matchPol && !matchReason) return false;
+          const matchAssignee = (f.assignee?.full_name || "").toLowerCase().includes(q);
+          if (!matchId && !matchReg && !matchPol && !matchReason && !matchAssignee) return false;
         }
 
         // Severity filter
@@ -151,15 +194,25 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           if (sev !== severityFilter.toUpperCase()) return false;
         }
 
-        // Status filter
+        // Status / Lifecycle filter
         if (statusFilter !== "ALL") {
-          const st = (f.status || "").toUpperCase();
-          if (st !== statusFilter.toUpperCase()) return false;
+          if (statusFilter === "ASSIGNED_TO_ME") {
+            if (!user?.id || f.assigned_to !== user.id) return false;
+          } else {
+            const st = (f.lifecycle_status || f.status || "").toUpperCase();
+            if (st !== statusFilter.toUpperCase()) return false;
+          }
         }
 
         return true;
       })
       .sort((a, b) => {
+        if (sortOrder === "updated_desc") {
+          const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+          const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+          return dateB - dateA;
+        }
+
         const scoreA = a.confidence != null ? a.confidence : 0;
         const scoreB = b.confidence != null ? b.confidence : 0;
 
@@ -173,11 +226,18 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
         if (sortOrder === "severity_asc") return rankA - rankB;
         return rankB - rankA; // severity_desc (default)
       });
-  }, [findings, searchQuery, severityFilter, statusFilter, sortOrder]);
+  }, [findings, searchQuery, severityFilter, statusFilter, sortOrder, user?.id]);
 
   const handleOpenDrawer = (item: FindingItem) => {
     setSelectedFinding(item);
     setIsDrawerOpen(true);
+  };
+
+  const handleFindingUpdated = (updated: FindingItem) => {
+    setFindings((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    if (selectedFinding?.id === updated.id) {
+      setSelectedFinding(updated);
+    }
   };
 
   const handleClearFilters = () => {
@@ -211,7 +271,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                 Findings Workspace
               </h1>
               <p className="text-xs text-muted-foreground">
-                Clause-level compliance gap evaluations for Report #{reportId.slice(0, 8)}.
+                Clause-level compliance evaluations and operational lifecycle management for Report #{reportId.slice(0, 8)}.
               </p>
             </div>
           </div>
@@ -237,9 +297,9 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
         </div>
       </div>
 
-      {/* ── 2. Summary Metrics ── */}
+      {/* ── 2. Operational Metrics ── */}
       {!isLoading && !error && findings.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <Card className="border border-border/60 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -249,46 +309,59 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-bold tabular-nums text-foreground">{metrics.total}</span>
-              <span className="text-[10px] text-muted-foreground">Evaluated clauses</span>
+              <span className="text-[10px] text-muted-foreground">Evaluated</span>
             </div>
           </Card>
 
           <Card className="border border-border/60 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-rose-500">
-                Critical / High
+                Open / Reopened
               </span>
-              <ShieldX className="h-4 w-4 text-rose-500" />
+              <ShieldAlert className="h-4 w-4 text-rose-500" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold tabular-nums text-rose-500">{metrics.high}</span>
-              <span className="text-[10px] text-muted-foreground">Non-compliant</span>
+              <span className="text-2xl font-bold tabular-nums text-rose-500">{metrics.open}</span>
+              <span className="text-[10px] text-muted-foreground">Needs action</span>
+            </div>
+          </Card>
+
+          <Card className="border border-border/60 bg-card p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">
+                In Review
+              </span>
+              <Clock className="h-4 w-4 text-indigo-500" />
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-bold tabular-nums text-indigo-500">{metrics.inReview}</span>
+              <span className="text-[10px] text-muted-foreground">Under legal review</span>
             </div>
           </Card>
 
           <Card className="border border-border/60 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-500">
-                Medium Risk
+                In Remediation
               </span>
-              <ShieldAlert className="h-4 w-4 text-amber-500" />
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold tabular-nums text-amber-500">{metrics.medium}</span>
-              <span className="text-[10px] text-muted-foreground">Partially compliant</span>
+              <span className="text-2xl font-bold tabular-nums text-amber-500">{metrics.remediation}</span>
+              <span className="text-[10px] text-muted-foreground">Active fixes</span>
             </div>
           </Card>
 
           <Card className="border border-border/60 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
-                Low / Compliant
+                Resolved
               </span>
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <CheckCircle className="h-4 w-4 text-emerald-500" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold tabular-nums text-emerald-500">{metrics.low}</span>
-              <span className="text-[10px] text-muted-foreground">Aligned clauses</span>
+              <span className="text-2xl font-bold tabular-nums text-emerald-500">{metrics.resolved}</span>
+              <span className="text-[10px] text-muted-foreground">Addressed</span>
             </div>
           </Card>
         </div>
@@ -302,7 +375,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search clause ID, reasoning, or citation..."
+            placeholder="Search clause ID, assignee, reasoning, or citation..."
             className="pl-9 h-8 text-xs bg-background"
           />
         </div>
@@ -326,12 +399,15 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer font-semibold text-indigo-600 dark:text-indigo-400"
           >
             <option value="ALL">All Statuses</option>
-            <option value="NON_COMPLIANT">Non-Compliant</option>
-            <option value="PARTIALLY_COMPLIANT">Partially Compliant</option>
-            <option value="COMPLIANT">Compliant</option>
+            <option value="OPEN">Open</option>
+            <option value="IN_REVIEW">In Review</option>
+            <option value="REMEDIATION">In Remediation</option>
+            <option value="RESOLVED">Resolved</option>
+            <option value="REOPENED">Reopened</option>
+            <option value="ASSIGNED_TO_ME">Assigned to Me</option>
           </select>
 
           <select
@@ -341,6 +417,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           >
             <option value="severity_desc">Highest Severity First</option>
             <option value="severity_asc">Lowest Severity First</option>
+            <option value="updated_desc">Recently Updated</option>
             <option value="score_desc">Highest Similarity Score</option>
             <option value="score_asc">Lowest Similarity Score</option>
           </select>
@@ -422,12 +499,16 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           </div>
           <div className="space-y-1 max-w-sm mx-auto">
             <h3 className="text-sm font-semibold text-foreground">
-              {findings.length === 0 ? "No compliance findings" : "No matching findings found"}
+              {statusFilter === "ASSIGNED_TO_ME"
+                ? "No findings are currently assigned to you."
+                : findings.length === 0
+                ? "No active compliance findings."
+                : "No matching findings found."}
             </h3>
             <p className="text-xs text-muted-foreground">
               {findings.length === 0
                 ? "This analysis did not return any compliance gaps or findings."
-                : "Try adjusting your search query or severity filter options above."}
+                : "Try adjusting your search query or severity/lifecycle filter options above."}
             </p>
           </div>
           <Button
@@ -451,16 +532,17 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/40 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
                     <th className="px-4 py-3">Severity</th>
+                    <th className="px-4 py-3">Lifecycle Status</th>
                     <th className="px-4 py-3">Regulation Clause</th>
-                    <th className="px-4 py-3">Matched Policy Clause</th>
+                    <th className="px-4 py-3">Assigned To</th>
                     <th className="px-4 py-3 text-center">Score</th>
-                    <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40 font-medium">
                   {filteredFindings.map((item) => {
                     const sev = deriveSeverityBadge(item.severity, item.status);
+                    const lifecycle = deriveLifecycleBadge(item.lifecycle_status);
                     const scoreText =
                       item.confidence != null
                         ? `${(item.confidence * (item.confidence <= 1 ? 100 : 1)).toFixed(0)}%`
@@ -480,6 +562,13 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                           </Badge>
                         </td>
 
+                        {/* Lifecycle Status Badge */}
+                        <td className="px-4 py-3.5">
+                          <Badge variant="outline" className={cn("text-[10px] font-bold uppercase", lifecycle.className)}>
+                            {lifecycle.label}
+                          </Badge>
+                        </td>
+
                         {/* Regulation Clause */}
                         <td className="px-4 py-3.5 text-foreground max-w-xs">
                           <p className="line-clamp-2 font-semibold">
@@ -490,35 +579,21 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                           </span>
                         </td>
 
-                        {/* Matched Policy Clause */}
-                        <td className="px-4 py-3.5 text-muted-foreground max-w-xs">
-                          {item.matched_policy_text ? (
-                            <p className="line-clamp-2">{item.matched_policy_text}</p>
+                        {/* Assignee */}
+                        <td className="px-4 py-3.5 text-muted-foreground">
+                          {item.assignee ? (
+                            <div className="flex items-center gap-1.5 text-foreground font-semibold">
+                              <UserCheck className="h-3.5 w-3.5 text-indigo-500" />
+                              <span>{item.assignee.full_name}</span>
+                            </div>
                           ) : (
-                            <span className="italic text-rose-500">No policy match</span>
+                            <span className="italic text-muted-foreground/70">Unassigned</span>
                           )}
                         </td>
 
                         {/* Score */}
                         <td className="px-4 py-3.5 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400">
                           {scoreText}
-                        </td>
-
-                        {/* Status */}
-                        <td className="px-4 py-3.5">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] font-bold uppercase",
-                              item.status === "COMPLIANT"
-                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                : item.status === "PARTIALLY_COMPLIANT"
-                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                            )}
-                          >
-                            {item.status}
-                          </Badge>
                         </td>
 
                         {/* Action */}
@@ -529,7 +604,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                             onClick={() => handleOpenDrawer(item)}
                             className="h-7 text-xs gap-1 cursor-pointer"
                           >
-                            <span>View Finding</span>
+                            <span>Open Finding</span>
                             <ChevronRight className="h-3 w-3" />
                           </Button>
                         </td>
@@ -545,6 +620,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           <div className="grid grid-cols-1 gap-3 md:hidden">
             {filteredFindings.map((item) => {
               const sev = deriveSeverityBadge(item.severity, item.status);
+              const lifecycle = deriveLifecycleBadge(item.lifecycle_status);
               const scoreText =
                 item.confidence != null
                   ? `${(item.confidence * (item.confidence <= 1 ? 100 : 1)).toFixed(0)}%`
@@ -557,10 +633,15 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                   className="border border-border/60 bg-card p-4 space-y-3 shadow-2xs hover:border-border transition-colors cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <Badge variant="outline" className={cn("gap-1 text-[10px] uppercase font-bold", sev.className)}>
-                      {sev.icon}
-                      {sev.label}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className={cn("gap-1 text-[10px] uppercase font-bold", sev.className)}>
+                        {sev.icon}
+                        {sev.label}
+                      </Badge>
+                      <Badge variant="outline" className={cn("text-[10px] font-bold uppercase", lifecycle.className)}>
+                        {lifecycle.label}
+                      </Badge>
+                    </div>
                     <span className="font-mono font-bold text-xs text-indigo-500">{scoreText} Score</span>
                   </div>
 
@@ -575,34 +656,24 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
 
                   <div className="space-y-1 border-t border-border/40 pt-2">
                     <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                      Matched Policy
+                      Assigned To
                     </span>
-                    <p className="text-xs text-muted-foreground">
-                      {item.matched_policy_text || <span className="italic text-rose-500">No policy match</span>}
+                    <p className="text-xs text-foreground">
+                      {item.assignee?.full_name || <span className="italic text-muted-foreground">Unassigned</span>}
                     </p>
                   </div>
 
                   <div className="pt-2 flex items-center justify-between border-t border-border/40" onClick={(e) => e.stopPropagation()}>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] font-bold uppercase",
-                        item.status === "COMPLIANT"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                          : item.status === "PARTIALLY_COMPLIANT"
-                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                          : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                      )}
-                    >
-                      {item.status}
-                    </Badge>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      ID: #{item.id.slice(0, 8)}
+                    </span>
 
                     <Button
                       size="sm"
                       onClick={() => handleOpenDrawer(item)}
                       className="h-8 text-xs font-semibold cursor-pointer gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
                     >
-                      <span>View Finding</span>
+                      <span>Open Finding</span>
                       <ChevronRight className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -618,7 +689,9 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
         finding={selectedFinding}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        onFindingUpdated={handleFindingUpdated}
         reportName={`Report #${reportId.slice(0, 8)}`}
+        organizationId={organizationId}
       />
     </div>
   );

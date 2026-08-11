@@ -569,6 +569,47 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
         </Card>
       </div>
 
+      {/* ── FINDING LIFECYCLE OPERATIONS SUMMARY BAR ── */}
+      <Card className="border border-indigo-500/20 bg-card p-4 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-indigo-500" />
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                Finding Remediation Lifecycle Status
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                Operational status of active compliance remediation workflows for this report.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30">
+              Open: {report?.open_count ?? 0}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+              In Review: {report?.in_review_count ?? 0}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+              In Remediation: {report?.remediation_count ?? 0}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+              Resolved: {report?.resolved_count ?? 0}
+            </Badge>
+
+            <Button
+              size="sm"
+              onClick={() => router.push(`/compliance/reports/${report?.id}/findings`)}
+              className="text-xs font-semibold cursor-pointer gap-1 bg-indigo-600 hover:bg-indigo-700 text-white ml-2"
+            >
+              <span>Manage Findings Workspace</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </Card>
+
       {/* ── SECTION 4: FINDINGS (PRIMARY EXPANDABLE TABLE) ── */}
       <Card className="border border-border/60 bg-card p-5 space-y-4 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

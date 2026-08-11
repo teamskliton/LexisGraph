@@ -6,6 +6,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, JSON, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -511,9 +512,46 @@ class ReportFinding(Base):
         nullable=True,
     )
 
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="OPEN",
+        index=True,
+    )
+
+    assigned_to: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    resolution_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    reopen_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    remediation_due_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
 
@@ -523,5 +561,80 @@ class ReportFinding(Base):
         lazy="select",
     )
 
+    assignee: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[assigned_to],
+        lazy="select",
+    )
+
+    comments: Mapped[list["FindingComment"]] = relationship(
+        "FindingComment",
+        back_populates="finding",
+        cascade="all, delete-orphan",
+        order_by="FindingComment.created_at.asc()",
+    )
+
     def __repr__(self) -> str:
-        return f"<ReportFinding(id={self.id}, report_id={self.report_id}, status={self.status!r}, severity={self.severity!r})>"
+        return f"<ReportFinding(id={self.id}, report_id={self.report_id}, status={self.status!r}, lifecycle={self.lifecycle_status!r})>"
+
+
+class FindingComment(Base):
+    """
+    Comment entity attached to a compliance finding.
+    """
+
+    __tablename__ = "finding_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    finding_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("report_findings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    finding: Mapped["ReportFinding"] = relationship(
+        "ReportFinding",
+        back_populates="comments",
+        lazy="select",
+    )
+
+    user: Mapped["User"] = relationship(
+        "User",
+        foreign_keys=[user_id],
+        lazy="select",
+    )
+
+    def __repr__(self) -> str:
+        return f"<FindingComment(id={self.id}, finding_id={self.finding_id}, user_id={self.user_id})>"
+

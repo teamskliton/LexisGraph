@@ -375,9 +375,90 @@ Immutable organization activity history.
 - Custom email templates with organization branding, legal disclaimers, and click-tracking metrics.
 - Unsubscribe & email bounce webhook handlers.
 
-*Do NOT implement now. Secure shareable invitation links (`/invite/{token}`) with Web Share API and single-use backend token validation are fully supported.*
+---
+
+### 24. Finding Lifecycle Email/Push Notification Infrastructure
+
+**Future capability:**
+Outbound notification delivery (email, push, webhooks) for finding operations:
+- Finding assigned to you
+- Finding status changed
+- Finding commented on
+- Finding reopened
+- SLA expiration warning
+
+*Do NOT implement until notification infrastructure exists.*
 
 ---
+
+### 25. Finding Remediation Due Dates, SLA Engine & Escalation Automation
+
+**Future capability:**
+- Per-finding target remediation due dates (`due_date`) and SLA response windows based on finding severity.
+- Automatic escalation policies for overdue findings.
+- SLA compliance metrics and tracking dashboards.
+
+---
+
+### 26. Bulk Finding Lifecycle Actions & Multi-Finding Approval Workflows
+
+**Future capability:**
+- Bulk status transitions and bulk member assignment across multiple selected findings simultaneously.
+- Multi-stage approval workflows for high-risk finding resolutions.
+
+---
+
+### 27. Remediation Task Management Platform & Jira/Linear Integration
+
+**Future capability:**
+- Full project management, issue tracking, and ticket creation in external task platforms (Jira, Linear, Asana, Azure DevOps) directly from compliance findings.
+- Automatic synchronization of resolution status between external ticketing systems and LexisGraph.
+
+---
+
+### 28. Historical Compliance Trend Analytics & Multi-Period Risk Charts
+
+**Future capability:**
+- Multi-month historical compliance score trending and risk trajectory visualization.
+- Department-wise or category-wise gap distribution breakdown.
+
+---
+
+### 29. Scheduled Compliance Monitoring & Automated Recurring Analysis
+
+**Future capability:**
+- Recurring scheduled compliance analysis jobs (daily, weekly, monthly).
+- Automatic re-evaluation of findings when regulatory statutes or organization policies are updated.
+
+---
+
+### 30. Executive Compliance Reporting & Multi-Client Legal Dashboard
+
+**Future capability:**
+- Board-level executive compliance PDF export briefs with customized legal branding.
+- Multi-client portfolio overview for external legal advisory firms managing multiple client organizations.
+
+---
+
+### 31. Automated Scheduled Due Date Reminders & SLA Escalation Engine
+
+**Future capability:**
+- Automatic background scheduled notifications (e.g. "Due tomorrow", "Due in 3 days").
+- SLA threshold monitoring and escalation to organization administrators when due dates pass.
+- Email/push integration for due date alerts.
+
+---
+
+### 32. Enterprise Remediation Project Management & External Task Sync
+
+**Future capability:**
+- Jira, Asana, and ServiceNow bidirectional sync for compliance remediation items.
+- Subtasks, work logs, time tracking, and Kanban board views for remediation progress.
+- Recurring compliance remediation cycles and calendar integration.
+
+---
+
+
 
 ## RULE FOR FUTURE AI AGENTS
 

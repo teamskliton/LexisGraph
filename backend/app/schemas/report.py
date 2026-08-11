@@ -37,9 +37,9 @@ class ReportItemResponse(BaseModel):
 
     id: uuid.UUID
     organization_id: uuid.UUID
-    regulation_id: uuid.UUID
+    regulation_id: Optional[uuid.UUID] = None
     regulation_document_id: Optional[uuid.UUID] = None
-    policy_document_id: uuid.UUID
+    policy_document_id: Optional[uuid.UUID] = None
     overall_score: Optional[float] = None
     risk_level: Optional[str] = None
     total_matches: Optional[int] = None
@@ -50,6 +50,10 @@ class ReportItemResponse(BaseModel):
     processing_time_seconds: Optional[float] = None
     processing_time_ms: Optional[float] = None
     is_deleted: bool = False
+    open_count: Optional[int] = 0
+    in_review_count: Optional[int] = 0
+    remediation_count: Optional[int] = 0
+    resolved_count: Optional[int] = 0
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -90,8 +94,13 @@ class ReportDetailResponse(BaseModel):
     is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
+    open_count: Optional[int] = 0
+    in_review_count: Optional[int] = 0
+    remediation_count: Optional[int] = 0
+    resolved_count: Optional[int] = 0
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
 
 
 # Backwards compatibility alias

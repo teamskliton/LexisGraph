@@ -21,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -143,6 +144,7 @@ export const OrganizationWorkspaceHeader = memo(function OrganizationWorkspaceHe
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Active Workspace
             </Badge>
+            <NotificationBell organizationId={organization.id} />
             <OrganizationSwitcher />
           </div>
         </div>

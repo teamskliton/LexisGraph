@@ -14,8 +14,9 @@ from app.db.models.document import Document, DocumentType, ProcessingStatus
 from app.db.models.regulation import Regulation, OrganizationRegulation
 from app.db.models.activity import Activity
 from app.db.models.conversation import ConversationSession, ConversationMessage
-from app.compliance.models import ComplianceReport, ComplianceReportStatus, ComplianceJob, ComplianceJobStatus, ReportFinding
+from app.compliance.models import ComplianceReport, ComplianceReportStatus, ComplianceJob, ComplianceJobStatus, ReportFinding, FindingComment
 from app.db.models.rbac import OrganizationMember, OrganizationInvitation, AuditLog, UserRole, MemberStatus
+from app.db.models.notification import Notification
 from app.models.report import Report
 
 __all__ = [
@@ -34,10 +35,12 @@ __all__ = [
     "ComplianceJob",
     "ComplianceJobStatus",
     "ReportFinding",
+    "FindingComment",
     "Report",
     "OrganizationMember",
     "OrganizationInvitation",
     "AuditLog",
     "UserRole",
     "MemberStatus",
+    "Notification",
 ]

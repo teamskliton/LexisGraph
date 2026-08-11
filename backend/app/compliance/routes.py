@@ -70,6 +70,23 @@ def analyze_compliance(
     )
 
 
+from app.routes.compliance import get_compliance_overview
+from app.schemas.compliance_overview import ComplianceOverviewResponse
+
+
+@router.get(
+    "/overview",
+    response_model=ComplianceOverviewResponse,
+    summary="Get organization-scoped Compliance Operations Overview",
+)
+def compliance_overview_endpoint(
+    organization_id: Optional[uuid.UUID] = Query(None, description="Optional Organization UUID to filter overview metrics"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ComplianceOverviewResponse:
+    return get_compliance_overview(organization_id=organization_id, db=db, current_user=current_user)
+
+
 @router.get(
     "/{report_id}",
     response_model=ComplianceReportResponse,
