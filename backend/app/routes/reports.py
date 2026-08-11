@@ -179,8 +179,23 @@ def get_report(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this organization's compliance report.",
             )
+
+        resp = ReportDetailResponse.model_validate(report)
+
+        # Populate lifecycle metric counts
+        from app.compliance.models import ReportFinding
+        db_findings = db.query(ReportFinding).filter(ReportFinding.report_id == report.id).all()
+        if db_findings:
+            resp.open_count = sum(1 for f in db_findings if (f.lifecycle_status or "OPEN") in ("OPEN", "REOPENED"))
+            resp.in_review_count = sum(1 for f in db_findings if f.lifecycle_status == "IN_REVIEW")
+            resp.remediation_count = sum(1 for f in db_findings if f.lifecycle_status == "REMEDIATION")
+            resp.resolved_count = sum(1 for f in db_findings if f.lifecycle_status == "RESOLVED")
+        else:
+            resp.open_count = (report.non_compliant_clauses or 0) + (report.partial_clauses or 0)
+            resp.resolved_count = report.compliant_clauses or 0
+
         logger.info("Report loaded: report_id=%s", report_id)
-        return ReportDetailResponse.model_validate(report)
+        return resp
     except ReportNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -200,6 +215,7 @@ def get_report_findings(
 ):
     """
     Return clause-level findings for a compliance report with organization access verification.
+    Auto-persists DB records if findings only exist in report_json.
     """
     try:
         report = service.get_report(db, report_id)
@@ -208,64 +224,89 @@ def get_report_findings(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this organization's compliance report findings.",
             )
-        findings = getattr(report, "findings_list", [])
-        if findings:
-            return [
-                {
-                    "id": str(f.id),
-                    "report_id": str(f.report_id),
-                    "policy_clause_id": f.policy_clause_id,
-                    "regulation_clause_id": f.regulation_clause_id,
-                    "status": f.status,
-                    "confidence": f.confidence,
-                    "severity": f.severity,
-                    "reasoning": f.reasoning,
-                    "recommendation": f.recommendation,
-                    "citation": f.citation,
-                    "graph_path": f.graph_path,
-                    "created_at": f.created_at,
+
+        from app.compliance.models import ReportFinding, FindingComment
+        findings = db.query(ReportFinding).filter(ReportFinding.report_id == report.id).order_by(ReportFinding.created_at.asc()).all()
+
+        if not findings:
+            # Fallback: Extract from report_json or summary JSON and auto-persist to DB
+            details_data = None
+            if report.report_json and isinstance(report.report_json, dict):
+                details_data = report.report_json
+            elif report.summary:
+                try:
+                    import json
+                    details_data = json.loads(report.summary)
+                except Exception:
+                    pass
+
+            if details_data and isinstance(details_data, dict):
+                clauses = details_data.get("evaluated_clauses", [])
+                new_findings = []
+                for c in clauses:
+                    st = (c.get("status") or "NON_COMPLIANT").upper()
+                    sev = "HIGH" if st == "NON_COMPLIANT" else ("MEDIUM" if st == "PARTIALLY_COMPLIANT" else "LOW")
+                    lifecycle_st = "RESOLVED" if st == "COMPLIANT" else "OPEN"
+                    f_obj = ReportFinding(
+                        id=uuid.uuid4(),
+                        report_id=report.id,
+                        policy_clause_id=c.get("matched_policy_clause_id") or c.get("policy_clause_id") or "POL-CLAUSE",
+                        regulation_clause_id=c.get("regulation_clause_id") or "REG-CLAUSE",
+                        status=st,
+                        lifecycle_status=lifecycle_st,
+                        confidence=float(c.get("similarity_score") or 0.85),
+                        severity=sev,
+                        reasoning=c.get("reasoning"),
+                        recommendation=c.get("recommendation"),
+                        citation=c.get("regulation_text"),
+                    )
+                    db.add(f_obj)
+                    new_findings.append(f_obj)
+
+                if new_findings:
+                    db.commit()
+                    findings = new_findings
+
+        result = []
+        for f in findings:
+            assignee_data = None
+            if f.assigned_to and f.assignee:
+                assignee_data = {
+                    "id": str(f.assignee.id),
+                    "full_name": f.assignee.full_name,
+                    "email": f.assignee.email,
                 }
-                for f in findings
-            ]
 
-        # Fallback: Extract from report_json or summary JSON if findings_list is empty
-        extracted = []
-        details_data = None
-        if report.report_json and isinstance(report.report_json, dict):
-            details_data = report.report_json
-        elif report.summary:
-            try:
-                import json
-                details_data = json.loads(report.summary)
-            except Exception:
-                pass
+            comments_cnt = db.query(FindingComment).filter(FindingComment.finding_id == f.id).count()
 
-        if details_data and isinstance(details_data, dict):
-            clauses = details_data.get("evaluated_clauses", [])
-            for idx, c in enumerate(clauses):
-                st = (c.get("status") or "NON_COMPLIANT").upper()
-                sev = "HIGH" if st == "NON_COMPLIANT" else ("MEDIUM" if st == "PARTIALLY_COMPLIANT" else "LOW")
-                extracted.append({
-                    "id": f"finding-{report.id}-{idx}",
-                    "report_id": str(report.id),
-                    "policy_clause_id": c.get("policy_clause_id") or "POL-CLAUSE",
-                    "regulation_clause_id": c.get("regulation_clause_id") or "REG-CLAUSE",
-                    "status": st,
-                    "confidence": c.get("similarity_score", 0.85),
-                    "severity": sev,
-                    "reasoning": c.get("reasoning"),
-                    "recommendation": c.get("recommendation"),
-                    "citation": c.get("regulation_text"),
-                    "matched_policy_text": c.get("matched_policy_text"),
-                    "graph_path": None,
-                    "created_at": report.created_at,
-                })
-        return extracted
+            result.append({
+                "id": str(f.id),
+                "report_id": str(f.report_id),
+                "policy_clause_id": f.policy_clause_id,
+                "regulation_clause_id": f.regulation_clause_id,
+                "status": f.status,
+                "lifecycle_status": f.lifecycle_status or "OPEN",
+                "confidence": f.confidence,
+                "severity": f.severity,
+                "reasoning": f.reasoning,
+                "recommendation": f.recommendation,
+                "citation": f.citation,
+                "graph_path": f.graph_path,
+                "assigned_to": str(f.assigned_to) if f.assigned_to else None,
+                "assignee": assignee_data,
+                "resolution_note": f.resolution_note,
+                "reopen_reason": f.reopen_reason,
+                "comments_count": comments_cnt,
+                "created_at": f.created_at,
+                "updated_at": f.updated_at or f.created_at,
+            })
+        return result
     except ReportNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Report with ID '{report_id}' not found.",
         )
+
 
 
 @router.delete(

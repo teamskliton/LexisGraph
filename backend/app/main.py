@@ -41,16 +41,19 @@ from app.routes.retrieval import router as retrieval_router
 from app.routes.upload import router as upload_router
 from app.routes.organizations import router as organizations_router
 from app.routes.reports import router as reports_router
+from app.routes.findings import router as findings_router
 from app.routes.pdf import router as pdf_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.jobs import router as jobs_router
 from app.routes.regulations import router as regulations_router
+from app.routes.notifications import router as notifications_router
 from app.services.health import get_system_health
 from app.services.retrieval import is_model_loaded, preload_model
 from app.services.scraper import fetch_and_process_external_data
 
 logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
+
 
 
 def _print_env_diagnostic() -> None:
@@ -269,16 +272,21 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, tags=["auth"])
     app.include_router(organizations_router)
     app.include_router(reports_router)
+    app.include_router(findings_router)
+    app.include_router(findings_router, prefix="/api/v1")
     app.include_router(pdf_router)
     app.include_router(dashboard_router)
     app.include_router(jobs_router)
     app.include_router(jobs_router, prefix="/api/v1")
     app.include_router(regulations_router)
     app.include_router(regulations_router, prefix="/api/v1")
+    app.include_router(notifications_router)
+    app.include_router(notifications_router, prefix="/api/v1")
     app.include_router(documents_router, tags=["documents"])
     app.include_router(chat_router)
     app.include_router(compliance_router)
     app.include_router(compliance_router, prefix="/api/v1")
+    app.include_router(legacy_compliance_router)
     app.include_router(legacy_compliance_router, prefix="/api/v1")
     app.include_router(graph_router)
     app.include_router(graph_router, prefix="/api/v1")

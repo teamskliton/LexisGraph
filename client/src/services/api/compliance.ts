@@ -75,6 +75,10 @@ export interface ComplianceReport {
   total_missing?: number | null;
   processing_time_seconds?: number | null;
   processing_time_ms?: number | null;
+  open_count?: number | null;
+  in_review_count?: number | null;
+  remediation_count?: number | null;
+  resolved_count?: number | null;
   status: ComplianceReportStatus;
   summary?: string | null;
   details?: ComplianceReportDetails | null;
@@ -169,18 +173,91 @@ export const complianceService = {
     return response.data;
   },
 
-  compareReports: async (reportId1: string, reportId2: string): Promise<any> => {
+  compareReports: async (reportId1: string, reportId2: string): Promise<unknown> => {
     const response = await api.get('/reports/compare', {
       params: { report_id_1: reportId1, report_id_2: reportId2 },
     });
     return response.data;
   },
 
-  getReportFindings: async (reportId: string): Promise<any[]> => {
+  getReportFindings: async (reportId: string): Promise<unknown[]> => {
     const response = await api.get(`/reports/${reportId}/findings`);
     return response.data;
   },
+
+  getComplianceOverview: async (organizationId?: string): Promise<ComplianceOverviewData> => {
+    const params = organizationId ? { organization_id: organizationId } : undefined;
+    const response = await api.get("/compliance/overview", { params });
+    return response.data;
+  },
 };
+
+export interface ComplianceOverviewSummary {
+  compliance_score?: number | null;
+  compliance_status: string;
+  total_findings: number;
+  open_findings: number;
+  in_review: number;
+  remediation: number;
+  resolved: number;
+  critical_count: number;
+  high_count: number;
+  overdue_count: number;
+}
+
+export interface ComplianceOverviewData {
+  organization_id: string;
+  organization_name: string;
+  summary: ComplianceOverviewSummary;
+  attention_required: Array<{
+    id: string;
+    report_id: string;
+    policy_clause_id?: string | null;
+    regulation_clause_id?: string | null;
+    status: string;
+    lifecycle_status: string;
+    confidence?: number;
+    severity: string;
+    reasoning?: string | null;
+    recommendation?: string | null;
+    citation?: string | null;
+    matched_policy_text?: string | null;
+    assigned_to?: string | null;
+    assignee?: { id: string; full_name: string; email: string } | null;
+    comments_count?: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+  my_work: Array<{
+    id: string;
+    report_id: string;
+    policy_clause_id?: string | null;
+    regulation_clause_id?: string | null;
+    status: string;
+    lifecycle_status: string;
+    confidence?: number;
+    severity: string;
+    reasoning?: string | null;
+    recommendation?: string | null;
+    citation?: string | null;
+    matched_policy_text?: string | null;
+    assigned_to?: string | null;
+    assignee?: { id: string; full_name: string; email: string } | null;
+    comments_count?: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+  recent_activity: Array<{
+    id: string;
+    finding_id: string;
+    user_name: string;
+    event_type: string;
+    title: string;
+    description: string;
+    created_at: string;
+  }>;
+  recent_reports: ComplianceReport[];
+}
 
 export const complianceApi = complianceService;
 

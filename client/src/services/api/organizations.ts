@@ -97,4 +97,21 @@ export const organizationsService = {
     const response = await api.post<AcceptInvitationResponse>("/organizations/invitations/accept", { token });
     return response.data;
   },
+
+  getMembers: async (organizationId: string): Promise<OrganizationMember[]> => {
+    const response = await api.get<OrganizationMember[]>(`/organizations/${organizationId}/members`);
+    return response.data;
+  },
 };
+
+export interface OrganizationMember {
+  id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  status: string;
+  joined_at: string;
+  last_active: string;
+}
+

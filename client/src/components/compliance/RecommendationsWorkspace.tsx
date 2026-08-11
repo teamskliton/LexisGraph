@@ -450,7 +450,7 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
                 onClick={() => handleOpenDrawer(item)}
                 className="border border-amber-500/20 bg-card hover:bg-muted/10 p-5 space-y-4 shadow-2xs hover:border-amber-500/40 transition-colors cursor-pointer group"
               >
-                {/* Header: Severity & Status Badges */}
+                {/* Header: Severity, Finding Status & Assignee Badges */}
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className={cn("gap-1 text-[10px] uppercase font-bold", sev.className)}>
@@ -460,17 +460,16 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
 
                     <Badge
                       variant="outline"
-                      className={cn(
-                        "text-[10px] font-bold uppercase",
-                        item.status === "COMPLIANT"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                          : item.status === "PARTIALLY_COMPLIANT"
-                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                          : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                      )}
+                      className="text-[10px] font-bold uppercase bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
                     >
-                      {item.status}
+                      Finding Status: {item.lifecycle_status || "OPEN"}
                     </Badge>
+
+                    {item.assignee && (
+                      <Badge variant="outline" className="text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+                        Assigned: {item.assignee.full_name}
+                      </Badge>
+                    )}
                   </div>
 
                   <span className="text-[10px] font-mono text-muted-foreground">

@@ -130,6 +130,8 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
     [clearAllConnections, handleEvent, startPolling]
   );
 
+  const startWebSocketRef = useRef<((id: string) => void) | null>(null);
+
   const startWebSocket = useCallback(
     (targetJobId: string) => {
       clearAllConnections();
@@ -181,19 +183,23 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
           if (wsReconnectAttempts.current < 2) {
             wsReconnectAttempts.current += 1;
             console.log(`[useJobProgress] Attempting WebSocket reconnect (${wsReconnectAttempts.current}/2)...`);
-            setTimeout(() => startWebSocket(targetJobId), 1500);
+            setTimeout(() => startWebSocketRef.current?.(targetJobId), 1500);
           } else {
             console.warn('[useJobProgress] Max WebSocket reconnects reached, falling back to SSE');
             startSSE(targetJobId, token);
           }
         };
       } catch (err) {
-        console.warn('[useJobProgress] Failed creating WebSocket instance, falling back to SSE:', err);
+        console.error('[useJobProgress] Failed creating WebSocket:', err);
         startSSE(targetJobId, token);
       }
     },
     [clearAllConnections, handleEvent, startSSE, status]
   );
+
+  useEffect(() => {
+    startWebSocketRef.current = startWebSocket;
+  }, [startWebSocket]);
 
   const fetchInitialJob = useCallback(async () => {
     if (!jobId) return;

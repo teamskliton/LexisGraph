@@ -135,8 +135,9 @@ def get_session() -> Session:
     return _get_session_local()()
 
 
-# Alias for public API compatibility
-SessionLocal = sessionmaker(bind=get_engine, autocommit=False, autoflush=False)  # type: ignore[arg-type]
+# Alias for public API compatibility — returns a new session from the lazy factory
+def SessionLocal() -> Session:
+    return _get_session_local()()
 
 
 # ---------------------------------------------------------------------------

@@ -991,6 +991,28 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
         report.status = ComplianceReportStatus.COMPLETED
         report.updated_at = datetime.now(timezone.utc)
 
+        # Create persistent ReportFinding DB records for each evaluated clause
+        from app.compliance.models import ReportFinding
+        evaluated_clauses = result.get("evaluated_clauses", [])
+        for c in evaluated_clauses:
+            st = (c.get("status") or "NON_COMPLIANT").upper()
+            sev = "HIGH" if st == "NON_COMPLIANT" else ("MEDIUM" if st == "PARTIALLY_COMPLIANT" else "LOW")
+            lifecycle_st = "RESOLVED" if st == "COMPLIANT" else "OPEN"
+            rf = ReportFinding(
+                id=uuid.uuid4(),
+                report_id=report.id,
+                policy_clause_id=c.get("matched_policy_clause_id") or c.get("policy_clause_id") or "POL-CLAUSE",
+                regulation_clause_id=c.get("regulation_clause_id") or "REG-CLAUSE",
+                status=st,
+                lifecycle_status=lifecycle_st,
+                confidence=float(c.get("similarity_score") or 0.85),
+                severity=sev,
+                reasoning=c.get("reasoning"),
+                recommendation=c.get("recommendation"),
+                citation=c.get("regulation_text"),
+            )
+            db.add(rf)
+
         db.commit()
         db.refresh(report)
 
