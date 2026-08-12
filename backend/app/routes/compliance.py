@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.compliance.models import ComplianceReport, ComplianceReportStatus, ReportFinding
 from app.core.dependencies import get_current_user
-from app.db.models import User, Organization
+from app.db.models import User, Organization, Document, Regulation
 from app.db.models.rbac import OrganizationMember, MemberStatus
 from app.db.models.activity import Activity
 from app.db.session import get_db
@@ -22,8 +22,14 @@ from app.routes.findings import _format_finding_response
 from app.schemas.compliance_overview import (
     ComplianceOverviewResponse,
     ComplianceOverviewSummary,
+    TeamWorkloadItem,
+    ReportExposureItem,
+    OverdueFindingItem,
+    ComplianceCalendarResponse,
+    ComplianceDeadlineItem,
+    DeadlineSummary,
 )
-from app.schemas.finding import FindingActivityItem, FindingItemResponse
+from app.schemas.finding import FindingActivityItem, FindingItemResponse, FindingAssigneeResponse
 from app.schemas.report import ReportItemResponse
 from app.services.compliance import detect_compliance_gaps
 
@@ -204,6 +210,13 @@ def get_compliance_overview(
         elif f.status == "NON_COMPLIANT":
             critical_cnt += 1
 
+    # Calculate operational metrics
+    unassigned_findings_raw = [
+        f for f in findings
+        if f.assigned_to is None and (f.lifecycle_status or "OPEN").upper() != "RESOLVED"
+    ]
+    unassigned_cnt = len(unassigned_findings_raw)
+
     summary = ComplianceOverviewSummary(
         compliance_score=overall_score,
         compliance_status=compliance_status,
@@ -215,16 +228,44 @@ def get_compliance_overview(
         critical_count=critical_cnt,
         high_count=high_cnt,
         overdue_count=overdue_cnt,
+        unassigned_count=unassigned_cnt,
     )
 
-    # 3. Attention Required: High/Critical/Open findings requiring action
+    # 3. Priority Attention Queue (Critical > High > Overdue > Due soon > Other unresolved)
+    unresolved_findings = [
+        f for f in findings if (f.lifecycle_status or "OPEN").upper() != "RESOLVED"
+    ]
+
+    sev_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+
+    def _priority_key(f: ReportFinding):
+        st = (f.lifecycle_status or "OPEN").upper()
+        sev = (f.severity or "").upper()
+        s_score = sev_rank.get(sev, 1 if f.status == "NON_COMPLIANT" else 0)
+
+        due_dt = (
+            f.remediation_due_date.replace(tzinfo=timezone.utc)
+            if (f.remediation_due_date and f.remediation_due_date.tzinfo is None)
+            else f.remediation_due_date
+        )
+        is_overdue = 1 if (due_dt and due_dt < now_utc and st != "RESOLVED") else 0
+        has_due = 1 if due_dt else 0
+        due_ts = -due_dt.timestamp() if due_dt else -9999999999
+        created_ts = f.created_at.timestamp() if f.created_at else 0
+
+        return (s_score, is_overdue, has_due, due_ts, created_ts)
+
+    unresolved_findings.sort(key=_priority_key, reverse=True)
+    priority_attention_resp: List[FindingItemResponse] = [
+        _format_finding_response(db, f) for f in unresolved_findings[:10]
+    ]
+
+    # Legacy attention_required for backward compatibility
     attention_findings = [
         f for f in findings
         if (f.severity in ("CRITICAL", "HIGH") or f.status == "NON_COMPLIANT")
         and (f.lifecycle_status or "OPEN").upper() in ("OPEN", "IN_REVIEW", "REMEDIATION", "REOPENED")
     ]
-
-    sev_rank = {"CRITICAL": 3, "HIGH": 2, "MEDIUM": 1, "LOW": 0}
     attention_findings.sort(key=lambda x: (sev_rank.get((x.severity or "").upper(), 1), x.created_at), reverse=True)
     attention_resp: List[FindingItemResponse] = [
         _format_finding_response(db, f) for f in attention_findings[:5]
@@ -240,7 +281,107 @@ def get_compliance_overview(
         _format_finding_response(db, f) for f in my_work_findings[:5]
     ]
 
-    # 5. Recent Reports
+    # 5. Team Workload Summary
+    active_members = db.scalars(
+        select(OrganizationMember).where(
+            OrganizationMember.organization_id == resolved_org_id,
+            OrganizationMember.status == MemberStatus.ACTIVE,
+        )
+    ).all()
+    member_uids = [m.user_id for m in active_members]
+    if target_org.created_by not in member_uids:
+        member_uids.append(target_org.created_by)
+
+    org_users = db.scalars(select(User).where(User.id.in_(member_uids))).all() if member_uids else []
+    user_map = {u.id: u for u in org_users}
+    role_map = {m.user_id: str(m.role.value if hasattr(m.role, "value") else m.role) for m in active_members}
+
+    team_workload_resp: List[TeamWorkloadItem] = []
+    for uid in member_uids:
+        user_obj = user_map.get(uid)
+        if not user_obj:
+            continue
+
+        u_findings = [f for f in findings if f.assigned_to == uid]
+        u_open = sum(1 for f in u_findings if (f.lifecycle_status or "OPEN").upper() in ("OPEN", "REOPENED"))
+        u_review = sum(1 for f in u_findings if (f.lifecycle_status or "OPEN").upper() == "IN_REVIEW")
+        u_remediation = sum(1 for f in u_findings if (f.lifecycle_status or "OPEN").upper() == "REMEDIATION")
+        u_resolved = sum(1 for f in u_findings if (f.lifecycle_status or "OPEN").upper() == "RESOLVED")
+
+        team_workload_resp.append(
+            TeamWorkloadItem(
+                user_id=str(user_obj.id),
+                full_name=user_obj.full_name,
+                email=user_obj.email,
+                role=role_map.get(user_obj.id, "MEMBER"),
+                open_count=u_open,
+                in_review_count=u_review,
+                remediation_count=u_remediation,
+                resolved_count=u_resolved,
+                total_assigned=len(u_findings),
+            )
+        )
+
+    # 6. Unassigned Findings
+    unassigned_resp: List[FindingItemResponse] = [
+        _format_finding_response(db, f) for f in unassigned_findings_raw[:10]
+    ]
+
+    # 7. Overdue Work
+    overdue_findings_raw = []
+    for f in findings:
+        st = (f.lifecycle_status or "OPEN").upper()
+        if st == "RESOLVED":
+            continue
+        due_dt = (
+            f.remediation_due_date.replace(tzinfo=timezone.utc)
+            if (f.remediation_due_date and f.remediation_due_date.tzinfo is None)
+            else f.remediation_due_date
+        )
+        if due_dt and due_dt < now_utc:
+            days_ov = int((now_utc - due_dt).total_seconds() // 86400)
+            formatted_f = _format_finding_response(db, f)
+            overdue_findings_raw.append(
+                OverdueFindingItem(
+                    **formatted_f.model_dump(),
+                    days_overdue=max(1, days_ov),
+                )
+            )
+
+    overdue_findings_raw.sort(key=lambda x: x.days_overdue, reverse=True)
+
+    # 8. Report Exposure Summary
+    report_exposure_resp: List[ReportExposureItem] = []
+    reg_ids = [r.regulation_id for r in org_reports if r.regulation_id]
+    pol_ids = [r.policy_document_id for r in org_reports if r.policy_document_id]
+
+    regs = db.scalars(select(Regulation).where(Regulation.id.in_(reg_ids))).all() if reg_ids else []
+    pols = db.scalars(select(Document).where(Document.id.in_(pol_ids))).all() if pol_ids else []
+
+    reg_map = {rg.id: rg.title for rg in regs}
+    pol_map = {pl.id: pl.original_filename for pl in pols}
+
+    for r in org_reports:
+        r_findings = [f for f in findings if f.report_id == r.id]
+        r_open = sum(1 for f in r_findings if (f.lifecycle_status or "OPEN").upper() != "RESOLVED")
+        r_hc = sum(
+            1 for f in r_findings
+            if (f.lifecycle_status or "OPEN").upper() != "RESOLVED"
+            and ((f.severity or "").upper() in ("CRITICAL", "HIGH") or f.status == "NON_COMPLIANT")
+        )
+
+        report_exposure_resp.append(
+            ReportExposureItem(
+                report_id=str(r.id),
+                regulation_title=reg_map.get(r.regulation_id, "Statutory Standard"),
+                policy_filename=pol_map.get(r.policy_document_id, "Policy Document"),
+                open_count=r_open,
+                high_critical_count=r_hc,
+                total_findings=len(r_findings),
+            )
+        )
+
+    # 9. Recent Reports
     recent_reports_resp: List[ReportItemResponse] = []
     for r in org_reports[:5]:
         r_findings = [f for f in findings if f.report_id == r.id]
@@ -275,7 +416,7 @@ def get_compliance_overview(
             )
         )
 
-    # 6. Recent Activity
+    # 10. Recent Activity
     member_user_ids = db.scalars(
         select(OrganizationMember.user_id).where(OrganizationMember.organization_id == resolved_org_id)
     ).all()
@@ -319,7 +460,240 @@ def get_compliance_overview(
         organization_name=target_org.name,
         summary=summary,
         attention_required=attention_resp,
+        priority_attention=priority_attention_resp,
+        team_workload=team_workload_resp,
+        unassigned_findings=unassigned_resp,
+        overdue_findings=overdue_findings_raw,
+        report_exposure=report_exposure_resp,
         my_work=my_work_resp,
         recent_activity=recent_activity_resp,
         recent_reports=recent_reports_resp,
+    )
+
+
+@router.get(
+    "/calendar",
+    response_model=ComplianceCalendarResponse,
+    summary="Get compliance remediation deadlines calendar for active organization",
+)
+def get_compliance_calendar(
+    organization_id: Optional[uuid.UUID] = Query(None, description="Optional Organization UUID filter"),
+    start_date: Optional[datetime] = Query(None, description="Optional start timestamp filter"),
+    end_date: Optional[datetime] = Query(None, description="Optional end timestamp filter"),
+    assigned_to_me: bool = Query(False, description="Filter deadlines assigned to authenticated user"),
+    overdue_only: bool = Query(False, description="Filter overdue deadlines only"),
+    severity: Optional[str] = Query(None, description="Filter by severity level"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ComplianceCalendarResponse:
+    """
+    Returns organization-scoped compliance remediation deadlines for calendar & timeline views.
+    Only findings with a valid remediation_due_date and non-RESOLVED status are surfaced.
+    """
+    target_org: Optional[Organization] = None
+
+    if organization_id:
+        target_org = db.get(Organization, organization_id)
+        if not target_org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization with ID '{organization_id}' not found.",
+            )
+        is_creator = target_org.created_by == current_user.id
+        is_active_member = db.scalar(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        ) > 0
+        if not is_creator and not is_active_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's compliance calendar.",
+            )
+    else:
+        created_org = db.scalars(
+            select(Organization).where(Organization.created_by == current_user.id).limit(1)
+        ).first()
+
+        if created_org:
+            target_org = created_org
+        else:
+            member_org_id = db.scalars(
+                select(OrganizationMember.organization_id).where(
+                    OrganizationMember.user_id == current_user.id,
+                    OrganizationMember.status == MemberStatus.ACTIVE,
+                ).limit(1)
+            ).first()
+
+            if member_org_id:
+                target_org = db.get(Organization, member_org_id)
+
+    if not target_org:
+        return ComplianceCalendarResponse(
+            organization_id=str(uuid.uuid4()),
+            organization_name="No Organization",
+            summary=DeadlineSummary(overdue_count=0, this_week_count=0, next_30_days_count=0),
+            deadlines=[],
+        )
+
+    resolved_org_id = target_org.id
+
+    # Fetch organization reports
+    org_reports = db.scalars(
+        select(ComplianceReport).where(
+            ComplianceReport.organization_id == resolved_org_id,
+            ComplianceReport.is_deleted == False,
+        )
+    ).all()
+    report_ids = [r.id for r in org_reports]
+
+    if not report_ids:
+        return ComplianceCalendarResponse(
+            organization_id=str(target_org.id),
+            organization_name=target_org.name,
+            summary=DeadlineSummary(overdue_count=0, this_week_count=0, next_30_days_count=0),
+            deadlines=[],
+        )
+
+    # Fetch findings with remediation_due_date set and NOT resolved
+    query = (
+        select(ReportFinding)
+        .where(
+            ReportFinding.report_id.in_(report_ids),
+            ReportFinding.remediation_due_date.isnot(None),
+            ReportFinding.lifecycle_status != "RESOLVED",
+        )
+    )
+
+    if assigned_to_me:
+        query = query.where(ReportFinding.assigned_to == current_user.id)
+
+    if severity:
+        query = query.where(func.upper(ReportFinding.severity) == severity.upper())
+
+    all_due_findings = db.scalars(query).all()
+
+    now_utc = datetime.now(timezone.utc)
+    week_end_utc = now_utc + timedelta(days=7)
+    thirty_days_end_utc = now_utc + timedelta(days=30)
+
+    # Compute organization summary metrics over all active due findings
+    overdue_cnt = 0
+    this_week_cnt = 0
+    next_30_days_cnt = 0
+
+    for f in all_due_findings:
+        due_dt = (
+            f.remediation_due_date.replace(tzinfo=timezone.utc)
+            if f.remediation_due_date and f.remediation_due_date.tzinfo is None
+            else f.remediation_due_date
+        )
+
+        if due_dt < now_utc:
+            overdue_cnt += 1
+        elif now_utc <= due_dt <= week_end_utc:
+            this_week_cnt += 1
+
+        if now_utc <= due_dt <= thirty_days_end_utc:
+            next_30_days_cnt += 1
+
+    summary = DeadlineSummary(
+        overdue_count=overdue_cnt,
+        this_week_count=this_week_cnt,
+        next_30_days_count=next_30_days_cnt,
+    )
+
+    # Apply date range and overdue_only filters for response items
+    filtered_findings = []
+    for f in all_due_findings:
+        due_dt = (
+            f.remediation_due_date.replace(tzinfo=timezone.utc)
+            if f.remediation_due_date and f.remediation_due_date.tzinfo is None
+            else f.remediation_due_date
+        )
+
+        if overdue_only and due_dt >= now_utc:
+            continue
+
+        if start_date:
+            s_dt = start_date.replace(tzinfo=timezone.utc) if start_date.tzinfo is None else start_date
+            if due_dt < s_dt:
+                continue
+
+        if end_date:
+            e_dt = end_date.replace(tzinfo=timezone.utc) if end_date.tzinfo is None else end_date
+            if due_dt > e_dt:
+                continue
+
+        filtered_findings.append(f)
+
+    # Pre-fetch lookup mappings (regulations, policies, assignees)
+    reg_ids = [r.regulation_id for r in org_reports if r.regulation_id]
+    pol_ids = [r.policy_document_id for r in org_reports if r.policy_document_id]
+    assignee_ids = list({f.assigned_to for f in filtered_findings if f.assigned_to})
+
+    regs = db.scalars(select(Regulation).where(Regulation.id.in_(reg_ids))).all() if reg_ids else []
+    pols = db.scalars(select(Document).where(Document.id.in_(pol_ids))).all() if pol_ids else []
+    assignees = db.scalars(select(User).where(User.id.in_(assignee_ids))).all() if assignee_ids else []
+
+    reg_map = {rg.id: rg.title for rg in regs}
+    pol_map = {pl.id: pl.original_filename for pl in pols}
+    assignee_map = {u.id: u for u in assignees}
+    report_map = {r.id: r for r in org_reports}
+
+    deadlines_resp: List[ComplianceDeadlineItem] = []
+    for f in filtered_findings:
+        due_dt = (
+            f.remediation_due_date.replace(tzinfo=timezone.utc)
+            if f.remediation_due_date and f.remediation_due_date.tzinfo is None
+            else f.remediation_due_date
+        )
+        is_ov = due_dt < now_utc
+        days_ov = int((now_utc - due_dt).total_seconds() // 86400) if is_ov else 0
+
+        r_obj = report_map.get(f.report_id)
+        reg_title = reg_map.get(r_obj.regulation_id, "Statutory Standard") if r_obj else None
+        pol_name = pol_map.get(r_obj.policy_document_id, "Policy Document") if r_obj else None
+
+        assignee_dto = None
+        if f.assigned_to and f.assigned_to in assignee_map:
+            u_obj = assignee_map[f.assigned_to]
+            assignee_dto = FindingAssigneeResponse(
+                id=str(u_obj.id),
+                full_name=u_obj.full_name,
+                email=u_obj.email,
+            )
+
+        deadlines_resp.append(
+            ComplianceDeadlineItem(
+                finding_id=str(f.id),
+                report_id=str(f.report_id),
+                regulation_title=reg_title,
+                policy_filename=pol_name,
+                policy_clause_id=f.policy_clause_id,
+                regulation_clause_id=f.regulation_clause_id,
+                status=f.status or "NON_COMPLIANT",
+                lifecycle_status=f.lifecycle_status or "OPEN",
+                severity=f.severity or "HIGH",
+                reasoning=f.reasoning,
+                citation=f.citation,
+                remediation_due_date=due_dt,
+                is_overdue=is_ov,
+                days_overdue=max(0, days_ov),
+                assigned_to=str(f.assigned_to) if f.assigned_to else None,
+                assignee=assignee_dto,
+                created_at=f.created_at,
+                updated_at=f.updated_at or f.created_at,
+            )
+        )
+
+    deadlines_resp.sort(key=lambda x: x.remediation_due_date)
+
+    return ComplianceCalendarResponse(
+        organization_id=str(target_org.id),
+        organization_name=target_org.name,
+        summary=summary,
+        deadlines=deadlines_resp,
     )
