@@ -190,7 +190,53 @@ export const complianceService = {
     const response = await api.get("/compliance/overview", { params });
     return response.data;
   },
+
+  getComplianceCalendar: async (params?: {
+    organization_id?: string;
+    start_date?: string;
+    end_date?: string;
+    assigned_to_me?: boolean;
+    overdue_only?: boolean;
+    severity?: string;
+  }): Promise<ComplianceCalendarData> => {
+    const response = await api.get("/compliance/calendar", { params });
+    return response.data;
+  },
 };
+
+export interface DeadlineSummary {
+  overdue_count: number;
+  this_week_count: number;
+  next_30_days_count: number;
+}
+
+export interface ComplianceDeadlineItem {
+  finding_id: string;
+  report_id: string;
+  regulation_title?: string | null;
+  policy_filename?: string | null;
+  policy_clause_id?: string | null;
+  regulation_clause_id?: string | null;
+  status: string;
+  lifecycle_status: string;
+  severity: string;
+  reasoning?: string | null;
+  citation?: string | null;
+  remediation_due_date: string;
+  is_overdue: boolean;
+  days_overdue: number;
+  assigned_to?: string | null;
+  assignee?: { id: string; full_name: string; email: string } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ComplianceCalendarData {
+  organization_id: string;
+  organization_name: string;
+  summary: DeadlineSummary;
+  deadlines: ComplianceDeadlineItem[];
+}
 
 export interface ComplianceOverviewSummary {
   compliance_score?: number | null;
@@ -203,6 +249,51 @@ export interface ComplianceOverviewSummary {
   critical_count: number;
   high_count: number;
   overdue_count: number;
+  unassigned_count: number;
+}
+
+export interface TeamWorkloadItem {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  open_count: number;
+  in_review_count: number;
+  remediation_count: number;
+  resolved_count: number;
+  total_assigned: number;
+}
+
+export interface ReportExposureItem {
+  report_id: string;
+  regulation_title?: string | null;
+  policy_filename?: string | null;
+  open_count: number;
+  high_critical_count: number;
+  total_findings: number;
+}
+
+export interface OverdueFindingItem {
+  id: string;
+  report_id: string;
+  policy_clause_id?: string | null;
+  regulation_clause_id?: string | null;
+  status: string;
+  lifecycle_status: string;
+  confidence?: number;
+  severity: string;
+  reasoning?: string | null;
+  recommendation?: string | null;
+  citation?: string | null;
+  matched_policy_text?: string | null;
+  assigned_to?: string | null;
+  assignee?: { id: string; full_name: string; email: string } | null;
+  remediation_due_date?: string | null;
+  is_overdue?: boolean;
+  days_overdue: number;
+  comments_count?: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ComplianceOverviewData {
@@ -228,6 +319,47 @@ export interface ComplianceOverviewData {
     created_at: string;
     updated_at: string;
   }>;
+  priority_attention: Array<{
+    id: string;
+    report_id: string;
+    policy_clause_id?: string | null;
+    regulation_clause_id?: string | null;
+    status: string;
+    lifecycle_status: string;
+    confidence?: number;
+    severity: string;
+    reasoning?: string | null;
+    recommendation?: string | null;
+    citation?: string | null;
+    matched_policy_text?: string | null;
+    assigned_to?: string | null;
+    assignee?: { id: string; full_name: string; email: string } | null;
+    remediation_due_date?: string | null;
+    is_overdue?: boolean;
+    comments_count?: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+  team_workload: TeamWorkloadItem[];
+  unassigned_findings: Array<{
+    id: string;
+    report_id: string;
+    policy_clause_id?: string | null;
+    regulation_clause_id?: string | null;
+    status: string;
+    lifecycle_status: string;
+    confidence?: number;
+    severity: string;
+    reasoning?: string | null;
+    recommendation?: string | null;
+    citation?: string | null;
+    matched_policy_text?: string | null;
+    comments_count?: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+  overdue_findings: OverdueFindingItem[];
+  report_exposure: ReportExposureItem[];
   my_work: Array<{
     id: string;
     report_id: string;

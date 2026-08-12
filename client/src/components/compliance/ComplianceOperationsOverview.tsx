@@ -26,6 +26,10 @@ import {
   User,
   LogOut,
   Building2,
+  Users,
+  AlertOctagon,
+  AlertCircle,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -398,16 +402,45 @@ export function ComplianceOperationsOverview() {
           )
         )}
 
-        {/* ── 5. Main Content Grid (Attention Required & My Work) ── */}
+        {/* ── 5. Unassigned Findings Banner ── */}
+        {summary && summary.unassigned_count > 0 && (
+          <Card className="border border-amber-500/40 bg-amber-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-foreground">
+                  {summary.unassigned_count} Unassigned Finding{summary.unassigned_count > 1 ? "s" : ""} Require Ownership
+                </h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Compliance gap findings currently lack an assigned reviewer or owner.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/compliance/my-work")}
+              className="text-xs font-semibold gap-1.5 cursor-pointer shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+            >
+              <span>Assign Owners in My Work</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </Card>
+        )}
+
+        {/* ── 6. Main Operational Grid: Priority Attention Queue & My Work ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* SECTION 1: ATTENTION REQUIRED */}
+          {/* SECTION 1: PRIORITY ATTENTION QUEUE */}
           <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
-                <ShieldAlert className="h-4 w-4 text-rose-500" /> Attention Required (High/Critical Risks)
+                <AlertOctagon className="h-4 w-4 text-rose-500" /> Priority Attention Queue
               </span>
               <span className="text-[10px] font-mono text-muted-foreground">
-                {overviewData?.attention_required.length || 0} Items
+                {overviewData?.priority_attention?.length || overviewData?.attention_required?.length || 0} Items
               </span>
             </div>
 
@@ -416,16 +449,17 @@ export function ComplianceOperationsOverview() {
                 <Skeleton className="h-16 w-full rounded-xl" />
                 <Skeleton className="h-16 w-full rounded-xl" />
               </div>
-            ) : !overviewData?.attention_required || overviewData.attention_required.length === 0 ? (
+            ) : (!overviewData?.priority_attention || overviewData.priority_attention.length === 0) &&
+              (!overviewData?.attention_required || overviewData.attention_required.length === 0) ? (
               <div className="py-8 text-center space-y-2">
                 <ShieldCheck className="h-8 w-8 text-emerald-500 mx-auto opacity-80" />
                 <p className="text-xs text-muted-foreground font-medium">
-                  Your organization has no high or critical findings requiring urgent attention.
+                  Nothing requires immediate attention. All compliance findings are on track.
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {overviewData.attention_required.map((item) => {
+                {(overviewData?.priority_attention || overviewData?.attention_required || []).slice(0, 5).map((item) => {
                   const sev = deriveSeverityBadge(item.severity, item.status);
                   const lifecycle = deriveLifecycleBadge(item.lifecycle_status);
 
@@ -433,7 +467,10 @@ export function ComplianceOperationsOverview() {
                     <div
                       key={item.id}
                       onClick={() => handleOpenDrawer(item)}
-                      className="p-3.5 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer space-y-2 group"
+                      className={cn(
+                        "p-3.5 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer space-y-2 group",
+                        item.is_overdue && "border-rose-500/40 bg-rose-500/5"
+                      )}
                     >
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5">
@@ -444,6 +481,11 @@ export function ComplianceOperationsOverview() {
                           <Badge variant="outline" className={cn("text-[10px] font-bold uppercase", lifecycle.className)}>
                             {lifecycle.label}
                           </Badge>
+                          {item.is_overdue && (
+                            <Badge variant="outline" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 text-[10px] font-bold">
+                              OVERDUE
+                            </Badge>
+                          )}
                         </div>
 
                         <span className="text-[10px] font-mono text-muted-foreground">
@@ -488,9 +530,6 @@ export function ComplianceOperationsOverview() {
                 <UserCheck className="h-4 w-4 text-indigo-500" /> My Work ({overviewData?.my_work.length || 0} Assigned)
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-muted-foreground hidden sm:inline">
-                  {user?.full_name || "Authenticated User"}
-                </span>
                 <Button
                   variant="ghost"
                   size="xs"
@@ -568,6 +607,113 @@ export function ComplianceOperationsOverview() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* ── 7. Team Workload Intelligence & Overdue Work Grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* TEAM WORKLOAD SUMMARY TABLE */}
+          <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <Users className="h-4 w-4 text-indigo-500" /> Team Workload Intelligence
+              </span>
+              <span className="text-[10px] font-mono text-muted-foreground">
+                {overviewData?.team_workload?.length || 0} Members
+              </span>
+            </div>
+
+            {isLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+              </div>
+            ) : !overviewData?.team_workload || overviewData.team_workload.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic py-6 text-center">
+                Add organization members to distribute compliance work.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b border-border/40 text-[10px] uppercase font-semibold text-muted-foreground">
+                      <th className="pb-2">Team Member</th>
+                      <th className="pb-2 text-center">Open</th>
+                      <th className="pb-2 text-center">In Review</th>
+                      <th className="pb-2 text-center">Remediation</th>
+                      <th className="pb-2 text-center">Resolved</th>
+                      <th className="pb-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/30">
+                    {overviewData.team_workload.map((m) => (
+                      <tr key={m.user_id} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-2.5 font-medium text-foreground">
+                          {m.full_name}
+                          <span className="block text-[10px] font-mono text-muted-foreground">{m.role}</span>
+                        </td>
+                        <td className="py-2.5 text-center font-bold text-blue-500 tabular-nums">{m.open_count}</td>
+                        <td className="py-2.5 text-center font-bold text-indigo-500 tabular-nums">{m.in_review_count}</td>
+                        <td className="py-2.5 text-center font-bold text-amber-500 tabular-nums">{m.remediation_count}</td>
+                        <td className="py-2.5 text-center font-bold text-emerald-500 tabular-nums">{m.resolved_count}</td>
+                        <td className="py-2.5 text-right font-bold text-foreground tabular-nums">{m.total_assigned}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* REPORT EXPOSURE SUMMARY */}
+          <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <BarChart3 className="h-4 w-4 text-indigo-500" /> Report Exposure Summary
+              </span>
+            </div>
+
+            {isLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+              </div>
+            ) : !overviewData?.report_exposure || overviewData.report_exposure.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic py-6 text-center">
+                No compliance report exposure records found.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {overviewData.report_exposure.map((exp) => (
+                  <div
+                    key={exp.report_id}
+                    onClick={() => router.push(`/compliance/reports/${exp.report_id}`)}
+                    className="p-3 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <h5 className="text-xs font-bold text-foreground truncate">
+                        {exp.regulation_title || `Report #${exp.report_id.slice(0, 8)}`}
+                      </h5>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">
+                        Policy: {exp.policy_filename || "Policy Document"}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="outline" className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 border-amber-500/30">
+                        {exp.open_count} Open
+                      </Badge>
+                      {exp.high_critical_count > 0 && (
+                        <Badge variant="outline" className="text-[10px] font-bold bg-rose-500/10 text-rose-600 border-rose-500/30">
+                          {exp.high_critical_count} High/Critical
+                        </Badge>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </Card>
@@ -688,7 +834,7 @@ export function ComplianceOperationsOverview() {
             Quick Actions
           </span>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Button
               variant="outline"
               onClick={() => router.push("/compliance/new")}
@@ -696,6 +842,15 @@ export function ComplianceOperationsOverview() {
             >
               <PlusCircle className="h-4 w-4" />
               <span>Run New Analysis</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => router.push("/compliance/calendar")}
+              className="h-12 text-xs font-semibold cursor-pointer gap-2 justify-start border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+            >
+              <Calendar className="h-4 w-4" />
+              <span>Compliance Calendar</span>
             </Button>
 
             <Button

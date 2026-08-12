@@ -380,84 +380,195 @@ export function MyWorkWorkspace() {
           </Card>
         ) : (
           /* Findings List Grid */
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-              <span>Showing {filteredFindings.length} of {findings.length} assigned items</span>
-            </div>
-
-            {filteredFindings.map((item) => {
-              const sev = deriveSeverityBadge(item.severity, item.status);
-              const lifecycle = deriveLifecycleBadge(item.lifecycle_status);
+          <div className="space-y-6">
+            {/* Needs Immediate Attention Priority Section */}
+            {(() => {
+              const needsAttention = filteredFindings.filter((item) => {
+                const s = (item.severity || "").toUpperCase();
+                return s === "CRITICAL" || s === "HIGH" || item.is_overdue || item.status === "NON_COMPLIANT";
+              });
+              const otherItems = filteredFindings.filter((item) => !needsAttention.includes(item));
 
               return (
-                <Card
-                  key={item.id}
-                  onClick={() => handleOpenDrawer(item)}
-                  className="border border-border/60 bg-card hover:border-border transition-all cursor-pointer p-4 space-y-3 group shadow-xs"
-                >
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className={cn("gap-1 text-xs uppercase font-bold", sev.className)}>
-                        {sev.icon}
-                        {sev.label}
-                      </Badge>
-                      <Badge variant="outline" className={cn("text-xs font-bold uppercase", lifecycle.className)}>
-                        {lifecycle.label}
-                      </Badge>
-                      {item.is_overdue && (
-                        <Badge variant="outline" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 gap-1 font-bold text-[10px]">
-                          <AlertTriangle className="h-3 w-3" />
-                          <span>OVERDUE</span>
-                        </Badge>
-                      )}
-                      <span className="text-xs font-mono text-muted-foreground">
-                        ID: #{item.id.slice(0, 8)}
-                      </span>
-                    </div>
+                <>
+                  {needsAttention.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between border-b border-rose-500/30 pb-2">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
+                          <AlertTriangle className="h-4 w-4 text-rose-500" /> Needs Immediate Attention ({needsAttention.length})
+                        </h3>
+                        <span className="text-[10px] text-muted-foreground font-mono">Critical / High / Overdue</span>
+                      </div>
 
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      {item.remediation_due_date && (
-                        <div className="flex items-center gap-1 font-medium text-foreground">
-                          <Calendar className="h-3.5 w-3.5 text-indigo-500" />
-                          <span>Due: {format(new Date(item.remediation_due_date), "dd MMM yyyy")}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>{format(new Date(item.created_at), "MMM d, yyyy")}</span>
+                      <div className="space-y-3">
+                        {needsAttention.map((item) => {
+                          const sev = deriveSeverityBadge(item.severity, item.status);
+                          const lifecycle = deriveLifecycleBadge(item.lifecycle_status);
+
+                          return (
+                            <Card
+                              key={item.id}
+                              onClick={() => handleOpenDrawer(item)}
+                              className={cn(
+                                "border border-border/60 bg-card hover:border-border transition-all cursor-pointer p-4 space-y-3 group shadow-xs",
+                                item.is_overdue && "border-rose-500/40 bg-rose-500/5"
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge variant="outline" className={cn("gap-1 text-xs uppercase font-bold", sev.className)}>
+                                    {sev.icon}
+                                    {sev.label}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn("text-xs font-bold uppercase", lifecycle.className)}>
+                                    {lifecycle.label}
+                                  </Badge>
+                                  {item.is_overdue && (
+                                    <Badge variant="outline" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 gap-1 font-bold text-[10px]">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      <span>OVERDUE</span>
+                                    </Badge>
+                                  )}
+                                  <span className="text-xs font-mono text-muted-foreground">
+                                    ID: #{item.id.slice(0, 8)}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                  {item.remediation_due_date && (
+                                    <div className="flex items-center gap-1 font-medium text-foreground">
+                                      <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+                                      <span>Due: {format(new Date(item.remediation_due_date), "dd MMM yyyy")}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-3.5 w-3.5" />
+                                    <span>{format(new Date(item.created_at), "MMM d, yyyy")}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                                  {item.policy_clause_id && <Badge variant="secondary" className="text-[10px]">{item.policy_clause_id}</Badge>}
+                                  {item.regulation_clause_id && <Badge variant="outline" className="text-[10px]">{item.regulation_clause_id}</Badge>}
+                                </div>
+                                <p className="text-xs text-foreground font-medium line-clamp-2">
+                                  {item.citation || item.reasoning || "Compliance finding item assigned for review."}
+                                </p>
+                              </div>
+
+                              {item.recommendation && (
+                                <p className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded-lg border border-border/30 line-clamp-2">
+                                  <strong className="text-foreground">Recommendation:</strong> {item.recommendation}
+                                </p>
+                              )}
+
+                              <div className="flex items-center justify-between pt-1 border-t border-border/30">
+                                <span className="text-[11px] text-muted-foreground">
+                                  Assigned to: <strong className="text-indigo-500">{item.assignee?.full_name || "You"}</strong>
+                                </span>
+
+                                <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-indigo-500 gap-1 group-hover:translate-x-0.5 transition-transform">
+                                  <span>Open Work Item</span>
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </Card>
+                          );
+                        })}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                      {item.policy_clause_id && <Badge variant="secondary" className="text-[10px]">{item.policy_clause_id}</Badge>}
-                      {item.regulation_clause_id && <Badge variant="outline" className="text-[10px]">{item.regulation_clause_id}</Badge>}
-                    </div>
-                    <p className="text-xs text-foreground font-medium line-clamp-2">
-                      {item.citation || item.reasoning || "Compliance finding item assigned for review."}
-                    </p>
-                  </div>
-
-                  {item.recommendation && (
-                    <p className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded-lg border border-border/30 line-clamp-2">
-                      <strong className="text-foreground">Recommendation:</strong> {item.recommendation}
-                    </p>
                   )}
 
-                  <div className="flex items-center justify-between pt-1 border-t border-border/30">
-                    <span className="text-[11px] text-muted-foreground">
-                      Assigned to: <strong className="text-indigo-500">{item.assignee?.full_name || "You"}</strong>
-                    </span>
+                  {/* All Other Assigned Items Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        {needsAttention.length > 0 ? `All Other Assigned Work (${otherItems.length})` : `All Assigned Findings (${filteredFindings.length})`}
+                      </h3>
+                      <span className="text-[10px] text-muted-foreground font-mono">Showing {filteredFindings.length} items</span>
+                    </div>
 
-                    <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-indigo-500 gap-1 group-hover:translate-x-0.5 transition-transform">
-                      <span>Open Work Item</span>
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="space-y-3">
+                      {(needsAttention.length > 0 ? otherItems : filteredFindings).map((item) => {
+                        const sev = deriveSeverityBadge(item.severity, item.status);
+                        const lifecycle = deriveLifecycleBadge(item.lifecycle_status);
+
+                        return (
+                          <Card
+                            key={item.id}
+                            onClick={() => handleOpenDrawer(item)}
+                            className="border border-border/60 bg-card hover:border-border transition-all cursor-pointer p-4 space-y-3 group shadow-xs"
+                          >
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline" className={cn("gap-1 text-xs uppercase font-bold", sev.className)}>
+                                  {sev.icon}
+                                  {sev.label}
+                                </Badge>
+                                <Badge variant="outline" className={cn("text-xs font-bold uppercase", lifecycle.className)}>
+                                  {lifecycle.label}
+                                </Badge>
+                                {item.is_overdue && (
+                                  <Badge variant="outline" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 gap-1 font-bold text-[10px]">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    <span>OVERDUE</span>
+                                  </Badge>
+                                )}
+                                <span className="text-xs font-mono text-muted-foreground">
+                                  ID: #{item.id.slice(0, 8)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                {item.remediation_due_date && (
+                                  <div className="flex items-center gap-1 font-medium text-foreground">
+                                    <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+                                    <span>Due: {format(new Date(item.remediation_due_date), "dd MMM yyyy")}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3.5 w-3.5" />
+                                  <span>{format(new Date(item.created_at), "MMM d, yyyy")}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                                {item.policy_clause_id && <Badge variant="secondary" className="text-[10px]">{item.policy_clause_id}</Badge>}
+                                {item.regulation_clause_id && <Badge variant="outline" className="text-[10px]">{item.regulation_clause_id}</Badge>}
+                              </div>
+                              <p className="text-xs text-foreground font-medium line-clamp-2">
+                                {item.citation || item.reasoning || "Compliance finding item assigned for review."}
+                              </p>
+                            </div>
+
+                            {item.recommendation && (
+                              <p className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded-lg border border-border/30 line-clamp-2">
+                                <strong className="text-foreground">Recommendation:</strong> {item.recommendation}
+                              </p>
+                            )}
+
+                            <div className="flex items-center justify-between pt-1 border-t border-border/30">
+                              <span className="text-[11px] text-muted-foreground">
+                                Assigned to: <strong className="text-indigo-500">{item.assignee?.full_name || "You"}</strong>
+                              </span>
+
+                              <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-indigo-500 gap-1 group-hover:translate-x-0.5 transition-transform">
+                                <span>Open Work Item</span>
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
                   </div>
-                </Card>
+                </>
               );
-            })}
+            })()}
           </div>
         )}
       </div>
