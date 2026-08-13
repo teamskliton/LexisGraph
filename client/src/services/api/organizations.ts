@@ -34,6 +34,7 @@ export interface InvitationDetailsResponse {
   organization_name: string;
   role: string;
   email?: string | null;
+  is_email_bound: boolean;
   inviter_name: string;
   expires_at: string;
   is_valid: boolean;
@@ -50,6 +51,7 @@ export interface AcceptInvitationResponse {
   message: string;
   organization_id: string;
   organization_name: string;
+  role?: string;
 }
 
 export const organizationsService = {

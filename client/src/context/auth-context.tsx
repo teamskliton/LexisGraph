@@ -89,11 +89,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { confirm_password, ...registerPayload } = data;
       await authService.register(registerPayload);
-      toast.success("Registration successful! You can now log in.");
-      router.push("/login");
+
+      // Check whether we have a pending invite redirect BEFORE doing anything
+      // else — the invite page saves this before navigating to /register.
+      const postAuthRedirect =
+        typeof window !== "undefined"
+          ? localStorage.getItem("post_auth_redirect")
+          : null;
+
+      if (postAuthRedirect) {
+        // Invite flow: auto-login so the user lands back on the invite page
+        // without having to re-enter credentials on /login.
+        try {
+          const tokenResponse = await authService.login({
+            username: registerPayload.email, // backend accepts email as username
+            password: registerPayload.password,
+          });
+          setToken(tokenResponse.access_token);
+          setTokenState(tokenResponse.access_token);
+          const profile = await authService.getCurrentUser();
+          setUser(profile);
+
+          toast.success("Account created! Completing your invitation...");
+          localStorage.removeItem("post_auth_redirect");
+          router.push(postAuthRedirect);
+        } catch {
+          // Auto-login failed — fall back to manual login flow with redirect preserved
+          toast.success("Account created! Please sign in to continue.");
+          router.push("/login");
+        }
+      } else {
+        // Normal registration flow: direct to login
+        toast.success("Registration successful! You can now log in.");
+        router.push("/login");
+      }
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      const errorMsg = axiosError.response?.data?.detail || "Registration failed. Please try again.";
+      const errorMsg =
+        axiosError.response?.data?.detail || "Registration failed. Please try again.";
       toast.error(errorMsg);
       throw error;
     } finally {
