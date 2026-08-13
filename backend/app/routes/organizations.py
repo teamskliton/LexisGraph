@@ -237,17 +237,26 @@ def get_invitation_by_token(
     ).first()
 
     if not inv:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invitation token.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invitation token. This link may have already been used or does not exist.",
+        )
 
     exp = inv.expires_at
     if exp.tzinfo is None:
         exp = exp.replace(tzinfo=timezone.utc)
 
     if exp < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation token has expired.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation link has expired. Please ask the admin to send a new one.",
+        )
 
     org = db.get(Organization, inv.organization_id)
     inviter = db.get(User, inv.invited_by)
+
+    # Determine whether this invitation is email-bound or a shareable link
+    is_email_bound = inv.email is not None and inv.email.strip() != ""
 
     return {
         "token": token,
@@ -255,6 +264,7 @@ def get_invitation_by_token(
         "organization_name": org.name if org else "Organization Workspace",
         "role": inv.role.value if hasattr(inv.role, "value") else str(inv.role),
         "email": inv.email,
+        "is_email_bound": is_email_bound,
         "inviter_name": inviter.full_name if inviter else "Team Administrator",
         "expires_at": inv.expires_at,
         "is_valid": True,
@@ -436,53 +446,107 @@ def accept_invitation(
     ).first()
 
     if not inv:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invitation token.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invitation token. This link may have already been used or does not exist.",
+        )
 
     exp = inv.expires_at
     if exp.tzinfo is None:
         exp = exp.replace(tzinfo=timezone.utc)
 
     if exp < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation token has expired.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation link has expired. Please ask the admin to send a new one.",
+        )
+
+    # ── Email-match enforcement ─────────────────────────────────────────────
+    # If the invitation is email-bound, only the exact invited email can accept.
+    is_email_bound = inv.email is not None and inv.email.strip() != ""
+    if is_email_bound:
+        if current_user.email.lower().strip() != inv.email.lower().strip():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"This invitation was sent to {inv.email}. "
+                    "Please sign in with the invited email address to accept it."
+                ),
+            )
 
     org = db.get(Organization, inv.organization_id)
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The organization for this invitation no longer exists.",
+        )
 
-    # Check if membership exists
+    # Capture values from invitation BEFORE any delete/commit
+    # to avoid referencing a detached/deleted SQLAlchemy object in the audit log.
+    invitation_org_id = inv.organization_id
+    invitation_role = inv.role
+    invitation_invited_by = inv.invited_by
+    org_name = org.name
+
+    # ── Idempotent membership creation ─────────────────────────────────────
     member = db.query(OrganizationMember).filter(
-        OrganizationMember.organization_id == inv.organization_id,
+        OrganizationMember.organization_id == invitation_org_id,
         OrganizationMember.user_id == current_user.id,
     ).first()
 
     if not member:
         member = OrganizationMember(
             id=uuid.uuid4(),
-            organization_id=inv.organization_id,
+            organization_id=invitation_org_id,
             user_id=current_user.id,
-            role=inv.role,
+            role=invitation_role,
             status=MemberStatus.ACTIVE,
-            invited_by=inv.invited_by,
+            invited_by=invitation_invited_by,
         )
         db.add(member)
     else:
+        # Already a member — update role to the invited role and ensure ACTIVE
         member.status = MemberStatus.ACTIVE
-        member.role = inv.role
+        member.role = invitation_role
 
+    # Capture member id before commit (needed for audit log)
+    member_id_for_audit = member.id
+
+    # Consume the invitation (delete it so it cannot be reused)
     db.delete(inv)
-    db.commit()
 
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("accept_invitation: DB commit failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to accept invitation. Please try again.",
+        ) from exc
+
+    # Audit log uses the captured local variables — NOT the deleted inv object
     audit_service.log_audit_event(
         db,
         user_id=current_user.id,
         action="INVITATION_ACCEPTED",
-        organization_id=inv.organization_id,
+        organization_id=invitation_org_id,
         entity="OrganizationMember",
-        entity_id=str(member.id),
+        entity_id=str(member_id_for_audit),
+    )
+
+    logger.info(
+        "Invitation accepted: user=%s org=%s role=%s",
+        current_user.id,
+        invitation_org_id,
+        invitation_role,
     )
 
     return {
         "message": "Invitation accepted successfully",
-        "organization_id": str(inv.organization_id),
-        "organization_name": org.name if org else "Organization Workspace",
+        "organization_id": str(invitation_org_id),
+        "organization_name": org_name,
+        "role": invitation_role.value if hasattr(invitation_role, "value") else str(invitation_role),
     }
 
 

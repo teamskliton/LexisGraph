@@ -22,7 +22,17 @@ export default function LoginPage() {
   // Redirect if already logged in
   useEffect(() => {
     if (user && !authLoading) {
-      router.replace("/dashboard");
+      // If coming from an invitation link, go back there instead of /dashboard
+      const postAuthRedirect =
+        typeof window !== "undefined"
+          ? localStorage.getItem("post_auth_redirect")
+          : null;
+      if (postAuthRedirect) {
+        // Don't remove here — auth-context login() will remove it after redirect
+        router.replace(postAuthRedirect);
+      } else {
+        router.replace("/dashboard");
+      }
     }
   }, [user, authLoading, router]);
 

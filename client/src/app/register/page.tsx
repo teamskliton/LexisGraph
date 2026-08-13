@@ -22,7 +22,17 @@ export default function RegisterPage() {
   // Redirect if already logged in
   useEffect(() => {
     if (user && !authLoading) {
-      router.replace("/dashboard");
+      // If coming from an invitation link, go back there instead of /dashboard
+      const postAuthRedirect =
+        typeof window !== "undefined"
+          ? localStorage.getItem("post_auth_redirect")
+          : null;
+      if (postAuthRedirect) {
+        localStorage.removeItem("post_auth_redirect");
+        router.replace(postAuthRedirect);
+      } else {
+        router.replace("/dashboard");
+      }
     }
   }, [user, authLoading, router]);
 
