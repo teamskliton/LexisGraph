@@ -72,6 +72,33 @@ def list_notifications(
     query = query.order_by(Notification.created_at.desc()).offset(offset).limit(limit)
 
     notifications = db.scalars(query).all()
+
+    # Safe backfill for legacy notifications without finding_id
+    from app.compliance.models import ReportFinding, ComplianceReport
+    from sqlalchemy import cast, String
+    import re
+
+    for n in notifications:
+        if not n.finding_id and n.type and n.type.startswith("FINDING_"):
+            match = re.search(r"#([0-9a-fA-F\-]{8,36})", n.message or n.title)
+            if match:
+                prefix = match.group(1).lower()
+                matching_finding = db.scalars(
+                    select(ReportFinding.id)
+                    .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+                    .where(
+                        ComplianceReport.organization_id == n.organization_id,
+                        cast(ReportFinding.id, String).ilike(f"{prefix}%"),
+                    )
+                    .limit(1)
+                ).first()
+                if matching_finding:
+                    n.finding_id = matching_finding
+                    try:
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+
     return [
         NotificationResponse(
             id=str(n.id),
@@ -83,6 +110,7 @@ def list_notifications(
             is_read=n.is_read,
             finding_id=str(n.finding_id) if n.finding_id else None,
             report_id=str(n.report_id) if n.report_id else None,
+            comment_id=str(n.comment_id) if n.comment_id else None,
             created_at=n.created_at,
         )
         for n in notifications
@@ -151,13 +179,22 @@ def mark_notification_read(
         is_read=notification.is_read,
         finding_id=str(notification.finding_id) if notification.finding_id else None,
         report_id=str(notification.report_id) if notification.report_id else None,
+        comment_id=str(notification.comment_id) if notification.comment_id else None,
         created_at=notification.created_at,
     )
 
 
 @router.patch(
     "/read-all",
-    summary="Mark all unread notifications as read",
+    summary="Mark all unread notifications as read (PATCH)",
+)
+@router.post(
+    "/read-all",
+    summary="Mark all unread notifications as read (POST)",
+)
+@router.post(
+    "/mark-all-read",
+    summary="Mark all unread notifications as read (Alias)",
 )
 def mark_all_read(
     organization_id: Optional[uuid.UUID] = Query(None, description="Optional organization UUID filter"),

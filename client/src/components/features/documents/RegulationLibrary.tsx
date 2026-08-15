@@ -45,6 +45,8 @@ import { RegulationDetailsDrawer } from "./RegulationDetailsDrawer";
 import { DocumentUpload } from "./DocumentUpload";
 import type { OrganizationDocumentExtended } from "./documents-types";
 
+import { useAuth } from "@/context/auth-context";
+
 interface RegulationLibraryProps {
   organizationId?: string;
   organizationName?: string;
@@ -54,6 +56,7 @@ export const RegulationLibrary = memo(function RegulationLibrary({
   organizationId = "org-001",
   organizationName = "Organization Workspace",
 }: RegulationLibraryProps) {
+  const { permissions } = useAuth();
   const [regulations, setRegulations] = useState<GlobalRegulation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -175,13 +178,15 @@ export const RegulationLibrary = memo(function RegulationLibrary({
               <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-primary")} />
               Refresh
             </Button>
-            <Button
-              size="sm"
-              onClick={() => setIsUploadOpen(true)}
-              className="gap-1.5 text-xs font-semibold cursor-pointer"
-            >
-              <Upload className="h-3.5 w-3.5" /> Import Regulation
-            </Button>
+            {permissions.canUploadDocuments && (
+              <Button
+                size="sm"
+                onClick={() => setIsUploadOpen(true)}
+                className="gap-1.5 text-xs font-semibold cursor-pointer"
+              >
+                <Upload className="h-3.5 w-3.5" /> Import Regulation
+              </Button>
+            )}
           </div>
         </div>
 

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, LoginInput } from "@/services/auth-service";
@@ -13,7 +13,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Eye, EyeOff, ShieldCheck, Scale, Network, ArrowRight, Loader2 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const inviteToken =
+    searchParams.get("invite_token") ||
+    (typeof window !== "undefined"
+      ? localStorage.getItem("pending_invite_token")
+      : null);
+
   const { user, login, isLoading: authLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,20 +28,14 @@ export default function LoginPage() {
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user && !authLoading) {
-      // If coming from an invitation link, go back there instead of /dashboard
-      const postAuthRedirect =
-        typeof window !== "undefined"
-          ? localStorage.getItem("post_auth_redirect")
-          : null;
-      if (postAuthRedirect) {
-        // Don't remove here — auth-context login() will remove it after redirect
-        router.replace(postAuthRedirect);
+    if (user && !authLoading && !isSubmitting) {
+      if (inviteToken) {
+        router.replace(`/invite/${inviteToken}`);
       } else {
         router.replace("/dashboard");
       }
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, isSubmitting, inviteToken]);
 
   const {
     register,
@@ -51,7 +52,7 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginInput) => {
     setIsSubmitting(true);
     try {
-      await login(data);
+      await login(data, inviteToken || undefined);
     } catch (err) {
       // Errors handled by toast inside auth-context
       console.error(err);
@@ -230,5 +231,19 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

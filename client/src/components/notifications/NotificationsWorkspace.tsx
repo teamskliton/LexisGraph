@@ -93,14 +93,32 @@ export function NotificationsWorkspace() {
       }
     }
 
-    if (notification.finding_id) {
-      try {
-        const findingDetail = await findingsService.getFinding(notification.finding_id);
-        setSelectedFinding(findingDetail as FindingItem);
-        setIsDrawerOpen(true);
-      } catch (err) {
-        router.push("/compliance/my-work");
+    if (notification.organization_id && typeof window !== "undefined") {
+      const currentStored = localStorage.getItem("selected_organization_id");
+      if (currentStored !== notification.organization_id) {
+        localStorage.setItem("selected_organization_id", notification.organization_id);
+        window.dispatchEvent(new Event("organization_changed"));
       }
+    }
+
+    if (notification.finding_id) {
+      const isCommentRelated =
+        Boolean(notification.comment_id) ||
+        notification.type.includes("COMMENT") ||
+        notification.type.includes("MENTION");
+
+      if (isCommentRelated) {
+        const queryParams = new URLSearchParams();
+        queryParams.set("tab", "discussion");
+        if (notification.comment_id) {
+          queryParams.set("commentId", notification.comment_id);
+        }
+        router.push(`/findings/${notification.finding_id}?${queryParams.toString()}`);
+      } else {
+        router.push(`/findings/${notification.finding_id}`);
+      }
+    } else {
+      router.push("/compliance/my-work?view=all");
     }
   };
 
@@ -116,12 +134,22 @@ export function NotificationsWorkspace() {
 
   const renderIcon = (type: string) => {
     switch (type) {
+      case "FINDING_SUBMITTED_FOR_REVIEW":
+        return <CheckCheck className="h-5 w-5 text-sky-500 shrink-0" />;
+      case "FINDING_RESOLVED":
+        return <CheckCheck className="h-5 w-5 text-emerald-500 shrink-0" />;
+      case "FINDING_REJECTED":
+        return <ShieldAlert className="h-5 w-5 text-rose-500 shrink-0" />;
       case "FINDING_ASSIGNED":
         return <UserCheck className="h-5 w-5 text-indigo-500 shrink-0" />;
       case "FINDING_STATUS_CHANGED":
         return <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0" />;
       case "FINDING_COMMENTED":
+      case "FINDING_COMMENT_REPLIED":
+      case "FINDING_MENTIONED":
         return <MessageSquare className="h-5 w-5 text-blue-500 shrink-0" />;
+      case "FINDING_COMMENT_RESOLVED":
+        return <CheckCheck className="h-5 w-5 text-emerald-500 shrink-0" />;
       case "FINDING_REOPENED":
         return <RotateCcw className="h-5 w-5 text-rose-500 shrink-0" />;
       default:
@@ -210,7 +238,7 @@ export function NotificationsWorkspace() {
                 onClick={() => setFilterTab("UNREAD")}
                 className="text-xs font-semibold cursor-pointer"
               >
-                Unread Only
+                Unread Only {unreadCount > 0 ? `(${unreadCount})` : ""}
               </Button>
             </div>
 
@@ -239,9 +267,13 @@ export function NotificationsWorkspace() {
         ) : notifications.length === 0 ? (
           <Card className="border border-dashed border-border/60 bg-muted/10 p-12 text-center space-y-3">
             <Bell className="h-10 w-10 text-muted-foreground opacity-40 mx-auto" />
-            <h3 className="text-sm font-bold text-foreground">You're all caught up.</h3>
+            <h3 className="text-sm font-bold text-foreground">
+              {filterTab === "UNREAD" ? "You're all caught up." : "No notifications yet."}
+            </h3>
             <p className="text-xs text-muted-foreground">
-              {filterTab === "UNREAD" ? "No unread notifications." : "No notifications found for this organization."}
+              {filterTab === "UNREAD"
+                ? "No unread notifications."
+                : "No notifications found for this organization."}
             </p>
           </Card>
         ) : (
@@ -252,35 +284,57 @@ export function NotificationsWorkspace() {
                 onClick={() => handleMarkAsRead(item)}
                 className={cn(
                   "border border-border/60 bg-card hover:border-border transition-all cursor-pointer p-4 space-y-2 group shadow-xs",
-                  !item.is_read && "border-indigo-500/40 bg-indigo-500/5"
+                  !item.is_read && "border-indigo-500/40 bg-indigo-500/5 dark:bg-indigo-500/10"
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-xl bg-muted/40 border border-border/40 mt-0.5">
+                    {/* Unread indicator */}
+                    <div className="mt-2 shrink-0">
+                      {!item.is_read ? (
+                        <span className="h-2.5 w-2.5 rounded-full bg-indigo-600 dark:bg-indigo-400 block" title="Unread" />
+                      ) : (
+                        <span className="h-2.5 w-2.5 rounded-full border border-muted-foreground/30 block" title="Read" />
+                      )}
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-muted/40 border border-border/40 mt-0.5 shrink-0">
                       {renderIcon(item.type)}
                     </div>
 
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className={cn("text-xs font-bold", !item.is_read ? "text-foreground" : "text-muted-foreground")}>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className={cn("text-xs", !item.is_read ? "font-bold text-foreground" : "font-medium text-muted-foreground")}>
                           {item.title}
                         </h4>
                         {!item.is_read && (
-                          <Badge variant="outline" className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20 text-[10px]">
-                            New
+                          <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 text-[10px] font-bold">
+                            Unread
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{item.message}</p>
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        {format(new Date(item.created_at), "MMM d, yyyy · HH:mm")}
-                      </span>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{item.message}</p>
+                      
+                      <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {format(new Date(item.created_at), "MMM d, yyyy · HH:mm")}
+                        </span>
+                        {item.finding_id && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono text-indigo-600 dark:text-indigo-400 border-indigo-500/20 bg-indigo-500/5">
+                            Finding #{item.finding_id.slice(0, 8)}
+                          </Badge>
+                        )}
+                        {item.comment_id && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono text-muted-foreground border-border/50">
+                            Discussion
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {item.finding_id && (
-                    <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-indigo-500 gap-1 group-hover:translate-x-0.5 transition-transform">
+                    <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-indigo-500 gap-1 group-hover:translate-x-0.5 transition-transform shrink-0">
                       <span>Inspect Finding</span>
                       <ExternalLink className="h-3 w-3" />
                     </Button>

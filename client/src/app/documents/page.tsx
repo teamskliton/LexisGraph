@@ -93,7 +93,7 @@ function StatusBadge({ status }: { status: ProcessingStatus }) {
 // ---------------------------------------------------------------------------
 
 export function DocumentsContent() {
-  const { logout, user } = useAuth();
+  const { logout, user, permissions } = useAuth();
   const router = useRouter();
 
   // Active Organization state
@@ -262,12 +262,14 @@ export function DocumentsContent() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <Button
-              onClick={() => setIsUploadOpen(true)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 px-4 rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer gap-1.5 font-semibold"
-            >
-              <Upload className="h-4 w-4" /> Upload Policy
-            </Button>
+            {permissions.canUploadDocuments && (
+              <Button
+                onClick={() => setIsUploadOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 px-4 rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer gap-1.5 font-semibold"
+              >
+                <Upload className="h-4 w-4" /> Upload Policy
+              </Button>
+            )}
           </div>
         </div>
 
@@ -331,13 +333,15 @@ export function DocumentsContent() {
                     <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                       Upload company policies (POSH, Privacy, Leave, IT) to evaluate them against statutory mandates.
                     </p>
-                    <Button
-                      size="sm"
-                      onClick={() => setIsUploadOpen(true)}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 cursor-pointer gap-1.5"
-                    >
-                      <Upload className="h-3.5 w-3.5" /> Upload First Policy
-                    </Button>
+                    {permissions.canUploadDocuments && (
+                      <Button
+                        size="sm"
+                        onClick={() => setIsUploadOpen(true)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 cursor-pointer gap-1.5"
+                      >
+                        <Upload className="h-3.5 w-3.5" /> Upload First Policy
+                      </Button>
+                    )}
                   </Card>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -405,14 +409,16 @@ export function DocumentsContent() {
                             >
                               <Sparkles className="h-3 w-3" /> Ask AI
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              onClick={() => router.push("/compliance")}
-                              className="bg-background border-border text-xs text-indigo-600 dark:text-indigo-400 hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
-                            >
-                              <Zap className="h-3 w-3" /> Analyze
-                            </Button>
+                            {permissions.canRunAnalysis && (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                onClick={() => router.push("/compliance")}
+                                className="bg-background border-border text-xs text-indigo-600 dark:text-indigo-400 hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
+                              >
+                                <Zap className="h-3 w-3" /> Analyze
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon-xs"
@@ -422,15 +428,17 @@ export function DocumentsContent() {
                             >
                               <Network className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              onClick={() => setDeleteTarget(p)}
-                              className="text-muted-foreground hover:text-rose-500 h-7 w-7 cursor-pointer"
-                              title="Delete Policy"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {permissions.canDeleteDocuments && (
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => setDeleteTarget(p)}
+                                className="text-muted-foreground hover:text-rose-500 h-7 w-7 cursor-pointer"
+                                title="Delete Policy"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </Card>

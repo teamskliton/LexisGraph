@@ -47,6 +47,7 @@ import { DocumentResponse } from "@/types/document";
 import { ProcessingBadge } from "./ProcessingBadge";
 import { DocumentPreviewDrawer } from "./DocumentPreviewDrawer";
 import { DocumentUpload } from "./DocumentUpload";
+import { useAuth } from "@/context/auth-context";
 import type { OrganizationDocumentExtended, ProcessingStatus, DocumentCategory } from "./documents-types";
 
 interface PolicyCenterProps {
@@ -59,6 +60,7 @@ export const PolicyCenter = memo(function PolicyCenter({
   organizationName = "Organization Workspace",
 }: PolicyCenterProps) {
   const router = useRouter();
+  const { permissions } = useAuth();
 
   const [documents, setDocuments] = useState<OrganizationDocumentExtended[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -205,13 +207,15 @@ export const PolicyCenter = memo(function PolicyCenter({
               <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-primary")} />
               Refresh
             </Button>
-            <Button
-              size="sm"
-              onClick={() => setIsUploadOpen(true)}
-              className="gap-1.5 text-xs font-semibold cursor-pointer"
-            >
-              <Upload className="h-3.5 w-3.5" /> Upload Policy
-            </Button>
+            {permissions.canUploadDocuments && (
+              <Button
+                size="sm"
+                onClick={() => setIsUploadOpen(true)}
+                className="gap-1.5 text-xs font-semibold cursor-pointer"
+              >
+                <Upload className="h-3.5 w-3.5" /> Upload Policy
+              </Button>
+            )}
           </div>
         </div>
 
@@ -413,16 +417,22 @@ export const PolicyCenter = memo(function PolicyCenter({
                             <DropdownMenuItem onClick={() => setPreviewDoc(doc)} className="gap-2 text-xs cursor-pointer">
                               <Eye className="h-3.5 w-3.5" /> Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push("/compliance")} className="gap-2 text-xs cursor-pointer">
-                              <Zap className="h-3.5 w-3.5" /> Run Analysis
-                            </DropdownMenuItem>
+                            {permissions.canRunAnalysis && (
+                              <DropdownMenuItem onClick={() => router.push("/compliance")} className="gap-2 text-xs cursor-pointer">
+                                <Zap className="h-3.5 w-3.5" /> Run Analysis
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => router.push("/reports")} className="gap-2 text-xs cursor-pointer">
                               <BarChart3 className="h-3.5 w-3.5" /> View Reports
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => handleDeleteDoc(doc.id)} className="gap-2 text-xs cursor-pointer">
-                              <Trash2 className="h-3.5 w-3.5" /> Delete
-                            </DropdownMenuItem>
+                            {permissions.canDeleteDocuments && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onClick={() => handleDeleteDoc(doc.id)} className="gap-2 text-xs cursor-pointer">
+                                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>

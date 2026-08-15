@@ -35,6 +35,7 @@ import {
 import { documentService } from "@/services/document-service";
 import { reportService } from "@/services/reportService";
 import { ProtectedRoute } from "@/components/layout/protected-route";
+import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import {
   OrganizationCard,
@@ -139,6 +140,7 @@ function OrgListSkeleton() {
 
 function OrganizationsContent() {
   const router = useRouter();
+  const { permissions } = useAuth();
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [enrichedOrgs, setEnrichedOrgs] = useState<EnrichedOrganizationData[]>([]);
@@ -399,14 +401,16 @@ function OrganizationsContent() {
               <span>Import</span>
             </Button>
 
-            <Button
-              size="sm"
-              onClick={handleCreateNew}
-              className="gap-1.5 text-xs font-semibold cursor-pointer h-9 px-4 bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
-            >
-              <Plus className="h-4 w-4" />
-              <span>New Organization</span>
-            </Button>
+            {permissions.canCreateOrganization && (
+              <Button
+                size="sm"
+                onClick={handleCreateNew}
+                className="gap-1.5 text-xs font-semibold cursor-pointer h-9 px-4 bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Organization</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -671,14 +675,16 @@ function OrganizationsContent() {
               </p>
             </div>
             <div className="flex items-center gap-3 pt-2">
-              <Button
-                size="sm"
-                onClick={handleCreateNew}
-                className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs px-4"
-              >
-                <Plus className="h-4 w-4" />
-                <span>New Organization</span>
-              </Button>
+              {permissions.canCreateOrganization && (
+                <Button
+                  size="sm"
+                  onClick={handleCreateNew}
+                  className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs px-4"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>New Organization</span>
+                </Button>
+              )}
 
               <Button
                 variant="outline"

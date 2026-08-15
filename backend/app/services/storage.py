@@ -91,13 +91,15 @@ def _get_extension(filename: str) -> str:
     return Path(filename).suffix.lower()
 
 
-def _ensure_storage_dirs() -> tuple[Path, Path]:
-    """Ensure all storage directories exist. Returns (regulations_dir, policies_dir)."""
+def _ensure_storage_dirs() -> tuple[Path, Path, Path]:
+    """Ensure all storage directories exist. Returns (regulations_dir, policies_dir, evidence_dir)."""
     regulations_dir = _STORAGE_ROOT / "regulations"
     policies_dir = _STORAGE_ROOT / "policies"
+    evidence_dir = _STORAGE_ROOT / "evidence"
     regulations_dir.mkdir(parents=True, exist_ok=True)
     policies_dir.mkdir(parents=True, exist_ok=True)
-    return regulations_dir, policies_dir
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    return regulations_dir, policies_dir, evidence_dir
 
 
 def validate_file(file: UploadFile) -> None:
@@ -107,18 +109,6 @@ def validate_file(file: UploadFile) -> None:
     Validates:
     - MIME type is application/pdf
     - File size does not exceed MAX_FILE_SIZE
-
-    Parameters
-    ----------
-    file : UploadFile
-        The uploaded file to validate.
-
-    Raises
-    ------
-    InvalidMimeTypeError
-        If the file is not a PDF.
-    FileTooLargeError
-        If the file exceeds the maximum allowed size.
     """
     # Check MIME type
     if file.content_type not in ALLOWED_MIME_TYPES:
@@ -136,37 +126,12 @@ def validate_file(file: UploadFile) -> None:
 def store_document(file: UploadFile, document_type: str) -> StoredFileMetadata:
     """
     Store an uploaded file on the local filesystem.
-
-    Generates a UUID-based filename while preserving the original extension,
-    computes the SHA-256 checksum, and stores the file in the appropriate
-    directory based on document type.
-
-    Parameters
-    ----------
-    file : UploadFile
-        The uploaded file to store.
-    document_type : str
-        The type of document ('REGULATION' or 'POLICY').
-
-    Returns
-    -------
-    StoredFileMetadata
-        Metadata about the stored file.
-
-    Raises
-    ------
-    InvalidMimeTypeError
-        If the file is not a PDF.
-    FileTooLargeError
-        If the file exceeds the maximum allowed size.
-    StorageError
-        If the document type is invalid.
     """
     # Validate MIME type and size
     validate_file(file)
 
     # Determine storage directory based on document type
-    regulations_dir, policies_dir = _ensure_storage_dirs()
+    regulations_dir, policies_dir, _ = _ensure_storage_dirs()
 
     if document_type == "REGULATION":
         storage_dir = regulations_dir
@@ -201,4 +166,57 @@ def store_document(file: UploadFile, document_type: str) -> StoredFileMetadata:
         checksum=checksum,
         size=len(file_content),
         mime_type=file.content_type or "application/pdf",
+    )
+
+
+ALLOWED_EVIDENCE_MIME_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "text/plain",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MAX_EVIDENCE_SIZE = 25 * 1024 * 1024  # 25 MB
+
+
+def store_remediation_evidence(file: UploadFile) -> StoredFileMetadata:
+    """
+    Store an uploaded remediation evidence document/image safely on disk.
+    """
+    content_type = (file.content_type or "").lower()
+    if content_type not in ALLOWED_EVIDENCE_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported evidence file type '{content_type}'. Allowed: PDF, DOCX, DOC, TXT, PNG, JPG, WEBP.",
+        )
+
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+
+    if size > MAX_EVIDENCE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Evidence file size ({size / (1024*1024):.1f}MB) exceeds 25MB limit.",
+        )
+
+    _, _, evidence_dir = _ensure_storage_dirs()
+    file_content = file.file.read()
+    extension = _get_extension(file.filename or "evidence.bin")
+    stored_filename = f"{uuid.uuid4()}{extension}"
+    checksum = _compute_sha256(file_content)
+    file_path = evidence_dir / stored_filename
+    file_path.write_bytes(file_content)
+    file.file.seek(0)
+
+    return StoredFileMetadata(
+        original_filename=file.filename or "evidence",
+        stored_filename=stored_filename,
+        path=str(file_path),
+        checksum=checksum,
+        size=len(file_content),
+        mime_type=content_type or "application/octet-stream",
     )

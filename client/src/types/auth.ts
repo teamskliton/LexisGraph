@@ -1,3 +1,11 @@
+export interface UserMembership {
+  organization_id: string;
+  organization_name: string;
+  role: string;
+  status: string;
+  is_owner: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -7,6 +15,7 @@ export interface User {
   is_superuser: boolean;
   created_at: string;
   updated_at: string;
+  memberships?: UserMembership[];
 }
 
 export interface TokenResponse {

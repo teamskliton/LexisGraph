@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Building2, ChevronDown, Check, Plus, Shield } from 'lucide-react';
 import { organizationsService, Organization, OrganizationCreate, OrganizationUpdate } from '@/services/api/organizations';
 import { OrganizationDialog } from '@/components/features/organizations/OrganizationDialog';
+import { useAuth } from '@/context/auth-context';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -21,6 +22,7 @@ interface OrganizationSwitcherProps {
 export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
   onOrganizationChanged,
 }) => {
+  const { permissions } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -136,15 +138,18 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
             );
           })}
 
-          <DropdownMenuSeparator className="bg-slate-800 my-1" />
-
-          <DropdownMenuItem
-            onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-2 px-2.5 py-2 text-indigo-400 hover:bg-indigo-950/40 font-semibold text-xs cursor-pointer rounded-lg"
-          >
-            <Plus className="w-4 h-4 shrink-0 text-indigo-400" />
-            <span>Create Organization</span>
-          </DropdownMenuItem>
+          {permissions.canCreateOrganization && (
+            <>
+              <DropdownMenuSeparator className="bg-slate-800 my-1" />
+              <DropdownMenuItem
+                onClick={() => setIsCreateOpen(true)}
+                className="flex items-center gap-2 px-2.5 py-2 text-indigo-400 hover:bg-indigo-950/40 font-semibold text-xs cursor-pointer rounded-lg"
+              >
+                <Plus className="w-4 h-4 shrink-0 text-indigo-400" />
+                <span>Create Organization</span>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

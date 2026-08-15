@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { Organization } from "@/services/api/organizations";
+import { useAuth } from "@/context/auth-context";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -173,6 +174,7 @@ export const OrganizationCard = memo(function OrganizationCard({
   viewMode = "grid",
 }: OrganizationCardProps) {
   const router = useRouter();
+  const { permissions } = useAuth();
   const status = deriveStatus(complianceScore);
   const { label: statusLabel, badgeClass, icon: statusIcon, scoreColor } = getStatusConfig(status);
 
@@ -267,14 +269,16 @@ export const OrganizationCard = memo(function OrganizationCard({
             <ArrowRight className="h-3 w-3" />
           </Button>
 
-          <Button
-            size="sm"
-            onClick={handleRunAnalysis}
-            className="h-8 px-3 text-xs gap-1 font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs"
-          >
-            <Zap className="h-3 w-3 text-amber-300" />
-            <span>Analyze</span>
-          </Button>
+          {permissions.canRunAnalysis && (
+            <Button
+              size="sm"
+              onClick={handleRunAnalysis}
+              className="h-8 px-3 text-xs gap-1 font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs"
+            >
+              <Zap className="h-3 w-3 text-amber-300" />
+              <span>Analyze</span>
+            </Button>
+          )}
 
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -289,19 +293,25 @@ export const OrganizationCard = memo(function OrganizationCard({
               <DropdownMenuItem onClick={handleOpenWorkspace} className="gap-2 text-xs cursor-pointer">
                 <ExternalLink className="h-3.5 w-3.5" /> View Workspace
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleRunAnalysis} className="gap-2 text-xs cursor-pointer">
-                <Zap className="h-3.5 w-3.5 text-amber-500" /> Run Analysis
-              </DropdownMenuItem>
+              {permissions.canRunAnalysis && (
+                <DropdownMenuItem onClick={handleRunAnalysis} className="gap-2 text-xs cursor-pointer">
+                  <Zap className="h-3.5 w-3.5 text-amber-500" /> Run Analysis
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => router.push(`/reports?org=${organization.id}`)} className="gap-2 text-xs cursor-pointer">
                 <BarChart3 className="h-3.5 w-3.5" /> View Reports
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onEdit(organization)} className="gap-2 text-xs cursor-pointer">
-                <Pencil className="h-3.5 w-3.5" /> Edit Organization
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={() => onDelete(organization.id)} className="gap-2 text-xs cursor-pointer">
-                <Trash2 className="h-3.5 w-3.5" /> Delete
-              </DropdownMenuItem>
+              {permissions.canManageOrganization && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onEdit(organization)} className="gap-2 text-xs cursor-pointer">
+                    <Pencil className="h-3.5 w-3.5" /> Edit Organization
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={() => onDelete(organization.id)} className="gap-2 text-xs cursor-pointer">
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -351,19 +361,25 @@ export const OrganizationCard = memo(function OrganizationCard({
               <DropdownMenuItem onClick={handleOpenWorkspace} className="gap-2 text-xs cursor-pointer">
                 <ExternalLink className="h-3.5 w-3.5" /> View Organization
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleRunAnalysis} className="gap-2 text-xs cursor-pointer">
-                <Zap className="h-3.5 w-3.5 text-amber-500" /> Run Analysis
-              </DropdownMenuItem>
+              {permissions.canRunAnalysis && (
+                <DropdownMenuItem onClick={handleRunAnalysis} className="gap-2 text-xs cursor-pointer">
+                  <Zap className="h-3.5 w-3.5 text-amber-500" /> Run Analysis
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => router.push(`/reports?org=${organization.id}`)} className="gap-2 text-xs cursor-pointer">
                 <BarChart3 className="h-3.5 w-3.5" /> View Reports
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onEdit(organization)} className="gap-2 text-xs cursor-pointer">
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={() => onDelete(organization.id)} className="gap-2 text-xs cursor-pointer">
-                <Trash2 className="h-3.5 w-3.5" /> Delete
-              </DropdownMenuItem>
+              {permissions.canManageOrganization && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onEdit(organization)} className="gap-2 text-xs cursor-pointer">
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={() => onDelete(organization.id)} className="gap-2 text-xs cursor-pointer">
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -443,7 +459,10 @@ export const OrganizationCard = memo(function OrganizationCard({
           variant="outline"
           size="sm"
           onClick={handleOpenWorkspace}
-          className="flex-1 h-8 text-xs font-semibold gap-1.5 cursor-pointer hover:border-primary/50"
+          className={cn(
+            "h-8 text-xs font-semibold gap-1.5 cursor-pointer hover:border-primary/50",
+            permissions.canRunAnalysis ? "flex-1" : "w-full"
+          )}
         >
           <span>View Organization</span>
           <ArrowRight className="h-3 w-3 text-muted-foreground" />

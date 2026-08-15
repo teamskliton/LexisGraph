@@ -74,9 +74,20 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
         className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
       };
     case "REMEDIATION":
+    case "REMEDIATION_REQUIRED":
       return {
         label: "REMEDIATION",
         className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+      };
+    case "POTENTIAL_FALSE_POSITIVE":
+      return {
+        label: "FALSE POSITIVE REVIEW",
+        className: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30",
+      };
+    case "ADMIN_REVIEW":
+      return {
+        label: "ADMIN REVIEW",
+        className: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
       };
     case "RESOLVED":
       return {
@@ -87,6 +98,11 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
       return {
         label: "REOPENED",
         className: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
+      };
+    case "REJECTED":
+      return {
+        label: "REJECTED (FALSE POSITIVE)",
+        className: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30",
       };
     default:
       return {
@@ -405,8 +421,11 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
             <option value="OPEN">Open</option>
             <option value="IN_REVIEW">In Review</option>
             <option value="REMEDIATION">In Remediation</option>
+            <option value="POTENTIAL_FALSE_POSITIVE">False Positive Review</option>
+            <option value="ADMIN_REVIEW">Admin Review</option>
             <option value="RESOLVED">Resolved</option>
             <option value="REOPENED">Reopened</option>
+            <option value="REJECTED">Rejected</option>
             <option value="ASSIGNED_TO_ME">Assigned to Me</option>
           </select>
 

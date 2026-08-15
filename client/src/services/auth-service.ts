@@ -42,4 +42,21 @@ export const authService = {
     const response = await api.get<User>("/auth/me");
     return response.data;
   },
+
+  /**
+   * POST /auth/setup-role
+   * Finalize role selection after normal (non-invited) signup.
+   * Only "ADMIN" or "LEGAL_ANALYST" are accepted by the backend.
+   * Returns the created organization_id and confirmed role.
+   */
+  async setupRole(role: "ADMIN" | "LEGAL_ANALYST"): Promise<{
+    organization_id: string;
+    organization_name: string;
+    role: string;
+    message: string;
+  }> {
+    const response = await api.post("/auth/setup-role", { role });
+    return response.data;
+  },
 };
+

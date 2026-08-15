@@ -18,6 +18,7 @@ class UserRole(str, enum.Enum):
     """Role-Based Access Control hierarchy."""
 
     ADMIN = "ADMIN"
+    COMPLIANCE_ANALYST = "COMPLIANCE_ANALYST"
     LEGAL_ANALYST = "LEGAL_ANALYST"
     REVIEWER = "REVIEWER"
     VIEWER = "VIEWER"

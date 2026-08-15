@@ -22,8 +22,9 @@ ROLE_RANK = {
     UserRole.VIEWER: 1,
     UserRole.EMPLOYEE: 1,
     UserRole.REVIEWER: 2,
-    UserRole.MANAGER: 2,
     UserRole.LEGAL_ANALYST: 3,
+    UserRole.COMPLIANCE_ANALYST: 3,
+    UserRole.MANAGER: 3,
     UserRole.ADMIN: 4,
     UserRole.ORGANIZATION_ADMIN: 4,
     UserRole.SUPER_ADMIN: 5,
@@ -34,7 +35,7 @@ def get_user_org_role(
     db: Session,
     user_id: uuid.UUID,
     organization_id: uuid.UUID,
-) -> UserRole:
+) -> UserRole | None:
     """Retrieve user's active role within an organization."""
     user = db.get(User, user_id)
     if user and user.is_superuser:
@@ -57,9 +58,25 @@ def get_user_org_role(
     if member:
         return member.role if isinstance(member.role, UserRole) else UserRole(member.role)
 
-    # Fallback default role for org creator / existing user
-    return UserRole.VIEWER
+    return None
 
+
+def is_org_admin(db: Session, user_id: uuid.UUID, organization_id: uuid.UUID) -> bool:
+    """Return True if user is Admin / Owner of the organization."""
+    role = get_user_org_role(db, user_id, organization_id)
+    return ROLE_RANK.get(role, 0) >= ROLE_RANK[UserRole.ADMIN]
+
+
+def is_org_analyst_or_admin(db: Session, user_id: uuid.UUID, organization_id: uuid.UUID) -> bool:
+    """Return True if user is Compliance Analyst or Admin in the organization."""
+    role = get_user_org_role(db, user_id, organization_id)
+    return ROLE_RANK.get(role, 0) >= ROLE_RANK[UserRole.COMPLIANCE_ANALYST]
+
+
+def is_org_reviewer_or_above(db: Session, user_id: uuid.UUID, organization_id: uuid.UUID) -> bool:
+    """Return True if user is Reviewer, Analyst, or Admin in the organization."""
+    role = get_user_org_role(db, user_id, organization_id)
+    return ROLE_RANK.get(role, 0) >= ROLE_RANK[UserRole.REVIEWER]
 
 
 def require_min_role(min_role: UserRole):
@@ -72,7 +89,7 @@ def require_min_role(min_role: UserRole):
         current_user: User = Depends(get_current_user),
     ) -> UserRole:
         user_role = get_user_org_role(db, current_user.id, organization_id)
-        if ROLE_RANK.get(user_role, 1) < ROLE_RANK.get(min_role, 1):
+        if ROLE_RANK.get(user_role, 0) < ROLE_RANK.get(min_role, 0):
             logger.warning(
                 "Access denied for user %s (role %s, required %s) on org %s",
                 current_user.id, user_role, min_role, organization_id,

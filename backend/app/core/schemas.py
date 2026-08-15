@@ -45,6 +45,18 @@ class UserLogin(BaseModel):
     password: str = Field(..., description="Plain-text password")
 
 
+class UserMembershipResponse(BaseModel):
+    """User membership within an organization."""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    organization_id: uuid.UUID = Field(..., description="Organization UUID")
+    organization_name: str = Field(..., description="Organization name")
+    role: str = Field(..., description="Role in this organization")
+    status: str = Field(..., description="Membership status")
+    is_owner: bool = Field(default=False, description="Whether user is the creator/owner of this organization")
+
+
 class UserResponse(UserBase):
     """
     Public user representation returned by the API.
@@ -63,6 +75,9 @@ class UserResponse(UserBase):
     is_superuser: bool = Field(default=False, description="Superuser flag")
     created_at: datetime = Field(..., description="UTC timestamp of creation")
     updated_at: datetime = Field(..., description="UTC timestamp of last update")
+    memberships: list[UserMembershipResponse] = Field(
+        default_factory=list, description="Active organization memberships"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -25,9 +25,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { formatRoleLabel, getRoleBadgeClass } from '@/utils/role-utils';
+import { cn } from '@/lib/utils';
 
 export function OrganizationSettingsContent() {
-  const { user } = useAuth();
+  const { user, activeRole } = useAuth();
   const router = useRouter();
 
   const [org, setOrg] = useState<Organization | null>(null);
@@ -223,8 +225,8 @@ export function OrganizationSettingsContent() {
             <div className="space-y-1">
               <span className="text-muted-foreground font-semibold block">Role Status</span>
               <div>
-                <Badge className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30 text-[10px] uppercase font-mono">
-                  {user?.is_superuser ? 'Superuser Admin' : isOwner ? 'Organization Owner / Admin' : 'Member'}
+                <Badge className={cn("text-[10px] uppercase font-mono", getRoleBadgeClass(activeRole))}>
+                  {user?.is_superuser ? 'Superuser Admin' : isOwner ? `Owner (${formatRoleLabel(activeRole)})` : formatRoleLabel(activeRole)}
                 </Badge>
               </div>
             </div>

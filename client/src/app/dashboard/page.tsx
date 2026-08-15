@@ -13,6 +13,7 @@ import {
   OrganizationCreate,
   OrganizationUpdate,
 } from "@/services/api/organizations";
+import { formatRoleLabel, getRoleBadgeClass } from "@/utils/role-utils";
 
 // Dashboard Components
 import { DashboardKpiCards } from "@/components/dashboard/DashboardKpiCards";
@@ -25,6 +26,7 @@ import { RecentReportsWidget } from "@/components/dashboard/RecentReportsWidget"
 import { AIExecutiveBrief } from "@/components/dashboard/AIExecutiveBrief";
 import { JobProgressCard } from "@/components/compliance/JobProgressCard";
 import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
+import { MyReviewQueue } from "@/components/dashboard/MyReviewQueue";
 import { complianceService, ComplianceJob } from "@/services/api/compliance";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   LogOut,
   ShieldCheck,
+  ShieldAlert,
+  UserCheck,
   Layers,
   RefreshCw,
   AlertTriangle,
@@ -50,6 +54,7 @@ import {
   BarChart3,
   Users,
   Network,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -110,7 +115,18 @@ function buildPostureSummary(stats: DashboardStatsResponse): PostureSummary {
 // ─── Dashboard Content ────────────────────────────────────────────────────────
 
 function DashboardContent() {
-  const { user, logout } = useAuth();
+  const {
+    user,
+    logout,
+    activeMembership,
+    activeRole,
+    isAdmin,
+    isReviewer,
+    isComplianceAnalyst,
+    isViewer,
+    permissions,
+    refreshUser,
+  } = useAuth();
   const router = useRouter();
 
   const [stats, setStats] = useState<DashboardStatsResponse | null>(null);
@@ -159,7 +175,13 @@ function DashboardContent() {
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    const handleOrgChange = () => {
+      fetchStats(false);
+      refreshUser();
+    };
+    window.addEventListener("organization_changed", handleOrgChange);
+    return () => window.removeEventListener("organization_changed", handleOrgChange);
+  }, [fetchStats, refreshUser]);
 
   const handleCreateOrgSubmit = async (
     data: OrganizationCreate | OrganizationUpdate
@@ -223,14 +245,25 @@ function DashboardContent() {
               >
                 Dashboard
               </Button>
+              {(isAdmin || (user?.memberships && user.memberships.length > 1)) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => router.push("/organizations")}
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                  Organizations
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => router.push("/organizations")}
+                onClick={() => router.push("/compliance/my-work?view=all")}
               >
-                <Building2 className="h-3.5 w-3.5" />
-                Organizations
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Findings
               </Button>
               <Button
                 variant="ghost"
@@ -337,26 +370,105 @@ function DashboardContent() {
               <span>Refresh</span>
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsOrgDialogOpen(true)}
-              className="gap-1.5 cursor-pointer text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/50"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>New Organization</span>
-            </Button>
+            {permissions.canCreateOrganization && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsOrgDialogOpen(true)}
+                className="gap-1.5 cursor-pointer text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>New Organization</span>
+              </Button>
+            )}
 
-            <Button
-              onClick={() => router.push("/compliance")}
-              size="sm"
-              className="gap-1.5 cursor-pointer"
-            >
-              <Zap className="h-3.5 w-3.5" />
-              <span>New Analysis</span>
-            </Button>
+            {isReviewer && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/compliance/my-work?view=all")}
+                className="gap-1.5 cursor-pointer text-xs border-purple-500/30 text-purple-600 hover:bg-purple-500/10 dark:text-purple-400 dark:hover:bg-purple-950/50 font-semibold"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>All Findings</span>
+              </Button>
+            )}
+
+            {isReviewer && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/compliance/my-work?view=my-work")}
+                className="gap-1.5 cursor-pointer text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-950/50"
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+                <span>My Work</span>
+              </Button>
+            )}
+
+            {isReviewer && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/reports")}
+                className="gap-1.5 cursor-pointer text-xs"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                <span>View Reports</span>
+              </Button>
+            )}
+
+            {permissions.canRunAnalysis && (
+              <Button
+                onClick={() => router.push("/compliance")}
+                size="sm"
+                className="gap-1.5 cursor-pointer"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                <span>New Analysis</span>
+              </Button>
+            )}
           </div>
         </div>
+
+        {/* ── Reviewer Workspace Banner ── */}
+        {isReviewer && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Reviewer Workspace — {activeMembership?.organization_name || "LexisGraph Workspace"}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  You are assigned as Reviewer. Inspect all organization compliance findings, review remediation recommendations, and evaluate audit evidence across published reports.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/compliance/my-work?view=my-work")}
+                className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs h-8 cursor-pointer gap-1"
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+                <span>My Work</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => router.push("/compliance/my-work?view=all")}
+                className="bg-amber-600 hover:bg-amber-500 text-white gap-1.5 shrink-0 cursor-pointer text-xs h-8 font-semibold"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>All Organization Findings</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* ── Error Alert ── */}
         {error && (
@@ -448,6 +560,14 @@ function DashboardContent() {
           />
         </div>
 
+        {/* ── 2.5 My Review Queue (for Reviewers) ── */}
+        {isReviewer && (
+          <MyReviewQueue
+            organizationId={activeMembership?.organization_id}
+            organizationName={activeMembership?.organization_name}
+          />
+        )}
+
         {/* ── 3. Recent Reports ── */}
         <RecentReportsWidget
           reports={stats?.recent_reports}
@@ -490,8 +610,8 @@ function DashboardContent() {
                 <span className="text-[11px] font-medium text-muted-foreground">
                   Role
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-[10px] font-semibold">
-                  {user?.is_superuser ? "Administrator" : "Compliance Analyst"}
+                <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold", getRoleBadgeClass(activeRole))}>
+                  {formatRoleLabel(activeRole)}
                 </span>
               </div>
 
@@ -515,8 +635,8 @@ function DashboardContent() {
                 <span className="text-[11px] font-medium text-muted-foreground">
                   Workspace
                 </span>
-                <span className="text-[11px] font-medium text-foreground">
-                  LexisGraph Cloud
+                <span className="text-[11px] font-medium text-foreground truncate max-w-[150px]" title={activeMembership?.organization_name || "LexisGraph Workspace"}>
+                  {activeMembership?.organization_name || "LexisGraph Workspace"}
                 </span>
               </div>
 
@@ -597,26 +717,50 @@ function DashboardContent() {
                   Quick Actions
                 </p>
                 <div className="flex gap-1 flex-wrap">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5 font-medium text-primary border-primary/20 hover:bg-primary/5"
-                    onClick={() => setIsOrgDialogOpen(true)}
-                  >
-                    + New Org
-                  </Button>
+                  {permissions.canCreateOrganization && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] px-2.5 font-medium text-primary border-primary/20 hover:bg-primary/5 cursor-pointer"
+                      onClick={() => setIsOrgDialogOpen(true)}
+                    >
+                      + New Org
+                    </Button>
+                  )}
+                  {isReviewer && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] px-2.5 font-medium text-amber-600 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer"
+                      onClick={() => router.push("/compliance/overview")}
+                    >
+                      Review Findings
+                    </Button>
+                  )}
+                  {permissions.canRunAnalysis && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] px-2.5 cursor-pointer"
+                      onClick={() => router.push("/compliance")}
+                    >
+                      Run Analysis
+                    </Button>
+                  )}
+                  {(permissions.canCreateOrganization || (user?.memberships && user.memberships.length > 1)) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] px-2.5 cursor-pointer"
+                      onClick={() => router.push("/organizations")}
+                    >
+                      Organizations
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-[11px] px-2.5"
-                    onClick={() => router.push("/organizations")}
-                  >
-                    Organizations
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5"
+                    className="h-7 text-[11px] px-2.5 cursor-pointer"
                     onClick={() => router.push("/reports")}
                   >
                     Reports
@@ -624,10 +768,18 @@ function DashboardContent() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-[11px] px-2.5"
-                    onClick={() => router.push("/compliance")}
+                    className="h-7 text-[11px] px-2.5 cursor-pointer"
+                    onClick={() => router.push("/documents")}
                   >
-                    Run Analysis
+                    Documents
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[11px] px-2.5 cursor-pointer"
+                    onClick={() => router.push("/knowledge-graph")}
+                  >
+                    Knowledge Graph
                   </Button>
                 </div>
               </div>

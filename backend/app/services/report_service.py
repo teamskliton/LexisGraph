@@ -70,7 +70,28 @@ class ReportService:
         if organization_id:
             stmt = stmt.where(ComplianceReport.organization_id == organization_id)
         elif user_id:
-            stmt = stmt.where(ComplianceReport.created_by == user_id)
+            from app.db.models.rbac import OrganizationMember, MemberStatus
+            from app.db.models.organization import Organization
+
+            member_org_ids = db.scalars(
+                select(OrganizationMember.organization_id).where(
+                    OrganizationMember.user_id == user_id,
+                    OrganizationMember.status == MemberStatus.ACTIVE,
+                )
+            ).all()
+            created_org_ids = db.scalars(
+                select(Organization.id).where(Organization.created_by == user_id)
+            ).all()
+            accessible_org_ids = list(set(member_org_ids) | set(created_org_ids))
+            if accessible_org_ids:
+                stmt = stmt.where(
+                    or_(
+                        ComplianceReport.organization_id.in_(accessible_org_ids),
+                        ComplianceReport.created_by == user_id,
+                    )
+                )
+            else:
+                stmt = stmt.where(ComplianceReport.created_by == user_id)
 
         if regulation_id:
             stmt = stmt.where(ComplianceReport.regulation_id == regulation_id)

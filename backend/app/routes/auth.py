@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -164,10 +165,172 @@ def login(data: UserLogin, db: Session = Depends(get_db)) -> Token:
 )
 def read_current_user(
     current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> UserResponse:
     """
-    Return the authenticated user making the request.
+    Return the authenticated user making the request with their organization memberships.
 
     Requires a valid ``Authorization: Bearer <token>`` header.
     """
-    return current_user
+    from app.db.models import Organization
+    from app.db.models.rbac import OrganizationMember, MemberStatus
+    from app.core.schemas import UserMembershipResponse
+
+    memberships_data: list[UserMembershipResponse] = []
+
+    # Query all active memberships for this user
+    members = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.status == MemberStatus.ACTIVE,
+    ).all()
+
+    seen_org_ids = set()
+    for m in members:
+        seen_org_ids.add(m.organization_id)
+        org = db.get(Organization, m.organization_id)
+        if org:
+            memberships_data.append(
+                UserMembershipResponse(
+                    organization_id=m.organization_id,
+                    organization_name=org.name,
+                    role=m.role.value if hasattr(m.role, "value") else str(m.role),
+                    status=m.status.value if hasattr(m.status, "value") else str(m.status),
+                    is_owner=(org.created_by == current_user.id),
+                )
+            )
+
+    # Also include owned organizations if missing from members table
+    owned_orgs = db.query(Organization).filter(
+        Organization.created_by == current_user.id,
+    ).all()
+    for org in owned_orgs:
+        if org.id not in seen_org_ids:
+            memberships_data.append(
+                UserMembershipResponse(
+                    organization_id=org.id,
+                    organization_name=org.name,
+                    role="ADMIN",
+                    status="ACTIVE",
+                    is_owner=True,
+                )
+            )
+            seen_org_ids.add(org.id)
+
+    user_res = UserResponse.model_validate(current_user)
+    user_res.memberships = memberships_data
+    return user_res
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/setup-role
+# ---------------------------------------------------------------------------
+
+
+class SetupRoleRequest(BaseModel):
+    """Role selection payload for post-registration onboarding."""
+    role: str
+
+
+@router.post(
+    "/setup-role",
+    summary="Finalize role selection after normal signup (server-side)",
+    responses={
+        200: {"description": "Role set, organization and membership created"},
+        400: {"description": "Invalid role"},
+        403: {"description": "Only ADMIN or LEGAL_ANALYST allowed for normal signup"},
+        409: {"description": "Role already set for this user"},
+    },
+)
+def setup_role(
+    data: SetupRoleRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Post-registration role selection for normal (non-invited) users.
+
+    Only ``ADMIN`` and ``LEGAL_ANALYST`` (displayed as "Compliance Analyst") are
+    accepted.  Any other value is rejected with HTTP 403.
+
+    - Creates a new Organization owned by the authenticated user.
+    - Creates an ``OrganizationMember`` record with the selected role.
+    - Returns the new organization_id and confirmed role.
+
+    This endpoint must NOT be called for users joining via invitation;
+    their role is set exclusively by the invitation record.
+    """
+    from app.db.models import Organization
+    from app.db.models.rbac import OrganizationMember, UserRole, MemberStatus
+
+    # ── Role validation ──────────────────────────────────────────────────────
+    ALLOWED_SIGNUP_ROLES = {"ADMIN", "LEGAL_ANALYST", "COMPLIANCE_ANALYST"}
+    role_upper = data.role.upper().strip()
+
+    if role_upper not in ALLOWED_SIGNUP_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Role '{data.role}' is not allowed for direct signup. "
+                "Only ADMIN or LEGAL_ANALYST (Compliance Analyst) may be selected here. "
+                "Other roles are assigned exclusively through organization invitations."
+            ),
+        )
+
+    user_role = UserRole.LEGAL_ANALYST if role_upper in {"LEGAL_ANALYST", "COMPLIANCE_ANALYST"} else UserRole(role_upper)
+
+    # ── Idempotency: check if user already has an org membership ─────────────
+    existing_membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.status == MemberStatus.ACTIVE,
+    ).first()
+
+    if existing_membership:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Role has already been set for this account.",
+        )
+
+    # ── Create Organization ──────────────────────────────────────────────────
+    role_label = "Admin" if user_role == UserRole.ADMIN else "Compliance Analyst"
+    org = Organization(
+        name=f"{current_user.full_name}'s Workspace",
+        description=f"Default workspace for {current_user.full_name} ({role_label})",
+        created_by=current_user.id,
+    )
+    db.add(org)
+    db.flush()  # get org.id without committing
+
+    # ── Create OrganizationMember ────────────────────────────────────────────
+    import uuid as _uuid
+    member = OrganizationMember(
+        id=_uuid.uuid4(),
+        organization_id=org.id,
+        user_id=current_user.id,
+        role=user_role,
+        status=MemberStatus.ACTIVE,
+    )
+    db.add(member)
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("setup_role: DB commit failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to complete role setup. Please try again.",
+        ) from exc
+
+    db.refresh(org)
+
+    logger.info(
+        "Role setup completed: user=%s role=%s org=%s",
+        current_user.id, user_role, org.id,
+    )
+
+    return {
+        "message": f"Role set to {user_role.value}. Organization workspace created.",
+        "organization_id": str(org.id),
+        "organization_name": org.name,
+        "role": user_role.value,
+    }

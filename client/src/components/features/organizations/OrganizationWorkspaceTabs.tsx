@@ -37,6 +37,7 @@ import { complianceService, ComplianceJob } from "@/services/api/compliance";
 import { PolicyCenter } from "@/components/features/documents/PolicyCenter";
 import { RegulationLibrary } from "@/components/features/documents/RegulationLibrary";
 import { OrganizationReportsWorkspace } from "./OrganizationReportsWorkspace";
+import { useAuth } from "@/context/auth-context";
 
 import { Users, Settings as SettingsIcon } from "lucide-react";
 import { UserManagementContent } from "@/app/dashboard/users/page";
@@ -226,12 +227,17 @@ export const OrganizationWorkspaceTabs = memo(function OrganizationWorkspaceTabs
   policyCount,
   reportCount,
 }: OrganizationWorkspaceTabsProps) {
+  const { permissions } = useAuth();
+  const visibleTabs = TABS.filter(
+    (t) => t.id !== "settings" || permissions.canManageOrganization
+  );
+
   return (
     <div className="space-y-6">
       {/* Client-Side Tab Bar directly below header with clean blue underline */}
       <div className="border-b border-border/50 bg-background/50 backdrop-blur-xs sticky top-[73px] z-10">
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none px-2 py-0">
-          {TABS.map((t) => {
+          {visibleTabs.map((t) => {
             const isActive = activeTab === t.id;
 
             return (

@@ -29,32 +29,12 @@ import {
   organizationsService,
   InvitationDetailsResponse,
 } from "@/services/api/organizations";
-
-function formatRoleLabel(role: string) {
-  const normalized = role.toUpperCase();
-  if (
-    normalized === "ADMIN" ||
-    normalized === "ORGANIZATION_ADMIN" ||
-    normalized === "SUPER_ADMIN"
-  ) {
-    return "Admin (Full Access)";
-  }
-  if (normalized === "LEGAL_ANALYST" || normalized === "MANAGER") {
-    return "Legal Analyst";
-  }
-  if (normalized === "REVIEWER") {
-    return "Reviewer";
-  }
-  if (normalized === "VIEWER" || normalized === "EMPLOYEE") {
-    return "Viewer (Read Only)";
-  }
-  return role.replace(/_/g, " ");
-}
+import { formatRoleLabel } from "@/utils/role-utils";
 
 export default function AcceptInvitePage() {
   const params = useParams();
   const router = useRouter();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isLoading: isAuthLoading, refreshUser } = useAuth();
 
   const token = Array.isArray(params?.token)
     ? params.token[0]
@@ -162,6 +142,8 @@ export default function AcceptInvitePage() {
         localStorage.setItem("selected_organization_id", res.organization_id);
         window.dispatchEvent(new Event("organization_changed"));
       }
+
+      await refreshUser();
 
       setAccepted(true);
 
@@ -385,7 +367,13 @@ export default function AcceptInvitePage() {
 
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <Button
-                    onClick={() => saveRedirectAndNavigate("/register")}
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("pending_invite_token", token);
+                        localStorage.setItem("post_auth_redirect", `/invite/${token}`);
+                      }
+                      router.push(`/register?invite_token=${token}`);
+                    }}
                     className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 rounded-xl font-semibold cursor-pointer gap-1"
                   >
                     <UserPlus className="h-3.5 w-3.5" /> Sign up
@@ -393,7 +381,13 @@ export default function AcceptInvitePage() {
 
                   <Button
                     variant="outline"
-                    onClick={() => saveRedirectAndNavigate("/login")}
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("pending_invite_token", token);
+                        localStorage.setItem("post_auth_redirect", `/invite/${token}`);
+                      }
+                      router.push(`/login?invite_token=${token}`);
+                    }}
                     className="bg-card border-border text-foreground hover:bg-muted text-xs h-9 rounded-xl font-semibold cursor-pointer gap-1"
                   >
                     <LogIn className="h-3.5 w-3.5" /> Log in

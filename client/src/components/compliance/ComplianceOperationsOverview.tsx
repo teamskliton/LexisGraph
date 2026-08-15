@@ -42,6 +42,7 @@ import {
 import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
 import { Organization } from "@/services/api/organizations";
+import { formatRoleLabel } from "@/utils/role-utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -109,7 +110,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
 
 export function ComplianceOperationsOverview() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, permissions } = useAuth();
 
   // Overview state
   const [activeOrgId, setActiveOrgId] = useState<string | undefined>(() => {
@@ -259,6 +260,16 @@ export function ComplianceOperationsOverview() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => router.push("/compliance/my-work?view=all")}
+              className="gap-1.5 text-xs font-semibold cursor-pointer border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>All Findings ({summary?.total_findings || 0})</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={fetchOverview}
               disabled={isLoading}
               className="gap-1.5 text-xs cursor-pointer"
@@ -267,13 +278,15 @@ export function ComplianceOperationsOverview() {
               <span>Refresh</span>
             </Button>
 
-            <Button
-              size="sm"
-              onClick={() => router.push("/compliance/new")}
-              className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              <PlusCircle className="h-3.5 w-3.5" /> Start New Analysis
-            </Button>
+            {permissions.canRunAnalysis && (
+              <Button
+                size="sm"
+                onClick={() => router.push("/compliance/new")}
+                className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                <PlusCircle className="h-3.5 w-3.5" /> Start New Analysis
+              </Button>
+            )}
           </div>
         </div>
 
@@ -439,9 +452,17 @@ export function ComplianceOperationsOverview() {
               <span className="text-xs font-bold uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
                 <AlertOctagon className="h-4 w-4 text-rose-500" /> Priority Attention Queue
               </span>
-              <span className="text-[10px] font-mono text-muted-foreground">
-                {overviewData?.priority_attention?.length || overviewData?.attention_required?.length || 0} Items
-              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => router.push("/compliance/my-work?view=all")}
+                  className="text-xs text-rose-500 hover:text-rose-600 gap-1 cursor-pointer font-semibold"
+                >
+                  <span>View All Findings ({summary?.total_findings || 0})</span>
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
 
             {isLoading ? (
@@ -652,7 +673,7 @@ export function ComplianceOperationsOverview() {
                       <tr key={m.user_id} className="hover:bg-muted/20 transition-colors">
                         <td className="py-2.5 font-medium text-foreground">
                           {m.full_name}
-                          <span className="block text-[10px] font-mono text-muted-foreground">{m.role}</span>
+                          <span className="block text-[10px] font-mono text-muted-foreground">{formatRoleLabel(m.role)}</span>
                         </td>
                         <td className="py-2.5 text-center font-bold text-blue-500 tabular-nums">{m.open_count}</td>
                         <td className="py-2.5 text-center font-bold text-indigo-500 tabular-nums">{m.in_review_count}</td>

@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { formatRoleLabel, getRoleBadgeClass, isRoleAdmin } from '@/utils/role-utils';
 
 interface Member {
   id: string;
@@ -56,45 +57,13 @@ interface PendingInvitation {
 }
 
 const ROLE_OPTIONS = [
-  { value: 'ADMIN', label: 'Admin (Full organization & team management)' },
-  { value: 'LEGAL_ANALYST', label: 'Legal Analyst (Policy upload & compliance runs)' },
+  { value: 'COMPLIANCE_ANALYST', label: 'Compliance Analyst (Policy upload & compliance runs)' },
   { value: 'REVIEWER', label: 'Reviewer (Findings & report review)' },
   { value: 'VIEWER', label: 'Viewer (Read-only dashboard & report downloads)' },
 ];
 
-function formatRoleLabel(role: string) {
-  const normalized = role.toUpperCase();
-  if (normalized === 'ADMIN' || normalized === 'ORGANIZATION_ADMIN' || normalized === 'SUPER_ADMIN') {
-    return 'Admin';
-  }
-  if (normalized === 'LEGAL_ANALYST' || normalized === 'MANAGER') {
-    return 'Legal Analyst';
-  }
-  if (normalized === 'REVIEWER') {
-    return 'Reviewer';
-  }
-  if (normalized === 'VIEWER' || normalized === 'EMPLOYEE') {
-    return 'Viewer';
-  }
-  return role.replace('_', ' ');
-}
-
-function getRoleBadgeClass(role: string) {
-  const normalized = role.toUpperCase();
-  if (normalized === 'ADMIN' || normalized === 'ORGANIZATION_ADMIN' || normalized === 'SUPER_ADMIN') {
-    return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30';
-  }
-  if (normalized === 'LEGAL_ANALYST' || normalized === 'MANAGER') {
-    return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30';
-  }
-  if (normalized === 'REVIEWER') {
-    return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30';
-  }
-  return 'bg-muted text-muted-foreground border-border';
-}
-
 export function UserManagementContent() {
-  const { user } = useAuth();
+  const { user, isAdmin: authIsAdmin } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -105,7 +74,7 @@ export function UserManagementContent() {
   const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
   const [inviteMethod, setInviteMethod] = useState<'EMAIL' | 'LINK'>('EMAIL');
   const [inviteEmail, setInviteEmail] = useState<string>('');
-  const [inviteRole, setInviteRole] = useState<string>('LEGAL_ANALYST');
+  const [inviteRole, setInviteRole] = useState<string>('VIEWER');
   const [isSendingInvite, setIsSendingInvite] = useState<boolean>(false);
   const [generatedInviteUrl, setGeneratedInviteUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
@@ -153,7 +122,7 @@ export function UserManagementContent() {
   }, [fetchTeamData]);
 
   const currentMember = members.find((m) => m.user_id === user?.id);
-  const isAdmin = user?.is_superuser || currentMember?.role?.toUpperCase() === 'ADMIN' || currentMember?.role?.toUpperCase() === 'ORGANIZATION_ADMIN' || currentMember?.role?.toUpperCase() === 'SUPER_ADMIN';
+  const isAdmin = authIsAdmin || isRoleAdmin(currentMember?.role, user?.is_superuser);
 
   // Handle Invitation Generation (Email or Share Link)
   const handleGenerateInvite = async (e: React.FormEvent) => {

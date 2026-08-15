@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { useAuth } from "@/context/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -106,6 +107,7 @@ export const OrganizationWorkspaceHeader = memo(function OrganizationWorkspaceHe
   onEdit,
 }: OrganizationWorkspaceHeaderProps) {
   const router = useRouter();
+  const { permissions } = useAuth();
 
   const status = deriveStatus(complianceScore);
   const updatedDate = organization.updated_at
@@ -218,26 +220,30 @@ export const OrganizationWorkspaceHeader = memo(function OrganizationWorkspaceHe
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                size="sm"
-                onClick={() => router.push("/compliance")}
-                className="gap-1.5 text-xs font-semibold cursor-pointer"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                Run Analysis
-              </Button>
+              {permissions.canRunAnalysis && (
+                <Button
+                  size="sm"
+                  onClick={() => router.push("/compliance")}
+                  className="gap-1.5 text-xs font-semibold cursor-pointer"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Run Analysis
+                </Button>
+              )}
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/documents")}
-                className="gap-1.5 text-xs cursor-pointer"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Upload Policy
-              </Button>
+              {permissions.canUploadDocuments && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push("/documents")}
+                  className="gap-1.5 text-xs cursor-pointer"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload Policy
+                </Button>
+              )}
 
-              {onEdit && (
+              {permissions.canManageOrganization && onEdit && (
                 <Button
                   variant="outline"
                   size="sm"

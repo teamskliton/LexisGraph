@@ -13,6 +13,7 @@ import {
   CheckCheck,
   ExternalLink,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,6 +37,8 @@ export function NotificationBell({ organizationId, className }: NotificationBell
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [filterTab, setFilterTab] = useState<"ALL" | "UNREAD">("ALL");
+
   // Finding drawer state for quick inspection
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -57,7 +60,10 @@ export function NotificationBell({ organizationId, className }: NotificationBell
     setIsLoading(true);
     setError(null);
     try {
-      const data = await notificationsService.getNotifications(organizationId, { limit: 15 });
+      const data = await notificationsService.getNotifications(organizationId, {
+        unread_only: filterTab === "UNREAD",
+        limit: 25,
+      });
       setNotifications(data || []);
     } catch (err: any) {
       console.error("Failed to load notifications:", err);
@@ -65,7 +71,7 @@ export function NotificationBell({ organizationId, className }: NotificationBell
     } finally {
       setIsLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, filterTab]);
 
   useEffect(() => {
     fetchUnreadCount();
@@ -103,18 +109,34 @@ export function NotificationBell({ organizationId, className }: NotificationBell
       }
     }
 
+    if (notification.organization_id && typeof window !== "undefined") {
+      const currentStored = localStorage.getItem("selected_organization_id");
+      if (currentStored !== notification.organization_id) {
+        localStorage.setItem("selected_organization_id", notification.organization_id);
+        window.dispatchEvent(new Event("organization_changed"));
+      }
+    }
+
     setIsOpen(false);
 
     if (notification.finding_id) {
-      try {
-        const findingDetail = await findingsService.getFinding(notification.finding_id);
-        setSelectedFinding(findingDetail as FindingItem);
-        setIsDrawerOpen(true);
-      } catch (err) {
-        router.push("/compliance/my-work");
+      const isCommentRelated =
+        Boolean(notification.comment_id) ||
+        notification.type.includes("COMMENT") ||
+        notification.type.includes("MENTION");
+
+      if (isCommentRelated) {
+        const queryParams = new URLSearchParams();
+        queryParams.set("tab", "discussion");
+        if (notification.comment_id) {
+          queryParams.set("commentId", notification.comment_id);
+        }
+        router.push(`/findings/${notification.finding_id}?${queryParams.toString()}`);
+      } else {
+        router.push(`/findings/${notification.finding_id}`);
       }
     } else {
-      router.push("/compliance/my-work");
+      router.push("/compliance/my-work?view=all");
     }
   };
 
@@ -131,12 +153,22 @@ export function NotificationBell({ organizationId, className }: NotificationBell
 
   const renderIcon = (type: string) => {
     switch (type) {
+      case "FINDING_SUBMITTED_FOR_REVIEW":
+        return <Send className="h-4 w-4 text-sky-500 shrink-0" />;
+      case "FINDING_RESOLVED":
+        return <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />;
+      case "FINDING_REJECTED":
+        return <ShieldAlert className="h-4 w-4 text-rose-500 shrink-0" />;
       case "FINDING_ASSIGNED":
         return <UserCheck className="h-4 w-4 text-indigo-500 shrink-0" />;
       case "FINDING_STATUS_CHANGED":
         return <ShieldAlert className="h-4 w-4 text-amber-500 shrink-0" />;
       case "FINDING_COMMENTED":
+      case "FINDING_COMMENT_REPLIED":
+      case "FINDING_MENTIONED":
         return <MessageSquare className="h-4 w-4 text-blue-500 shrink-0" />;
+      case "FINDING_COMMENT_RESOLVED":
+        return <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />;
       case "FINDING_REOPENED":
         return <RotateCcw className="h-4 w-4 text-rose-500 shrink-0" />;
       default:
@@ -164,29 +196,59 @@ export function NotificationBell({ organizationId, className }: NotificationBell
 
       {/* Popover Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-border bg-card text-card-foreground shadow-xl z-50 overflow-hidden flex flex-col max-h-[480px]">
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-border bg-card text-card-foreground shadow-xl z-50 overflow-hidden flex flex-col max-h-[500px]">
           {/* Header */}
-          <div className="flex items-center justify-between p-3.5 border-b border-border/60 bg-muted/20">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-foreground">Notifications</span>
+          <div className="p-3 border-b border-border/60 bg-muted/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-foreground">Notifications</span>
+                {unreadCount > 0 && (
+                  <Badge variant="outline" className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20 text-[10px] font-semibold">
+                    {unreadCount} unread
+                  </Badge>
+                )}
+              </div>
+
               {unreadCount > 0 && (
-                <Badge variant="outline" className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20 text-[10px] font-semibold">
-                  {unreadCount} unread
-                </Badge>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleMarkAllRead}
+                  className="text-[11px] h-6 text-muted-foreground hover:text-foreground gap-1 cursor-pointer px-1.5"
+                >
+                  <CheckCheck className="h-3 w-3" />
+                  <span>Mark all read</span>
+                </Button>
               )}
             </div>
 
-            {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={handleMarkAllRead}
-                className="text-[11px] h-6 text-muted-foreground hover:text-foreground gap-1 cursor-pointer"
+            {/* Filter Tabs: [ All ] [ Unread ] */}
+            <div className="flex items-center gap-1 bg-muted/50 p-0.5 rounded-lg border border-border/40">
+              <button
+                type="button"
+                onClick={() => setFilterTab("ALL")}
+                className={cn(
+                  "flex-1 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer text-center",
+                  filterTab === "ALL"
+                    ? "bg-background text-foreground shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
               >
-                <CheckCheck className="h-3 w-3" />
-                <span>Mark all read</span>
-              </Button>
-            )}
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterTab("UNREAD")}
+                className={cn(
+                  "flex-1 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer text-center",
+                  filterTab === "UNREAD"
+                    ? "bg-background text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Unread {unreadCount > 0 ? `(${unreadCount})` : ""}
+              </button>
+            </div>
           </div>
 
           {/* Body */}
@@ -204,10 +266,16 @@ export function NotificationBell({ organizationId, className }: NotificationBell
                 </Button>
               </div>
             ) : notifications.length === 0 ? (
-              <div className="p-8 text-center space-y-1">
-                <Bell className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
-                <p className="text-xs font-semibold text-foreground">You're all caught up.</p>
-                <p className="text-[11px] text-muted-foreground">No new notifications in this organization.</p>
+              <div className="p-8 text-center space-y-1.5">
+                <Bell className="h-7 w-7 text-muted-foreground mx-auto opacity-40" />
+                <p className="text-xs font-semibold text-foreground">
+                  {filterTab === "UNREAD" ? "You're all caught up." : "No notifications yet."}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {filterTab === "UNREAD"
+                    ? "There are no unread notifications."
+                    : "Notifications for finding reviews and comments will appear here."}
+                </p>
               </div>
             ) : (
               notifications.map((n) => (
@@ -215,23 +283,46 @@ export function NotificationBell({ organizationId, className }: NotificationBell
                   key={n.id}
                   onClick={() => handleMarkAsRead(n)}
                   className={cn(
-                    "p-3.5 flex items-start gap-3 transition-colors cursor-pointer hover:bg-muted/40",
-                    !n.is_read && "bg-indigo-500/5"
+                    "p-3 flex items-start gap-2.5 transition-colors cursor-pointer hover:bg-muted/40",
+                    !n.is_read ? "bg-indigo-500/5 dark:bg-indigo-500/10" : "opacity-85"
                   )}
                 >
+                  {/* Read / Unread bullet indicator */}
+                  <div className="mt-1 flex items-center justify-center shrink-0">
+                    {!n.is_read ? (
+                      <span className="h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400" title="Unread notification" />
+                    ) : (
+                      <span className="h-2 w-2 rounded-full border border-muted-foreground/40" title="Read notification" />
+                    )}
+                  </div>
+
                   <div className="mt-0.5">{renderIcon(n.type)}</div>
 
-                  <div className="flex-1 space-y-0.5">
+                  <div className="flex-1 space-y-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <span className={cn("text-xs font-semibold", !n.is_read ? "text-foreground font-bold" : "text-muted-foreground")}>
+                      <span className={cn("text-xs leading-snug truncate", !n.is_read ? "font-bold text-foreground" : "font-medium text-muted-foreground")}>
                         {n.title}
                       </span>
-                      {!n.is_read && <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />}
+                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                        {format(new Date(n.created_at), "MMM d, HH:mm")}
+                      </span>
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {format(new Date(n.created_at), "MMM d, HH:mm")}
-                    </span>
+
+                    <p className="text-xs text-foreground/80 line-clamp-2 leading-relaxed">{n.message}</p>
+
+                    {/* Structured context badges */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      {n.finding_id && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono text-indigo-600 dark:text-indigo-400 border-indigo-500/20 bg-indigo-500/5">
+                          Finding #{n.finding_id.slice(0, 8)}
+                        </Badge>
+                      )}
+                      {n.comment_id && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono text-muted-foreground border-border/50">
+                          Discussion
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))
@@ -249,7 +340,7 @@ export function NotificationBell({ organizationId, className }: NotificationBell
               }}
               className="w-full text-xs font-semibold text-indigo-500 hover:text-indigo-600 gap-1 cursor-pointer"
             >
-              <span>View All Notifications</span>
+              <span>View Notification Center</span>
               <ExternalLink className="h-3 w-3" />
             </Button>
           </div>

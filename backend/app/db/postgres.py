@@ -61,6 +61,16 @@ def test_connection() -> bool:
                 logger.info("Migrated organizations.logo_url column to TEXT in PostgreSQL")
             except Exception as e:
                 logger.debug("organizations.logo_url column alter check: %s", e)
+
+            # Auto-ensure finding_comments columns exist
+            try:
+                conn.execute(text("ALTER TABLE finding_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES finding_comments(id) ON DELETE CASCADE;"))
+                conn.execute(text("ALTER TABLE finding_comments ADD COLUMN IF NOT EXISTS is_resolved BOOLEAN DEFAULT FALSE NOT NULL;"))
+                conn.execute(text("ALTER TABLE finding_comments ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES users(id) ON DELETE SET NULL;"))
+                conn.execute(text("ALTER TABLE finding_comments ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;"))
+                conn.commit()
+            except Exception as e:
+                logger.debug("finding_comments column migration check: %s", e)
         logger.info("PostgreSQL connectivity OK")
         return True
     except OperationalError as exc:
