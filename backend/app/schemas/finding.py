@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 
 class FindingStatusUpdateRequest(BaseModel):
-    lifecycle_status: Optional[str] = Field(None, description="Target lifecycle status: OPEN, IN_REVIEW, REMEDIATION, RESOLVED, REOPENED")
+    lifecycle_status: Optional[str] = Field(None, description="Target lifecycle status: OPEN, IN_REVIEW, REMEDIATION, POTENTIAL_FALSE_POSITIVE, ADMIN_REVIEW, RESOLVED, REOPENED, REJECTED")
     status: Optional[str] = Field(None, description="Alias for lifecycle_status")
 
 
@@ -26,12 +26,26 @@ class FindingReopenRequest(BaseModel):
     reopen_reason: Optional[str] = Field(None, description="Reason for reopening finding")
 
 
+class FindingRejectRequest(BaseModel):
+    rejection_reason: Optional[str] = Field(None, description="Reason for rejecting false-positive finding")
+
+
+class FindingSubmitReviewRequest(BaseModel):
+    submission_note: Optional[str] = Field(None, description="Note summarizing remediation or false positive for Admin review")
+
+
 class FindingRemediationUpdateRequest(BaseModel):
     due_date: Optional[datetime] = Field(None, description="ISO format due date timestamp or null to clear")
 
 
 class FindingCommentCreateRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000, description="Comment text content")
+    parent_id: Optional[uuid.UUID] = Field(None, description="UUID of parent comment for threaded replies")
+    mentioned_user_ids: Optional[List[uuid.UUID]] = Field(None, description="List of user UUIDs mentioned in comment")
+
+
+class FindingCommentResolveRequest(BaseModel):
+    is_resolved: bool = Field(True, description="Whether comment thread/discussion is resolved")
 
 
 class FindingAssigneeResponse(BaseModel):
@@ -46,9 +60,16 @@ class FindingCommentResponse(BaseModel):
     user_id: str
     user_name: str
     user_email: str
+    user_role: Optional[str] = None
     content: str
+    parent_id: Optional[str] = None
+    is_resolved: bool = False
+    resolved_by: Optional[str] = None
+    resolved_by_name: Optional[str] = None
+    resolved_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    replies: List[FindingCommentResponse] = []
 
 
 class FindingActivityItem(BaseModel):
@@ -82,5 +103,14 @@ class FindingItemResponse(BaseModel):
     remediation_due_date: Optional[datetime] = None
     is_overdue: bool = False
     comments_count: int = 0
+    organization_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class FindingPaginatedResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    items: List[FindingItemResponse]

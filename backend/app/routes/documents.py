@@ -77,8 +77,15 @@ def upload_document(
             detail=f"Invalid document_type: {document_type}. Must be 'REGULATION' or 'POLICY'.",
         )
 
-    # Validate organization ownership
+    # Validate organization access
     _validate_organization_ownership(db, organization_id, current_user.id)
+
+    from app.core.rbac_dependencies import is_org_analyst_or_admin
+    if not is_org_analyst_or_admin(db, current_user.id, organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewers and Viewers are not permitted to upload documents.",
+        )
 
     # Store file and get metadata
     try:
@@ -394,12 +401,9 @@ def get_document_status(
 
 
 
-    # 403 rather than 404 so users know the document exists but is not theirs.
-    if document.uploaded_by != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to view this document.",
-        )
+    # If policy document, validate user belongs to the document's organization
+    if not is_regulation and hasattr(document, "organization_id") and document.organization_id:
+        _validate_organization_ownership(db, document.organization_id, current_user.id)
 
     logger.info(
         "Status queried: document_id=%s status=%s progress=%s by user=%s",
@@ -462,7 +466,16 @@ def retry_document(
             detail="Document not found.",
         )
 
-    if document.uploaded_by != current_user.id:
+    _validate_organization_ownership(db, document.organization_id, current_user.id)
+
+    from app.core.rbac_dependencies import is_org_analyst_or_admin
+    if not is_org_analyst_or_admin(db, current_user.id, document.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewers and Viewers are not permitted to retry document processing.",
+        )
+
+    if document.uploaded_by != current_user.id and not is_org_admin(db, current_user.id, document.organization_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to retry this document.",
@@ -549,8 +562,15 @@ def delete_document(
             detail="Document not found.",
         )
 
-    # Validate organization ownership
+    # Validate organization access
     _validate_organization_ownership(db, document.organization_id, current_user.id)
+
+    from app.core.rbac_dependencies import is_org_analyst_or_admin
+    if not is_org_analyst_or_admin(db, current_user.id, document.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewers and Viewers are not permitted to delete documents.",
+        )
 
     # Store the file path before deleting the record
     file_path = document.file_path

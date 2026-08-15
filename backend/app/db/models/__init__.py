@@ -15,6 +15,7 @@ from app.db.models.regulation import Regulation, OrganizationRegulation
 from app.db.models.activity import Activity
 from app.db.models.conversation import ConversationSession, ConversationMessage
 from app.compliance.models import ComplianceReport, ComplianceReportStatus, ComplianceJob, ComplianceJobStatus, ReportFinding, FindingComment
+from app.db.models.remediation import FindingRemediation, RemediationEvidence
 from app.db.models.rbac import OrganizationMember, OrganizationInvitation, AuditLog, UserRole, MemberStatus
 from app.db.models.notification import Notification
 from app.models.report import Report
@@ -36,6 +37,8 @@ __all__ = [
     "ComplianceJobStatus",
     "ReportFinding",
     "FindingComment",
+    "FindingRemediation",
+    "RemediationEvidence",
     "Report",
     "OrganizationMember",
     "OrganizationInvitation",

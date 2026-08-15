@@ -326,10 +326,11 @@ def delete_report(
     user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000000")
     if current_user:
         report = service.get_report(db, report_id)
-        if not verify_user_organization_access(db, current_user.id, report.organization_id):
+        from app.core.rbac_dependencies import is_org_admin
+        if not is_org_admin(db, current_user.id, report.organization_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to delete this organization's report.",
+                detail="Only organization admins are permitted to delete compliance reports.",
             )
     success = service.delete_report(db, report_id, user_id)
     if not success:

@@ -54,6 +54,18 @@ def _validate_org_access(db: Session, organization_id: uuid.UUID, current_user: 
         )
 
 
+def _require_analyst_or_admin(current_user: User | None) -> None:
+    if current_user is None or getattr(current_user, "is_superuser", False):
+        return
+    role_str = str(getattr(current_user, "role", "")).upper()
+    if any(allowed in role_str for allowed in ("ADMIN", "ANALYST", "MANAGER")):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Only Compliance Analysts and Administrators may initiate or modify Knowledge Graph builds.",
+    )
+
+
 class KnowledgeGraphRequest(BaseModel):
     user_document_id: str = Field(min_length=1)
     domain_document_ids: list[str] = Field(min_length=1)
@@ -130,7 +142,11 @@ async def graph_documents() -> dict:
 
 
 @router.post("/build-knowledge-graph")
-async def build_knowledge_graph_endpoint(payload: KnowledgeGraphRequest) -> dict:
+async def build_knowledge_graph_endpoint(
+    payload: KnowledgeGraphRequest,
+    current_user: User | None = Depends(get_optional_current_user),
+) -> dict:
+    _require_analyst_or_admin(current_user)
     job = start_job("build-knowledge-graph")
     try:
         update_job(job["job_id"], "Loading selected documents", 15)
@@ -147,7 +163,10 @@ async def build_knowledge_graph_endpoint(payload: KnowledgeGraphRequest) -> dict
 
 
 @router.post("/reset-knowledge-graph")
-async def reset_knowledge_graph_endpoint() -> dict:
+async def reset_knowledge_graph_endpoint(
+    current_user: User | None = Depends(get_optional_current_user),
+) -> dict:
+    _require_analyst_or_admin(current_user)
     try:
         return await to_thread(clear_active_knowledge_graph)
     except Exception as exc:  # noqa: BLE001
@@ -165,7 +184,11 @@ async def graph_history() -> dict:
 
 
 @router.post("/graph-history/{build_id}/activate")
-async def activate_graph_history(build_id: str) -> dict:
+async def activate_graph_history(
+    build_id: str,
+    current_user: User | None = Depends(get_optional_current_user),
+) -> dict:
+    _require_analyst_or_admin(current_user)
     try:
         return await to_thread(activate_knowledge_graph, build_id)
     except ValueError as exc:
@@ -176,7 +199,11 @@ async def activate_graph_history(build_id: str) -> dict:
 
 
 @router.delete("/graph-history/{build_id}")
-async def delete_graph_history(build_id: str) -> dict:
+async def delete_graph_history(
+    build_id: str,
+    current_user: User | None = Depends(get_optional_current_user),
+) -> dict:
+    _require_analyst_or_admin(current_user)
     try:
         return await to_thread(delete_knowledge_graph, build_id)
     except Exception as exc:  # noqa: BLE001
@@ -185,8 +212,11 @@ async def delete_graph_history(build_id: str) -> dict:
 
 
 @router.post("/build-graph")
-async def build_graph_endpoint() -> dict:
+async def build_graph_endpoint(
+    current_user: User | None = Depends(get_optional_current_user),
+) -> dict:
     """Build deduplication-safe Document/Clause graph in Neo4j from MongoDB."""
+    _require_analyst_or_admin(current_user)
     job = start_job("build-graph")
     try:
         update_job(job["job_id"], "Building graph", 35)
@@ -207,8 +237,11 @@ async def build_graph_endpoint() -> dict:
 
 
 @router.post("/build-similarity")
-async def build_similarity_endpoint() -> dict:
+async def build_similarity_endpoint(
+    current_user: User | None = Depends(get_optional_current_user),
+) -> dict:
     """Create SIMILAR_TO relationships between clause nodes."""
+    _require_analyst_or_admin(current_user)
     job = start_job("build-similarity")
     try:
         update_job(job["job_id"], "Creating similarity edges", 35)

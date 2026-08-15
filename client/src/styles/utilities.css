@@ -797,7 +797,11 @@ input:-webkit-autofill:active {
   box-shadow: var(--shadow-xl);
 }
 
-/* SECTION 14 — Scrollbar */
+/* SECTION 14 — Scrollbar & Layout Stability */
+
+html {
+  scrollbar-gutter: stable;
+}
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

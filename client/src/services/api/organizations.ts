@@ -109,6 +109,7 @@ export const organizationsService = {
 export interface OrganizationMember {
   id: string;
   user_id: string;
+  username?: string;
   full_name: string;
   email: string;
   role: string;

@@ -19,6 +19,7 @@ class NotificationResponse(BaseModel):
     is_read: bool
     finding_id: Optional[str] = None
     report_id: Optional[str] = None
+    comment_id: Optional[str] = None
     created_at: datetime
 
 

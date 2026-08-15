@@ -13,8 +13,17 @@ from app.core.schemas import (
     OrganizationUpdate,
 )
 from app.core.dependencies import get_current_user
+from app.core.rbac_dependencies import get_user_org_role, ROLE_RANK
 from app.db.models import Organization, User
+from app.db.models.rbac import (
+    AuditLog,
+    MemberStatus,
+    OrganizationInvitation,
+    OrganizationMember,
+    UserRole,
+)
 from app.db.session import get_db
+from app.services import audit_service
 from app.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
@@ -145,26 +154,29 @@ def update_organization(
     Update an existing organization.
     Only the owner or admin can update their organization.
     """
+    from app.core.rbac_dependencies import is_org_admin
     from app.routes.reports import verify_user_organization_access
-    if not verify_user_organization_access(db, current_user.id, organization_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found or you don't have access to it."
-        )
+
     org = db.get(Organization, organization_id)
-    if not org:
+    if not org or not verify_user_organization_access(db, current_user.id, organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found."
+            detail="Organization not found or you don't have access to it.",
         )
-        
+
+    if not is_org_admin(db, current_user.id, organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can modify organization settings.",
+        )
+
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(org, field, value)
-        
+
     db.commit()
     db.refresh(org)
-    
+
     logger.info("Organization updated: id=%s by user=%s", org.id, current_user.id)
     return org
 
@@ -181,19 +193,24 @@ def delete_organization(
 ):
     """
     Delete an organization.
-    Only the owner can delete their organization.
+    Only the owner or admin can delete their organization.
     """
-    org = db.query(Organization).filter(
-        Organization.id == organization_id,
-        Organization.created_by == current_user.id
-    ).first()
-    
-    if not org:
+    from app.core.rbac_dependencies import is_org_admin
+    from app.routes.reports import verify_user_organization_access
+
+    org = db.get(Organization, organization_id)
+    if not org or not verify_user_organization_access(db, current_user.id, organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found or you don't have access to it."
+            detail="Organization not found or you don't have access to it.",
         )
-        
+
+    if not is_org_admin(db, current_user.id, organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can delete an organization.",
+        )
+
     db.delete(org)
     db.commit()
     logger.info("Organization deleted: id=%s by user=%s", organization_id, current_user.id)
@@ -292,9 +309,11 @@ def list_organization_members(
 
     for m in members:
         seen_users.add(m.user_id)
+        uname = m.user.username if m.user and m.user.username else (m.user.email.split("@")[0] if m.user and m.user.email else "user")
         result.append({
             "id": str(m.id),
             "user_id": str(m.user_id),
+            "username": uname,
             "full_name": m.user.full_name if m.user else "User",
             "email": m.user.email if m.user else "",
             "role": m.role.value if hasattr(m.role, "value") else str(m.role),
@@ -306,9 +325,11 @@ def list_organization_members(
     if org and org.created_by not in seen_users:
         owner = db.get(User, org.created_by)
         if owner:
+            owner_uname = owner.username if owner.username else (owner.email.split("@")[0] if owner.email else "owner")
             result.insert(0, {
                 "id": str(uuid.uuid4()),
                 "user_id": str(owner.id),
+                "username": owner_uname,
                 "full_name": owner.full_name,
                 "email": owner.email,
                 "role": UserRole.ADMIN.value,
@@ -329,8 +350,16 @@ def list_organization_invitations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List all pending invitation tokens for an organization."""
+    """List all pending invitation tokens for an organization. Requires ADMIN role."""
     from datetime import datetime, timezone
+
+    # ── Authorization: ADMIN only ──────────────────────────────────────────
+    caller_role = get_user_org_role(db, current_user.id, organization_id)
+    if ROLE_RANK.get(caller_role, 0) < ROLE_RANK[UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can view invitation lists.",
+        )
 
     invitations = db.query(OrganizationInvitation).filter(
         OrganizationInvitation.organization_id == organization_id,
@@ -362,7 +391,15 @@ def cancel_organization_invitation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Cancel and delete a pending invitation token."""
+    """Cancel and delete a pending invitation token. Requires ADMIN role."""
+    # ── Authorization: ADMIN only ──────────────────────────────────────────
+    caller_role = get_user_org_role(db, current_user.id, organization_id)
+    if ROLE_RANK.get(caller_role, 0) < ROLE_RANK[UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can cancel invitations.",
+        )
+
     inv = db.query(OrganizationInvitation).filter(
         OrganizationInvitation.id == invitation_id,
         OrganizationInvitation.organization_id == organization_id,
@@ -390,9 +427,38 @@ def invite_user(
     import secrets
     from datetime import datetime, timedelta, timezone
 
+    # ── Authorization: ADMIN only ──────────────────────────────────────────
+    caller_role = get_user_org_role(db, current_user.id, organization_id)
+    if ROLE_RANK.get(caller_role, 0) < ROLE_RANK[UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can create invitation links.",
+        )
+
     org = db.get(Organization, organization_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    # ── Prevent privilege escalation via invitation ──────────────────────────
+    # ADMIN cannot be assigned through an invitation link.
+    # Admins are only created through normal signup + setup-role.
+    INVITABLE_ROLES = {
+        UserRole.COMPLIANCE_ANALYST,
+        UserRole.LEGAL_ANALYST,
+        UserRole.REVIEWER,
+        UserRole.VIEWER,
+        UserRole.EMPLOYEE,
+        UserRole.MANAGER,
+    }
+    if data.role not in INVITABLE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Role '{data.role.value if hasattr(data.role, 'value') else data.role}' "
+                "cannot be assigned via invitation. "
+                "Admin accounts are created through the normal signup flow."
+            ),
+        )
 
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
@@ -494,6 +560,7 @@ def accept_invitation(
         OrganizationMember.user_id == current_user.id,
     ).first()
 
+    effective_role = invitation_role
     if not member:
         member = OrganizationMember(
             id=uuid.uuid4(),
@@ -505,9 +572,14 @@ def accept_invitation(
         )
         db.add(member)
     else:
-        # Already a member — update role to the invited role and ensure ACTIVE
+        # Already a member — preserve existing ADMIN role if user is admin, otherwise update to invited role
         member.status = MemberStatus.ACTIVE
-        member.role = invitation_role
+        ADMIN_ROLES = {UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ORGANIZATION_ADMIN}
+        if member.role in ADMIN_ROLES:
+            effective_role = member.role
+        else:
+            member.role = invitation_role
+            effective_role = invitation_role
 
     # Capture member id before commit (needed for audit log)
     member_id_for_audit = member.id
@@ -546,7 +618,7 @@ def accept_invitation(
         "message": "Invitation accepted successfully",
         "organization_id": str(invitation_org_id),
         "organization_name": org_name,
-        "role": invitation_role.value if hasattr(invitation_role, "value") else str(invitation_role),
+        "role": effective_role.value if hasattr(effective_role, "value") else str(effective_role),
     }
 
 
@@ -561,7 +633,15 @@ def update_member_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update assigned role for an organization member."""
+    """Update assigned role for an organization member. Requires ADMIN role."""
+    # ── Authorization: ADMIN only ──────────────────────────────────────────
+    caller_role = get_user_org_role(db, current_user.id, organization_id)
+    if ROLE_RANK.get(caller_role, 0) < ROLE_RANK[UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can change member roles.",
+        )
+
     member = db.query(OrganizationMember).filter(
         OrganizationMember.organization_id == organization_id,
         OrganizationMember.user_id == user_id,
@@ -605,7 +685,15 @@ def remove_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Remove user from organization membership."""
+    """Remove user from organization membership. Requires ADMIN role."""
+    # ── Authorization: ADMIN only ──────────────────────────────────────────
+    caller_role = get_user_org_role(db, current_user.id, organization_id)
+    if ROLE_RANK.get(caller_role, 0) < ROLE_RANK[UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can remove members.",
+        )
+
     member = db.query(OrganizationMember).filter(
         OrganizationMember.organization_id == organization_id,
         OrganizationMember.user_id == user_id,

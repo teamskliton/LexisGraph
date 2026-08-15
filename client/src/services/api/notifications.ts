@@ -10,6 +10,7 @@ export interface NotificationItem {
   is_read: boolean;
   finding_id?: string | null;
   report_id?: string | null;
+  comment_id?: string | null;
   created_at: string;
 }
 

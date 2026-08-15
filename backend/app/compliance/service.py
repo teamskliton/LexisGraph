@@ -52,12 +52,27 @@ def analyze_compliance_report(
     Creates a ComplianceJob in QUEUED status and enqueues non-blocking worker execution.
     Returns immediately in < 1 second.
     """
-    # 1. Validate Organization ownership
+    # 1. Validate Organization access and role authorization
+    from app.core.rbac_dependencies import is_org_analyst_or_admin
+    from app.routes.reports import verify_user_organization_access
+
     org = db.get(Organization, data.organization_id)
-    if not org or org.created_by != user_id:
+    if not org:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if not org else status.HTTP_403_FORBIDDEN,
-            detail="Organization not found or you don't have access to it.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found.",
+        )
+
+    if not verify_user_organization_access(db, user_id, data.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this organization.",
+        )
+
+    if not is_org_analyst_or_admin(db, user_id, data.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewers and Viewers are not authorized to run compliance analyses.",
         )
 
     # 2. Validate Regulation

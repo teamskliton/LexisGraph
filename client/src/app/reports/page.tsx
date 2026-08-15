@@ -46,7 +46,7 @@ const DEFAULT_FILTERS: FilterState = {
 };
 
 function ReportsPageContent() {
-  const { logout } = useAuth();
+  const { logout, permissions } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const reportQueryId = searchParams.get("report");
@@ -292,7 +292,7 @@ function ReportsPageContent() {
                 orgMap={orgMap}
                 isLoading={isLoading}
                 onViewReport={handleViewReport}
-                onDeleteReport={handleDeleteReport}
+                onDeleteReport={permissions.canManageOrganization ? handleDeleteReport : undefined}
               />
             ) : isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

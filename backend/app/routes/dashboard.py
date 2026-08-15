@@ -101,31 +101,54 @@ def get_dashboard_stats(
     Computes real-time live user-specific dashboard metrics directly from PostgreSQL database records.
     Calculates KPI totals, activity streams, score distributions, risk level breakdown, reports over time, org averages, and recent reports for current user.
     """
-    # 1. KPI Counts
-    total_orgs = db.scalar(
-        select(func.count(Organization.id)).where(Organization.created_by == current_user.id)
-    ) or 0
-    total_regs = db.scalar(select(func.count(Regulation.id))) or 0
-    total_pols = db.scalar(
-        select(func.count(Document.id)).where(
-            Document.document_type == DocumentType.POLICY,
-            Document.uploaded_by == current_user.id,
-        )
-    ) or 0
-    total_reports = db.scalar(
-        select(func.count(ComplianceReport.id)).where(
-            ComplianceReport.created_by == current_user.id,
-            ComplianceReport.is_deleted == False,
-        )
-    ) or 0
+    # 1. Organization IDs accessible by current user (created or active membership)
+    from app.db.models.rbac import OrganizationMember, MemberStatus
 
-    # Calculate average compliance score across user's evaluated reports
-    scores_query = select(ComplianceReport.overall_score).where(
-        ComplianceReport.created_by == current_user.id,
-        ComplianceReport.overall_score.isnot(None),
-        ComplianceReport.is_deleted == False,
-    )
-    scores = db.scalars(scores_query).all()
+    member_org_ids = db.scalars(
+        select(OrganizationMember.organization_id).where(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.status == MemberStatus.ACTIVE,
+        )
+    ).all()
+    created_org_ids = db.scalars(
+        select(Organization.id).where(Organization.created_by == current_user.id)
+    ).all()
+    user_org_ids = list(set(member_org_ids) | set(created_org_ids))
+
+    total_orgs = len(user_org_ids)
+    total_regs = db.scalar(select(func.count(Regulation.id))) or 0
+
+    if user_org_ids:
+        total_pols = db.scalar(
+            select(func.count(Document.id)).where(
+                Document.document_type == DocumentType.POLICY,
+                (Document.organization_id.in_(user_org_ids) | (Document.uploaded_by == current_user.id)),
+            )
+        ) or 0
+        all_reports = db.scalars(
+            select(ComplianceReport).where(
+                (ComplianceReport.organization_id.in_(user_org_ids) | (ComplianceReport.created_by == current_user.id)),
+                ComplianceReport.is_deleted == False,
+            )
+        ).all()
+    else:
+        total_pols = db.scalar(
+            select(func.count(Document.id)).where(
+                Document.document_type == DocumentType.POLICY,
+                Document.uploaded_by == current_user.id,
+            )
+        ) or 0
+        all_reports = db.scalars(
+            select(ComplianceReport).where(
+                ComplianceReport.created_by == current_user.id,
+                ComplianceReport.is_deleted == False,
+            )
+        ).all()
+
+    total_reports = len(all_reports)
+
+    # Calculate average compliance score across accessible reports
+    scores = [r.overall_score for r in all_reports if r.overall_score is not None]
     if scores:
         normalized_scores = [s * 100 if (s <= 1.0 and s > 0) else s for s in scores]
         avg_score = round(sum(normalized_scores) / len(normalized_scores), 1)
@@ -140,7 +163,7 @@ def get_dashboard_stats(
         average_compliance_score=avg_score,
     )
 
-    # 2. Score Distribution & Risk Breakdown (user-specific)
+    # 2. Score Distribution & Risk Breakdown
     excellent_c = 0
     good_c = 0
     needs_review_c = 0
@@ -150,13 +173,6 @@ def get_dashboard_stats(
     medium_r = 0
     high_r = 0
     critical_r = 0
-
-    all_reports = db.scalars(
-        select(ComplianceReport).where(
-            ComplianceReport.created_by == current_user.id,
-            ComplianceReport.is_deleted == False,
-        )
-    ).all()
 
     for rep in all_reports:
         sc = rep.overall_score
@@ -196,7 +212,7 @@ def get_dashboard_stats(
         critical=critical_r,
     )
 
-    # 3. Reports Over Time (Monthly grouping, user-specific)
+    # 3. Reports Over Time (Monthly grouping)
     over_time_map: Dict[str, int] = {}
     for rep in all_reports:
         dt = rep.created_at
@@ -208,10 +224,13 @@ def get_dashboard_stats(
         for lbl, cnt in list(over_time_map.items())[-6:]
     ]
 
-    # 4. Average Score Per Organization (user-owned organizations)
-    user_orgs = db.scalars(
-        select(Organization).where(Organization.created_by == current_user.id)
-    ).all()
+    # 4. Average Score Per Organization (accessible organizations)
+    if user_org_ids:
+        user_orgs = db.scalars(
+            select(Organization).where(Organization.id.in_(user_org_ids))
+        ).all()
+    else:
+        user_orgs = []
     org_name_map = {str(o.id): o.name for o in user_orgs}
 
     org_scores_list: List[OrgScoreAnalyticsItem] = []
@@ -235,15 +254,26 @@ def get_dashboard_stats(
     org_scores_list.sort(key=lambda x: x.avg_score, reverse=True)
     org_scores = org_scores_list[:5]
 
-    recent_report_objs = db.scalars(
-        select(ComplianceReport)
-        .where(
-            ComplianceReport.created_by == current_user.id,
-            ComplianceReport.is_deleted == False,
-        )
-        .order_by(ComplianceReport.created_at.desc())
-        .limit(5)
-    ).all()
+    if user_org_ids:
+        recent_report_objs = db.scalars(
+            select(ComplianceReport)
+            .where(
+                (ComplianceReport.organization_id.in_(user_org_ids) | (ComplianceReport.created_by == current_user.id)),
+                ComplianceReport.is_deleted == False,
+            )
+            .order_by(ComplianceReport.created_at.desc())
+            .limit(5)
+        ).all()
+    else:
+        recent_report_objs = db.scalars(
+            select(ComplianceReport)
+            .where(
+                ComplianceReport.created_by == current_user.id,
+                ComplianceReport.is_deleted == False,
+            )
+            .order_by(ComplianceReport.created_at.desc())
+            .limit(5)
+        ).all()
 
     recent_reports: List[RecentReportItem] = []
     for r in recent_report_objs:
