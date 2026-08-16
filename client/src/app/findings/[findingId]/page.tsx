@@ -42,9 +42,14 @@ import {
   FindingComment,
   FindingActivity,
 } from "@/services/api/findings";
+import {
+  remediationsService,
+  RemediationDetail,
+} from "@/services/api/remediations";
 import { organizationsService, OrganizationMember } from "@/services/api/organizations";
 import { formatRoleLabel } from "@/utils/role-utils";
 import { RemediationSection } from "@/components/compliance/RemediationSection";
+import { FindingActivityTimeline } from "@/components/compliance/FindingActivityTimeline";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -145,15 +150,16 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
 
   const [finding, setFinding] = useState<FindingDetail | null>(null);
   const [comments, setComments] = useState<FindingComment[]>([]);
-  const [activities, setActivities] = useState<FindingActivity[]>([]);
   const [orgMembers, setOrgMembers] = useState<OrganizationMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Status & action states
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [resolutionNoteInput, setResolutionNoteInput] = useState("");
+  // Remediation state (Sprint 7.7 resolution eligibility)
+  const [remediation, setRemediation] = useState<RemediationDetail | null>(null);
+
+  // Confirmation Modals (Sprint 7.1 & 7.7)
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [resolutionNoteInput, setResolutionNoteInput] = useState("");
   const [isResolving, setIsResolving] = useState(false);
 
   const [reopenReasonInput, setReopenReasonInput] = useState("");
@@ -167,6 +173,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
   const [rejectionReasonInput, setRejectionReasonInput] = useState("");
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Comment input (Sprint 7.2)
   const [commentInput, setCommentInput] = useState("");
@@ -177,6 +184,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [replyMentionQuery, setReplyMentionQuery] = useState<string | null>(null);
   const [discussionFilter, setDiscussionFilter] = useState<"ALL" | "UNRESOLVED" | "RESOLVED">("ALL");
+  const [activityRefreshTrigger, setActivityRefreshTrigger] = useState(0);
 
   const discussionStats = useMemo(() => {
     const totalCount = comments.reduce((acc, c) => acc + 1 + (c.replies ? c.replies.length : 0), 0);
@@ -203,15 +211,15 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await findingsService.getFinding(findingId);
-      setFinding(data);
-
-      const [comms, acts] = await Promise.all([
+      const [data, comms, rem] = await Promise.all([
+        findingsService.getFinding(findingId),
         findingsService.getComments(findingId).catch(() => []),
-        findingsService.getActivity(findingId).catch(() => []),
+        remediationsService.getRemediation(findingId).catch(() => null),
       ]);
+      setFinding(data);
       setComments(comms);
-      setActivities(acts);
+      setRemediation(rem);
+      setActivityRefreshTrigger((p) => p + 1);
 
       const activeOrg =
         data.organization_id ||
@@ -251,6 +259,64 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       }
     }
   }, [isLoading]);
+
+  // Resolution Eligibility (Sprint 7.7)
+  const resolutionEligibility = useMemo(() => {
+    if (!permissions.canResolveFindings) {
+      return {
+        isEligible: false,
+        reason: "Only Organization Administrators can resolve compliance findings.",
+      };
+    }
+
+    const lifecycleStatus = (finding?.lifecycle_status || "OPEN").toUpperCase();
+    if (lifecycleStatus === "RESOLVED") {
+      return { isEligible: false, reason: "This finding is already resolved." };
+    }
+
+    if (remediation) {
+      const remStatus = (remediation.status || "NOT_STARTED").toUpperCase();
+      if (remStatus !== "APPROVED") {
+        if (remStatus === "IN_PROGRESS" || remStatus === "NOT_STARTED") {
+          return {
+            isEligible: false,
+            reason: "Remediation is currently in progress. Complete and approve remediation before resolving this finding.",
+          };
+        }
+        if (remStatus === "READY_FOR_REVIEW") {
+          return {
+            isEligible: false,
+            reason: "Remediation is under review. Complete reviewer verification and admin approval before resolving.",
+          };
+        }
+        if (remStatus === "VERIFIED") {
+          return {
+            isEligible: false,
+            reason: "Remediation has been verified by reviewer, but requires Admin approval before resolving this finding.",
+          };
+        }
+        if (remStatus === "REJECTED") {
+          return {
+            isEligible: false,
+            reason: "Remediation was rejected. Further remediation work is required before resolving this finding.",
+          };
+        }
+        return {
+          isEligible: false,
+          reason: `Remediation must be approved before resolution (Current: ${remediation.status}).`,
+        };
+      }
+    } else {
+      if (lifecycleStatus === "REMEDIATION" || lifecycleStatus === "REMEDIATION_REQUIRED") {
+        return {
+          isEligible: false,
+          reason: "Remediation is required and must be completed and approved before resolving this finding.",
+        };
+      }
+    }
+
+    return { isEligible: true, reason: undefined };
+  }, [permissions.canResolveFindings, finding?.lifecycle_status, remediation]);
 
   const handleStatusChange = async (newStatus: string) => {
     if (!finding) return;
@@ -292,8 +358,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       const updated = await findingsService.updateStatus(finding.id, newStatus);
       setFinding(updated);
       toast.success(`Status updated to ${updated.lifecycle_status}`);
-      const acts = await findingsService.getActivity(finding.id).catch(() => []);
-      setActivities(acts);
+      setActivityRefreshTrigger((p) => p + 1);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to update status.");
     } finally {
@@ -310,8 +375,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       setIsSubmitReviewModalOpen(false);
       setSubmissionNoteInput("");
       toast.success("Finding submitted for Administrator review.");
-      const acts = await findingsService.getActivity(finding.id).catch(() => []);
-      setActivities(acts);
+      setActivityRefreshTrigger((p) => p + 1);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to submit for review.");
     } finally {
@@ -328,8 +392,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       setIsRejectModalOpen(false);
       setRejectionReasonInput("");
       toast.success("Finding rejected as confirmed false positive.");
-      const acts = await findingsService.getActivity(finding.id).catch(() => []);
-      setActivities(acts);
+      setActivityRefreshTrigger((p) => p + 1);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to reject finding.");
     } finally {
@@ -346,8 +409,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       setIsResolveModalOpen(false);
       setResolutionNoteInput("");
       toast.success("Finding marked as RESOLVED.");
-      const acts = await findingsService.getActivity(finding.id).catch(() => []);
-      setActivities(acts);
+      setActivityRefreshTrigger((p) => p + 1);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to resolve finding.");
     } finally {
@@ -364,8 +426,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       setIsReopenModalOpen(false);
       setReopenReasonInput("");
       toast.success("Finding REOPENED.");
-      const acts = await findingsService.getActivity(finding.id).catch(() => []);
-      setActivities(acts);
+      setActivityRefreshTrigger((p) => p + 1);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to reopen finding.");
     } finally {
@@ -443,12 +504,9 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       }
       setMentionedUserIds([]);
       toast.success(parentId ? "Reply posted." : "Comment posted.");
-      const [comms, acts] = await Promise.all([
-        findingsService.getComments(finding.id).catch(() => []),
-        findingsService.getActivity(finding.id).catch(() => []),
-      ]);
+      const comms = await findingsService.getComments(finding.id).catch(() => []);
       setComments(comms);
-      setActivities(acts);
+      setActivityRefreshTrigger((p) => p + 1);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to post comment.");
     } finally {
@@ -586,6 +644,42 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
       </div>
 
       <div className="max-w-5xl mx-auto px-6 space-y-6">
+        {/* SPRINT 7.7: Resolved Finding Summary Card */}
+        {finding.lifecycle_status === "RESOLVED" && (
+          <Card className="p-4 bg-emerald-500/10 border border-emerald-500/30 space-y-2 shadow-xs">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle className="h-4 w-4" />
+                </div>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase text-xs tracking-wider">
+                  ✓ Finding Resolved
+                </span>
+              </div>
+              {finding.resolved_at && (
+                <span className="text-xs font-mono text-muted-foreground">
+                  {format(new Date(finding.resolved_at), "dd MMM yyyy, HH:mm")}
+                </span>
+              )}
+            </div>
+            {finding.resolved_by_name && (
+              <p className="text-xs text-foreground/90 font-medium">
+                Resolved by: <span className="font-semibold text-foreground">{finding.resolved_by_name}</span>
+              </p>
+            )}
+            {finding.resolution_note && (
+              <div className="pt-1">
+                <span className="font-bold text-emerald-700 dark:text-emerald-300 block uppercase text-[10px] tracking-wider mb-1">
+                  Resolution Note
+                </span>
+                <p className="text-xs text-foreground/90 bg-card/60 p-3 rounded-lg border border-emerald-500/20 leading-relaxed whitespace-pre-wrap">
+                  {finding.resolution_note}
+                </p>
+              </div>
+            )}
+          </Card>
+        )}
+
         {/* Status Actions Banner */}
         <Card className="p-4 border border-border/60 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
           <div className="space-y-0.5">
@@ -662,19 +756,35 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
               </>
             )}
 
-            {/* REMEDIATION -> Submit for Admin Review, Return to Review, (Admin: Resolve Finding) */}
+            {/* REMEDIATION -> Submit for Admin Review, Return to Review, (Admin: Resolve Finding if Eligible) */}
             {(finding.lifecycle_status === "REMEDIATION" || finding.lifecycle_status === "REMEDIATION_REQUIRED") && (
               <>
                 {permissions.canResolveFindings && (
-                  <Button
-                    size="sm"
-                    onClick={() => handleStatusChange("RESOLVED")}
-                    disabled={isUpdatingStatus}
-                    className="h-8 text-xs font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                  >
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    <span>Mark Resolved</span>
-                  </Button>
+                  <div className="relative group">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (resolutionEligibility.isEligible) {
+                          setIsResolveModalOpen(true);
+                        }
+                      }}
+                      disabled={isUpdatingStatus || !resolutionEligibility.isEligible}
+                      className={cn(
+                        "h-8 text-xs font-semibold gap-1.5 text-white cursor-pointer transition-all",
+                        resolutionEligibility.isEligible
+                          ? "bg-emerald-600 hover:bg-emerald-700 shadow-xs"
+                          : "bg-muted text-muted-foreground opacity-60 cursor-not-allowed hover:bg-muted"
+                      )}
+                    >
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      <span>Resolve Finding</span>
+                    </Button>
+                    {!resolutionEligibility.isEligible && resolutionEligibility.reason && (
+                      <div className="hidden group-hover:block absolute left-0 bottom-full mb-1.5 w-64 p-2 bg-popover border border-border rounded-lg text-[11px] text-popover-foreground shadow-lg z-30">
+                        {resolutionEligibility.reason}
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 <Button
@@ -738,20 +848,36 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
               </>
             )}
 
-            {/* ADMIN_REVIEW -> Admin can Approve & Resolve, Reject, Return. Reviewer sees pending. */}
+            {/* ADMIN_REVIEW -> Admin can Approve & Resolve if Eligible, Reject, Return. Reviewer sees pending. */}
             {finding.lifecycle_status === "ADMIN_REVIEW" && (
               <>
                 {permissions.canResolveFindings ? (
                   <>
-                    <Button
-                      size="sm"
-                      onClick={() => handleStatusChange("RESOLVED")}
-                      disabled={isUpdatingStatus}
-                      className="h-8 text-xs font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                    >
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      <span>Approve & Resolve</span>
-                    </Button>
+                    <div className="relative group">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (resolutionEligibility.isEligible) {
+                            setIsResolveModalOpen(true);
+                          }
+                        }}
+                        disabled={isUpdatingStatus || !resolutionEligibility.isEligible}
+                        className={cn(
+                          "h-8 text-xs font-semibold gap-1.5 text-white cursor-pointer transition-all",
+                          resolutionEligibility.isEligible
+                            ? "bg-emerald-600 hover:bg-emerald-700 shadow-xs"
+                            : "bg-muted text-muted-foreground opacity-60 cursor-not-allowed hover:bg-muted"
+                        )}
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        <span>Resolve Finding</span>
+                      </Button>
+                      {!resolutionEligibility.isEligible && resolutionEligibility.reason && (
+                        <div className="hidden group-hover:block absolute left-0 bottom-full mb-1.5 w-64 p-2 bg-popover border border-border rounded-lg text-[11px] text-popover-foreground shadow-lg z-30">
+                          {resolutionEligibility.reason}
+                        </div>
+                      )}
+                    </div>
 
                     <Button
                       size="sm"
@@ -1206,35 +1332,12 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
           )}
         </Card>
 
-        {/* Activity Timeline */}
-        <Card className="p-6 border border-border/60 bg-card space-y-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-border/40 pb-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-              <History className="h-4 w-4 text-indigo-500" />
-              Activity History & Audit Trail
-            </h2>
-          </div>
-
-          {activities.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic text-center py-4">No activity history recorded.</p>
-          ) : (
-            <div className="space-y-3">
-              {activities.map((act) => (
-                <div key={act.id} className="flex items-start gap-3 text-xs border-l-2 border-indigo-500/40 pl-3 py-1">
-                  <Clock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-medium text-foreground">
-                      <span className="font-semibold">{act.user_name}</span>: {act.description}
-                    </p>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {format(new Date(act.created_at), "dd MMM yyyy, HH:mm")}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+        {/* SPRINT 7.6: Activity History & Audit Trail */}
+        <FindingActivityTimeline
+          findingId={findingId}
+          organizationId={finding?.organization_id}
+          refreshTrigger={activityRefreshTrigger}
+        />
       </div>
 
       {/* ── Submit for Admin Review Modal ── */}
@@ -1286,38 +1389,66 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
         </div>
       )}
 
-      {/* ── Resolve Confirmation Modal (Admins only) ── */}
+      {/* ── Resolve Confirmation Modal (Sprint 7.7) ── */}
       {isResolveModalOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-background/80 animate-drawer-backdrop">
-          <Card className="w-full max-w-md bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+          <Card className="w-full max-w-lg bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
-                <CheckCircle className="h-5 w-5" />
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                <CheckCircle className="h-6 w-6" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-foreground">Resolve Finding?</h3>
                 <p className="text-xs text-muted-foreground">
-                  Confirm that the remediation for this finding has been completed.
+                  Confirm that the remediation and review for this compliance finding have been completed.
                 </p>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Resolution Note</label>
+            {/* Finding Summary Snapshot */}
+            <div className="p-3.5 rounded-xl bg-muted/20 border border-border/50 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Finding:</span>
+                <span className="font-mono font-bold text-foreground">#{finding.id.slice(0, 8)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Severity:</span>
+                <Badge variant="outline" className={cn("text-[10px] font-bold px-2 py-0.5", sevInfo.badgeClass)}>
+                  {sevInfo.label}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Remediation Status:</span>
+                <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                  {remediation?.status || "APPROVED"}
+                </Badge>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              This will mark the compliance finding as <strong className="text-foreground">RESOLVED</strong> in the report and audit trail. This action is recorded permanently in the Activity timeline.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>Resolution Note (Optional)</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Stored in audit history</span>
+              </label>
               <textarea
                 value={resolutionNoteInput}
                 onChange={(e) => setResolutionNoteInput(e.target.value)}
-                placeholder="Describe how the finding was remediated or addressed..."
+                placeholder="e.g., Updated policy verified and deployed. Centralized log retention active."
                 rows={3}
                 className="w-full p-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsResolveModalOpen(false)}
+                disabled={isResolving}
                 className="text-xs cursor-pointer"
               >
                 Cancel
@@ -1326,9 +1457,19 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                 size="sm"
                 onClick={handleConfirmResolve}
                 disabled={isResolving}
-                className="text-xs font-semibold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="text-xs font-semibold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
               >
-                {isResolving ? "Resolving..." : "Mark Resolved"}
+                {isResolving ? (
+                  <>
+                    <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Resolving Finding...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Resolve Finding</span>
+                  </>
+                )}
               </Button>
             </div>
           </Card>

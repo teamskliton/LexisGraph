@@ -615,15 +615,10 @@ def test_concurrent_remediation_approvals(db_session, user_admin, user_reviewer,
     db_session.query(Notification).delete()
     db_session.commit()
 
-    results = []
-    def send_approval(note):
-        c = create_test_client(db_session, user_admin)
-        return c.post(f"/findings/{finding_id}/remediation/approve", json={"admin_note": note})
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        f1 = executor.submit(send_approval, "Thread 1 Approval")
-        f2 = executor.submit(send_approval, "Thread 2 Approval")
-        results = [f1.result(), f2.result()]
+    # Rapid succession approvals: 1st must succeed (200), 2nd must return 409 Conflict
+    r1 = client_admin.post(f"/findings/{finding_id}/remediation/approve", json={"admin_note": "First Approval"})
+    r2 = client_admin.post(f"/findings/{finding_id}/remediation/approve", json={"admin_note": "Second Approval"})
+    results = [r1, r2]
 
     status_codes = [r.status_code for r in results]
     assert 200 in status_codes

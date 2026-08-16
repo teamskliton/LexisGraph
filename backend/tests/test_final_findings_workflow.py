@@ -369,7 +369,9 @@ class TestFinalFindingsWorkflow:
 
         res = admin_client.get(f"/findings/{sample_finding.id}/activity")
         assert res.status_code == status.HTTP_200_OK
-        events = [a["event_type"] for a in res.json()]
+        data = res.json()
+        raw_events = data["items"] if isinstance(data, dict) and "items" in data else data
+        events = [a["event_type"] for a in raw_events]
         assert "FINDING_STATUS_CHANGED" in events
         assert "FINDING_COMMENTED" in events
         assert "FINDING_SUBMITTED_FOR_REVIEW" in events

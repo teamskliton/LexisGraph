@@ -960,82 +960,7 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
         result = analyze_compliance_engine(org, reg_doc, policy_doc)
 
         elapsed_seconds = time.perf_counter() - start_time
-
-        score_val = result.get("overall_score") or 0.0
-        if score_val >= 85.0:
-            calculated_risk = "LOW"
-        elif score_val >= 70.0:
-            calculated_risk = "MEDIUM"
-        elif score_val >= 50.0:
-            calculated_risk = "HIGH"
-        else:
-            calculated_risk = "CRITICAL"
-
-        report.overall_score = score_val
-        report.risk_level = calculated_risk
-        report.total_clauses = result.get("total_regulation_clauses", 0)
-        report.compliant_clauses = result.get("compliant_count", 0)
-        report.partial_clauses = result.get("partially_compliant_count", 0)
-        report.non_compliant_clauses = result.get("non_compliant_count", 0)
-
-        report.total_matches = result.get("compliant_count", 0)
-        report.total_partial_matches = result.get("partially_compliant_count", 0)
-        report.total_missing = result.get("non_compliant_count", 0)
-
-        report.executive_summary = result.get("summary")
-        report.summary = json.dumps(result, default=str)
-        report.report_json = result
-        report.recommendations = result.get("recommendations", [])
-        report.processing_time_seconds = round(elapsed_seconds, 2)
-        report.processing_time_ms = round(elapsed_seconds * 1000.0, 2)
-        report.status = ComplianceReportStatus.COMPLETED
-        report.updated_at = datetime.now(timezone.utc)
-
-        # Create persistent ReportFinding DB records for each evaluated clause
-        from app.compliance.models import ReportFinding
-        evaluated_clauses = result.get("evaluated_clauses", [])
-        for c in evaluated_clauses:
-            st = (c.get("status") or "NON_COMPLIANT").upper()
-            sev = "HIGH" if st == "NON_COMPLIANT" else ("MEDIUM" if st == "PARTIALLY_COMPLIANT" else "LOW")
-            lifecycle_st = "RESOLVED" if st == "COMPLIANT" else "OPEN"
-            rf = ReportFinding(
-                id=uuid.uuid4(),
-                report_id=report.id,
-                policy_clause_id=c.get("matched_policy_clause_id") or c.get("policy_clause_id") or "POL-CLAUSE",
-                regulation_clause_id=c.get("regulation_clause_id") or "REG-CLAUSE",
-                status=st,
-                lifecycle_status=lifecycle_st,
-                confidence=float(c.get("similarity_score") or 0.85),
-                severity=sev,
-                reasoning=c.get("reasoning"),
-                recommendation=c.get("recommendation"),
-                citation=c.get("regulation_text"),
-            )
-            db.add(rf)
-
-        db.commit()
-        db.refresh(report)
-
-        logger.info(
-            "New report stored: report_id=%s status=COMPLETED score=%s time=%.2fs risk=%s",
-            report.id,
-            report.overall_score,
-            elapsed_seconds,
-            report.risk_level,
-        )
-
-        from app.services.activity_service import log_activity
-        log_activity(
-            db,
-            user_id=report.created_by,
-            event_type="COMPLIANCE_COMPLETED",
-            title="Generated Compliance Report",
-            description=f"Completed compliance check for {org.name if org else 'Organization'}",
-            icon_type="report",
-            extra_data={"report_id": str(report.id), "overall_score": report.overall_score},
-        )
-
-        return result
+        return store_compliance_report(db, report_id, result, elapsed_seconds=elapsed_seconds)
     except Exception as exc:
         db.rollback()
         logger.error("Report failed... report_id=%s status=FAILED error=%s", report_id, exc)
@@ -1050,3 +975,183 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
             db.rollback()
             logger.error("Failed setting FAILED status for report_id=%s: %s", report_id, rollback_exc)
         raise
+
+
+def store_compliance_report(
+    db: Session,
+    report_id: uuid.UUID,
+    result: dict[str, Any],
+    elapsed_seconds: float = 0.0,
+) -> dict[str, Any]:
+    """
+    Persist compliance analysis evaluation results to ComplianceReport and ReportFinding models,
+    handling reassessment triggers for previously resolved findings and activity logging.
+    """
+    from datetime import datetime, timezone
+    from app.compliance.models import ComplianceReport, ComplianceReportStatus, ReportFinding
+    from app.db.models import Document
+    from app.db.models.rbac import OrganizationMember, UserRole, MemberStatus
+    from app.db.models.notification import Notification
+
+    report = db.get(ComplianceReport, report_id)
+    if not report:
+        raise ValueError(f"ComplianceReport {report_id} not found")
+
+    score_val = result.get("overall_score") or 0.0
+    if score_val >= 85.0:
+        calculated_risk = "LOW"
+    elif score_val >= 70.0:
+        calculated_risk = "MEDIUM"
+    elif score_val >= 50.0:
+        calculated_risk = "HIGH"
+    else:
+        calculated_risk = "CRITICAL"
+
+    report.overall_score = score_val
+    report.risk_level = calculated_risk
+    report.total_clauses = result.get("total_regulation_clauses", 0)
+    report.compliant_clauses = result.get("compliant_count", 0)
+    report.partial_clauses = result.get("partially_compliant_count", 0)
+    report.non_compliant_clauses = result.get("non_compliant_count", 0)
+
+    report.total_matches = result.get("compliant_count", 0)
+    report.total_partial_matches = result.get("partially_compliant_count", 0)
+    report.total_missing = result.get("non_compliant_count", 0)
+
+    report.executive_summary = result.get("summary")
+    report.summary = json.dumps(result, default=str)
+    report.report_json = result
+    report.recommendations = result.get("recommendations", [])
+    report.processing_time_seconds = round(elapsed_seconds, 2)
+    report.processing_time_ms = round(elapsed_seconds * 1000.0, 2)
+    report.status = ComplianceReportStatus.COMPLETED
+    report.updated_at = datetime.now(timezone.utc)
+
+    policy_doc = db.get(Document, report.policy_document_id) if report.policy_document_id else None
+    policy_doc_name = policy_doc.original_filename if policy_doc else None
+
+    evaluated_clauses = result.get("evaluated_clauses", [])
+    for c in evaluated_clauses:
+        st = (c.get("status") or "NON_COMPLIANT").upper()
+        sev = "HIGH" if st == "NON_COMPLIANT" else ("MEDIUM" if st == "PARTIALLY_COMPLIANT" else "LOW")
+        reg_clause = c.get("regulation_clause_id") or "REG-CLAUSE"
+        pol_clause = c.get("matched_policy_clause_id") or c.get("policy_clause_id") or "POL-CLAUSE"
+
+        # Check if there is an existing RESOLVED finding in this org for the same regulation clause
+        existing_resolved_finding = None
+        if st != "COMPLIANT":
+            existing_resolved_finding = (
+                db.query(ReportFinding)
+                .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+                .filter(
+                    ComplianceReport.organization_id == report.organization_id,
+                    ComplianceReport.id != report.id,
+                    ReportFinding.regulation_clause_id == reg_clause,
+                    ReportFinding.lifecycle_status.in_(["RESOLVED", "REASSESSMENT_REQUIRED"]),
+                    (ComplianceReport.is_deleted == False) | (ComplianceReport.is_deleted.is_(None)),
+                )
+                .order_by(ReportFinding.created_at.desc())
+                .first()
+            )
+
+        if existing_resolved_finding:
+            # SPRINT 7.9: Mark existing resolved finding as REASSESSMENT_REQUIRED
+            # Do NOT create duplicate finding, do NOT automatically reopen!
+            if existing_resolved_finding.lifecycle_status == "RESOLVED":
+                existing_resolved_finding.lifecycle_status = "REASSESSMENT_REQUIRED"
+                existing_resolved_finding.reassessment_trigger = "NEW_ANALYSIS"
+                existing_resolved_finding.reassessment_reason = (
+                    f"New compliance analysis detected potential compliance gap for clause {reg_clause} "
+                    f"in policy {policy_doc_name or 'document'}."
+                )
+                existing_resolved_finding.reassessment_document_id = report.policy_document_id
+                existing_resolved_finding.reassessment_document_name = policy_doc_name
+                existing_resolved_finding.reassessment_report_id = report.id
+                existing_resolved_finding.reassessment_detected_at = datetime.now(timezone.utc)
+                existing_resolved_finding.updated_at = datetime.now(timezone.utc)
+
+                # Log exactly ONE Activity event for this reassessment
+                from app.services.activity_service import log_activity
+                log_activity(
+                    db,
+                    user_id=report.created_by,
+                    event_type="FINDING_REASSESSMENT_REQUIRED",
+                    title="Finding Reassessment Required",
+                    description=f"New compliance analysis detected gap in clause {reg_clause}. Admin reassessment required.",
+                    icon_type="alert",
+                    extra_data={
+                        "finding_id": str(existing_resolved_finding.id),
+                        "report_id": str(report.id),
+                        "trigger": "NEW_ANALYSIS",
+                        "document_name": policy_doc_name,
+                    },
+                )
+
+                # Send exactly ONE notification to org admin / assignee
+                org_admins = (
+                    db.query(OrganizationMember)
+                    .filter(
+                        OrganizationMember.organization_id == report.organization_id,
+                        OrganizationMember.role == UserRole.ADMIN,
+                        OrganizationMember.status == MemberStatus.ACTIVE,
+                    )
+                    .all()
+                )
+                recipient_user_ids = {m.user_id for m in org_admins}
+                if existing_resolved_finding.assigned_to:
+                    recipient_user_ids.add(existing_resolved_finding.assigned_to)
+
+                for rec_id in recipient_user_ids:
+                    db.add(
+                        Notification(
+                            user_id=rec_id,
+                            organization_id=report.organization_id,
+                            type="FINDING_REASSESSMENT_REQUIRED",
+                            title="Finding Reassessment Required",
+                            message=f"Finding #{str(existing_resolved_finding.id)[:8]} requires reassessment because an associated policy was updated or analyzed.",
+                            finding_id=existing_resolved_finding.id,
+                            report_id=report.id,
+                        )
+                    )
+        else:
+            lifecycle_st = "RESOLVED" if st == "COMPLIANT" else "OPEN"
+            rf = ReportFinding(
+                id=uuid.uuid4(),
+                report_id=report.id,
+                policy_clause_id=pol_clause,
+                regulation_clause_id=reg_clause,
+                status=st,
+                lifecycle_status=lifecycle_st,
+                confidence=float(c.get("similarity_score") or 0.85),
+                severity=sev,
+                reasoning=c.get("reasoning"),
+                recommendation=c.get("recommendation"),
+                citation=c.get("regulation_text"),
+            )
+            db.add(rf)
+
+    db.commit()
+    db.refresh(report)
+
+    logger.info(
+        "New report stored: report_id=%s status=COMPLETED score=%s time=%.2fs risk=%s",
+        report.id,
+        report.overall_score,
+        elapsed_seconds,
+        report.risk_level,
+    )
+
+    from app.services.activity_service import log_activity
+    org = report.organization
+    log_activity(
+        db,
+        user_id=report.created_by,
+        event_type="COMPLIANCE_COMPLETED",
+        title="Generated Compliance Report",
+        description=f"Completed compliance check for {org.name if org else 'Organization'}",
+        icon_type="report",
+        extra_data={"report_id": str(report.id), "overall_score": report.overall_score},
+    )
+
+    return result
+

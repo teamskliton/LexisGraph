@@ -23,6 +23,9 @@ import {
   Plus,
   RefreshCw,
   Edit3,
+  Link2,
+  FolderOpen,
+  FileCheck2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +36,7 @@ import {
   RemediationEvidenceItem,
 } from "@/services/api/remediations";
 import { organizationsService, OrganizationMember } from "@/services/api/organizations";
+import { documentsService, OrgDocumentItem } from "@/services/api/documents";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,6 +158,14 @@ export function RemediationSection({
   const [evidenceDescription, setEvidenceDescription] = useState("");
   const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Document library linking state (Sprint 7.10)
+  const [isLinkDocModalOpen, setIsLinkDocModalOpen] = useState(false);
+  const [availableDocs, setAvailableDocs] = useState<OrgDocumentItem[]>([]);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+  const [selectedDocId, setSelectedDocId] = useState<string>("");
+  const [linkDocDescription, setLinkDocDescription] = useState<string>("");
+  const [isLinkingDoc, setIsLinkingDoc] = useState(false);
 
   const activeOrgId =
     organizationId ||
@@ -404,6 +416,59 @@ export function RemediationSection({
       toast.error(err?.response?.data?.detail || "Failed to download evidence file.");
     } finally {
       setDownloadingEvidenceId(null);
+    }
+  };
+
+  const handleOpenLinkDocModal = async () => {
+    const orgId = activeOrgId;
+    if (!orgId) {
+      toast.error("Organization context not found.");
+      return;
+    }
+    setIsLinkDocModalOpen(true);
+    setIsLoadingDocs(true);
+    try {
+      const docs = await documentsService.listDocuments(orgId);
+      setAvailableDocs(docs || []);
+      if (docs && docs.length > 0) {
+        setSelectedDocId(docs[0].id);
+      }
+    } catch (err: any) {
+      console.error("Error loading documents library:", err);
+      toast.error("Failed to load documents library.");
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  };
+
+  const handleConfirmLinkDoc = async () => {
+    if (!selectedDocId) {
+      toast.error("Please select a document from the library.");
+      return;
+    }
+    setIsLinkingDoc(true);
+    try {
+      const linked = await remediationsService.linkDocumentEvidence(
+        findingId,
+        selectedDocId,
+        linkDocDescription.trim() || undefined
+      );
+      setRemediation((prev) => {
+        if (!prev) return null;
+        const exists = prev.evidence.some((e) => e.id === linked.id);
+        return {
+          ...prev,
+          evidence: exists ? prev.evidence : [linked, ...prev.evidence],
+        };
+      });
+      setIsLinkDocModalOpen(false);
+      setLinkDocDescription("");
+      toast.success("Document linked as evidence from library.");
+      if (onRemediationChanged) onRemediationChanged();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to link document from library.");
+    } finally {
+      setIsLinkingDoc(false);
     }
   };
 
@@ -753,18 +818,30 @@ export function RemediationSection({
         )}
       </div>
 
-      {/* Remediation Evidence Section */}
+      {/* Remediation Evidence Section (Sprint 7.10) */}
       <div className="space-y-3 pt-2 border-t border-border/40">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
             <Paperclip className="h-3.5 w-3.5 text-indigo-500" /> Attached Evidence ({remediation.evidence.length})
           </span>
+          {permissions.canManageRemediation && (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={handleOpenLinkDocModal}
+              className="h-6 text-[10px] font-medium gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10 cursor-pointer"
+            >
+              <FolderOpen className="h-3 w-3" />
+              <span>Attach from Library</span>
+            </Button>
+          )}
         </div>
 
         {/* Evidence List */}
         {remediation.evidence.length === 0 ? (
           <p className="text-[11px] text-muted-foreground italic bg-muted/10 p-3 rounded-lg border border-border/30">
-            No remediation evidence submitted.
+            No remediation evidence submitted. Attach policy files, implementation proofs, or link from document library.
           </p>
         ) : (
           <div className="space-y-2">
@@ -776,7 +853,22 @@ export function RemediationSection({
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <FileText className="h-4 w-4 text-indigo-500 shrink-0" />
                   <div className="min-w-0 space-y-0.5">
-                    <p className="font-semibold text-foreground truncate">{ev.original_filename}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="font-semibold text-foreground truncate">{ev.original_filename}</p>
+                      {ev.cycle_number && (
+                        <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+                          Cycle {ev.cycle_number}
+                        </Badge>
+                      )}
+                      {ev.document_id && (
+                        <Badge variant="outline" className="text-[9px] font-medium px-1.5 py-0 bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30">
+                          <Link2 className="h-2.5 w-2.5 mr-0.5 inline" /> Library Doc
+                        </Badge>
+                      )}
+                      {ev.version && (
+                        <span className="text-[10px] font-mono text-muted-foreground">v{ev.version}</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
                       <span>{formatFileSize(ev.file_size)}</span>
                       <span>·</span>
@@ -822,7 +914,7 @@ export function RemediationSection({
         {/* Upload Form */}
         {permissions.canManageRemediation && (
           <form onSubmit={handleUploadEvidence} className="space-y-2 p-3 rounded-xl bg-muted/10 border border-border/30 text-xs">
-            <span className="font-bold text-[11px] text-foreground block">Attach New Evidence</span>
+            <span className="font-bold text-[11px] text-foreground block">Upload New Evidence File</span>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 ref={fileInputRef}
@@ -844,12 +936,95 @@ export function RemediationSection({
                 className="h-7 text-xs font-semibold gap-1 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shrink-0"
               >
                 <UploadCloud className="h-3.5 w-3.5" />
-                <span>{isUploadingEvidence ? "Uploading..." : "Attach"}</span>
+                <span>{isUploadingEvidence ? "Uploading..." : "Upload & Attach"}</span>
               </Button>
             </div>
           </form>
         )}
       </div>
+
+      {/* Attach from Document Library Modal (Sprint 7.10) */}
+      {isLinkDocModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border/80 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-indigo-500" /> Attach Document from Library
+              </h3>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => setIsLinkDocModalOpen(false)}
+                className="h-6 w-6 p-0 text-muted-foreground"
+              >
+                <XCircle className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Link an existing organization policy or document as supporting evidence without duplicate uploads.
+            </p>
+
+            {isLoadingDocs ? (
+              <div className="py-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin text-indigo-500" />
+                <span>Loading organization documents...</span>
+              </div>
+            ) : availableDocs.length === 0 ? (
+              <div className="p-3 bg-muted/20 rounded-xl border border-border/40 text-xs text-muted-foreground text-center">
+                No organization documents found. Upload documents via the Documents section first.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-foreground">Select Document</label>
+                  <select
+                    value={selectedDocId}
+                    onChange={(e) => setSelectedDocId(e.target.value)}
+                    className="w-full p-2 text-xs rounded-xl border border-input bg-background text-foreground"
+                  >
+                    {availableDocs.map((doc) => (
+                      <option key={doc.id} value={doc.id}>
+                        {doc.original_filename} ({formatFileSize(doc.file_size)} · {doc.document_type || "POLICY"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-foreground">Evidence Description (Optional)</label>
+                  <input
+                    type="text"
+                    value={linkDocDescription}
+                    onChange={(e) => setLinkDocDescription(e.target.value)}
+                    placeholder="e.g. Attached section 4 of approved security baseline"
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-input bg-background text-foreground"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => setIsLinkDocModalOpen(false)}
+                disabled={isLinkingDoc}
+                className="cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="xs"
+                onClick={handleConfirmLinkDoc}
+                disabled={isLinkingDoc || availableDocs.length === 0 || !selectedDocId}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer"
+              >
+                {isLinkingDoc ? "Linking..." : "Attach Document"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Verify Modal */}
       {isVerifyModalOpen && (

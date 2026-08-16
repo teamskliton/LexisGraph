@@ -348,7 +348,8 @@ class TestFindingLifecycleOperations:
         # 3. Get activity timeline
         act_resp = client.get(f"/findings/{finding_a.id}/activity")
         assert act_resp.status_code == 200
-        activities = act_resp.json()
+        data = act_resp.json()
+        activities = data["items"] if isinstance(data, dict) and "items" in data else data
         assert len(activities) >= 1
         assert activities[0]["event_type"] == "FINDING_COMMENTED"
 

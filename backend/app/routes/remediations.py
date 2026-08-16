@@ -3,6 +3,7 @@ Remediation Management & Evidence REST API Routes (Sprint 7.4).
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import uuid
@@ -32,19 +33,23 @@ from app.core.rbac_dependencies import (
     is_org_admin,
     is_org_analyst_or_admin,
 )
+from app.db.models.document import Document
 from app.db.models.organization import Organization
 from app.db.models.rbac import MemberStatus, OrganizationMember, UserRole
-from app.db.models.remediation import FindingRemediation, RemediationEvidence
+from app.db.models.remediation import FindingRemediation, RemediationEvidence, RemediationCycle
 from app.db.models.user import User
 from app.db.session import get_db
 from app.routes.reports import verify_user_organization_access
 from app.schemas.remediation import (
+    LinkDocumentEvidenceRequest,
     RemediationApproveRequest,
     RemediationCreateRequest,
     RemediationEvidenceResponse,
     RemediationRejectRequest,
     RemediationResponse,
     RemediationReturnRequest,
+    RemediationSubmitRequest,
+    RemediationCycleResponse,
     RemediationUpdateRequest,
     RemediationUserItem,
     RemediationVerifyRequest,
@@ -104,6 +109,71 @@ def _get_finding_and_verify_access(
     return finding, report, user_role
 
 
+def _format_cycle_response(
+    db: Session,
+    cycle: RemediationCycle,
+) -> RemediationCycleResponse:
+    """Serialize RemediationCycle into RemediationCycleResponse."""
+    sub_user = cycle.submitter or (db.get(User, cycle.submitted_by) if cycle.submitted_by else None)
+    submitter_item = (
+        RemediationUserItem(id=str(sub_user.id), full_name=sub_user.full_name, email=sub_user.email)
+        if sub_user
+        else None
+    )
+    rev_user = cycle.reviewer or (db.get(User, cycle.reviewed_by) if cycle.reviewed_by else None)
+    reviewer_item = (
+        RemediationUserItem(id=str(rev_user.id), full_name=rev_user.full_name, email=rev_user.email)
+        if rev_user
+        else None
+    )
+    return RemediationCycleResponse(
+        id=str(cycle.id),
+        remediation_id=str(cycle.remediation_id),
+        finding_id=str(cycle.finding_id),
+        organization_id=str(cycle.organization_id),
+        cycle_number=cycle.cycle_number,
+        status=cycle.status,
+        submission_note=cycle.submission_note,
+        submitted_by=str(cycle.submitted_by),
+        submitted_at=cycle.submitted_at,
+        submitter=submitter_item,
+        reviewed_by=str(cycle.reviewed_by) if cycle.reviewed_by else None,
+        reviewed_at=cycle.reviewed_at,
+        reviewer=reviewer_item,
+        result=cycle.result,
+        rejection_reason=cycle.rejection_reason,
+        verification_note=cycle.verification_note,
+        evidence_snapshot=cycle.evidence_snapshot,
+    )
+
+def _format_evidence_response(db: Session, ev: RemediationEvidence) -> RemediationEvidenceResponse:
+    """Serialize RemediationEvidence model to RemediationEvidenceResponse."""
+    up_item = None
+    if ev.uploaded_by:
+        u = ev.uploader or db.get(User, ev.uploaded_by)
+        if u:
+            up_item = RemediationUserItem(id=str(u.id), full_name=u.full_name, email=u.email)
+
+    return RemediationEvidenceResponse(
+        id=str(ev.id),
+        remediation_id=str(ev.remediation_id),
+        finding_id=str(ev.finding_id),
+        organization_id=str(ev.organization_id),
+        original_filename=ev.original_filename,
+        file_size=ev.file_size,
+        mime_type=ev.mime_type,
+        description=ev.description,
+        cycle_id=str(ev.cycle_id) if ev.cycle_id else None,
+        cycle_number=ev.cycle_number,
+        document_id=str(ev.document_id) if ev.document_id else None,
+        document_type=ev.document_type,
+        version=ev.version,
+        uploaded_by=str(ev.uploaded_by),
+        uploaded_at=ev.uploaded_at,
+        uploader=up_item,
+    )
+
+
 def _format_remediation_response(
     db: Session,
     rem: FindingRemediation,
@@ -142,29 +212,18 @@ def _format_remediation_response(
             admin_approver_item = RemediationUserItem(id=str(u.id), full_name=u.full_name, email=u.email)
 
     # Build evidence list
-    evidence_list: List[RemediationEvidenceResponse] = []
-    for ev in rem.evidence_items:
-        up_item = None
-        if ev.uploaded_by:
-            u = ev.uploader or db.get(User, ev.uploaded_by)
-            if u:
-                up_item = RemediationUserItem(id=str(u.id), full_name=u.full_name, email=u.email)
+    evidence_list: List[RemediationEvidenceResponse] = [
+        _format_evidence_response(db, ev) for ev in rem.evidence_items
+    ]
 
-        evidence_list.append(
-            RemediationEvidenceResponse(
-                id=str(ev.id),
-                remediation_id=str(ev.remediation_id),
-                finding_id=str(ev.finding_id),
-                organization_id=str(ev.organization_id),
-                original_filename=ev.original_filename,
-                file_size=ev.file_size,
-                mime_type=ev.mime_type,
-                description=ev.description,
-                uploaded_by=str(ev.uploaded_by),
-                uploaded_at=ev.uploaded_at,
-                uploader=up_item,
-            )
-        )
+    # Get latest cycle info
+    current_cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).first()
+
+    cycles_count = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).count()
 
     return RemediationResponse(
         id=str(rem.id),
@@ -191,6 +250,8 @@ def _format_remediation_response(
         admin_approved_at=rem.admin_approved_at,
         admin_note=rem.admin_note,
         evidence=evidence_list,
+        current_cycle_number=current_cycle.cycle_number if current_cycle else None,
+        cycles_count=cycles_count,
     )
 
 
@@ -495,19 +556,20 @@ def start_remediation(
 @router.post(
     "/findings/{finding_id}/remediation/submit",
     response_model=RemediationResponse,
-    summary="Submit remediation for review",
+    summary="Submit remediation for review (Creates new cycle)",
 )
 def submit_remediation_for_review(
     finding_id: uuid.UUID,
+    data: Optional[RemediationSubmitRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RemediationResponse:
-    """Transition remediation status to READY_FOR_REVIEW."""
+    """Transition remediation status to READY_FOR_REVIEW and record a snapshot review cycle."""
     finding, report, _ = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
 
     rem = db.query(FindingRemediation).filter(
         FindingRemediation.finding_id == finding.id
-    ).first()
+    ).with_for_update().first()
 
     if not rem:
         raise HTTPException(
@@ -515,28 +577,89 @@ def submit_remediation_for_review(
             detail="Remediation record not found. Please create remediation first.",
         )
 
+    if rem.status == "READY_FOR_REVIEW":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Remediation is already submitted and pending review.",
+        )
+
+    if rem.status == "APPROVED":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Remediation has already been approved.",
+        )
+
+    # Calculate next cycle number
+    last_cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).first()
+
+    next_cycle_num = (last_cycle.cycle_number + 1) if last_cycle else 1
+
+    # Snapshot current evidence files
+    evidence_items = db.query(RemediationEvidence).filter(
+        RemediationEvidence.remediation_id == rem.id
+    ).all()
+    snapshot_data = [
+        {
+            "id": str(ev.id),
+            "filename": ev.original_filename,
+            "size": ev.file_size,
+            "mime_type": ev.mime_type,
+            "uploaded_at": ev.uploaded_at.isoformat() if ev.uploaded_at else None,
+            "description": ev.description,
+        }
+        for ev in evidence_items
+    ]
+    snapshot_str = json.dumps(snapshot_data)
+
+    submission_note = data.submission_note if data else None
+
+    # Create new RemediationCycle
+    cycle = RemediationCycle(
+        id=uuid.uuid4(),
+        remediation_id=rem.id,
+        finding_id=finding.id,
+        organization_id=report.organization_id,
+        cycle_number=next_cycle_num,
+        status="READY_FOR_REVIEW",
+        submission_note=submission_note,
+        submitted_by=current_user.id,
+        submitted_at=datetime.now(timezone.utc),
+        evidence_snapshot=snapshot_str,
+    )
+    db.add(cycle)
+
     rem.status = "READY_FOR_REVIEW"
     rem.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(rem)
 
+    note_text = f": {submission_note}" if submission_note else ""
     log_activity(
         db,
         user_id=current_user.id,
-        event_type="REMEDIATION_SUBMITTED",
-        title=f"Submitted Remediation for Finding #{str(finding.id)[:8]}",
-        description=f"{current_user.full_name} submitted remediation for review.",
+        event_type="REMEDIATION_CYCLE_SUBMITTED",
+        title=f"Submitted Remediation Cycle {next_cycle_num} for Finding #{str(finding.id)[:8]}",
+        description=f"{current_user.full_name} submitted remediation Cycle {next_cycle_num} for review{note_text}.",
         icon_type="send",
-        extra_data={"finding_id": str(finding.id), "remediation_id": str(rem.id)},
+        extra_data={
+            "finding_id": str(finding.id),
+            "organization_id": str(report.organization_id),
+            "remediation_id": str(rem.id),
+            "cycle_id": str(cycle.id),
+            "cycle_number": next_cycle_num,
+            "submission_note": submission_note,
+        },
     )
 
     audit_service.log_audit_event(
         db,
         user_id=current_user.id,
-        action="REMEDIATION_SUBMITTED",
+        action="REMEDIATION_CYCLE_SUBMITTED",
         organization_id=report.organization_id,
-        entity="FindingRemediation",
-        entity_id=str(rem.id),
+        entity="RemediationCycle",
+        entity_id=str(cycle.id),
     )
 
     # Notify Reviewers and Admins
@@ -548,8 +671,8 @@ def submit_remediation_for_review(
         assignee_id=rem.assigned_to,
         actor_id=current_user.id,
         event_type="FINDING_SUBMITTED_FOR_REVIEW",
-        title="Remediation Ready for Review",
-        message=f"Remediation for Finding #{str(finding.id)[:8]} was submitted for review by {current_user.full_name}.",
+        title=f"Remediation Cycle {next_cycle_num} Ready for Review",
+        message=f"Remediation Cycle {next_cycle_num} for Finding #{str(finding.id)[:8]} was submitted for review by {current_user.full_name}.",
     )
     db.commit()
 
@@ -593,6 +716,20 @@ def verify_remediation(
             detail="Remediation has already been approved.",
         )
 
+    # Update latest cycle to VERIFIED
+    latest_cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).first()
+
+    cycle_num = latest_cycle.cycle_number if latest_cycle else 1
+    if latest_cycle:
+        latest_cycle.status = "VERIFIED"
+        latest_cycle.result = "VERIFIED"
+        latest_cycle.reviewed_by = current_user.id
+        latest_cycle.reviewed_at = datetime.now(timezone.utc)
+        if data and data.verification_note:
+            latest_cycle.verification_note = data.verification_note
+
     rem.status = "VERIFIED"
     rem.verified_by = current_user.id
     rem.verified_at = datetime.now(timezone.utc)
@@ -607,17 +744,24 @@ def verify_remediation(
     log_activity(
         db,
         user_id=current_user.id,
-        event_type="REMEDIATION_VERIFIED",
-        title=f"Verified Remediation for Finding #{str(finding.id)[:8]}",
-        description=f"{current_user.full_name} verified remediation{note_str}",
+        event_type="REMEDIATION_CYCLE_VERIFIED",
+        title=f"Verified Remediation Cycle {cycle_num} for Finding #{str(finding.id)[:8]}",
+        description=f"{current_user.full_name} verified remediation Cycle {cycle_num}{note_str}",
         icon_type="check",
-        extra_data={"finding_id": str(finding.id), "remediation_id": str(rem.id)},
+        extra_data={
+            "finding_id": str(finding.id),
+            "organization_id": str(report.organization_id),
+            "remediation_id": str(rem.id),
+            "cycle_id": str(latest_cycle.id) if latest_cycle else None,
+            "cycle_number": cycle_num,
+            "verification_note": data.verification_note if data else None,
+        },
     )
 
     audit_service.log_audit_event(
         db,
         user_id=current_user.id,
-        action="REMEDIATION_VERIFIED",
+        action="REMEDIATION_CYCLE_VERIFIED",
         organization_id=report.organization_id,
         entity="FindingRemediation",
         entity_id=str(rem.id),
@@ -678,6 +822,20 @@ def reject_remediation(
         )
 
     reason = data.rejection_reason if (data and data.rejection_reason) else "Insufficient evidence or corrective action"
+
+    # Mark active cycle as REJECTED
+    latest_cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).first()
+
+    cycle_num = latest_cycle.cycle_number if latest_cycle else 1
+    if latest_cycle:
+        latest_cycle.status = "REJECTED"
+        latest_cycle.result = "REJECTED"
+        latest_cycle.reviewed_by = current_user.id
+        latest_cycle.reviewed_at = datetime.now(timezone.utc)
+        latest_cycle.rejection_reason = reason
+
     rem.status = "REJECTED"
     rem.verification_note = f"Rejected by {current_user.full_name}: {reason}"
     rem.updated_at = datetime.now(timezone.utc)
@@ -688,17 +846,25 @@ def reject_remediation(
     log_activity(
         db,
         user_id=current_user.id,
-        event_type="REMEDIATION_REJECTED",
-        title=f"Rejected Remediation for Finding #{str(finding.id)[:8]}",
+        event_type="REMEDIATION_CYCLE_REJECTED",
+        title=f"Rejected Remediation Cycle {cycle_num} for Finding #{str(finding.id)[:8]}",
         description=f"Returned for further work: {reason}",
         icon_type="alert",
-        extra_data={"finding_id": str(finding.id), "remediation_id": str(rem.id), "reason": reason},
+        extra_data={
+            "finding_id": str(finding.id),
+            "organization_id": str(report.organization_id),
+            "remediation_id": str(rem.id),
+            "cycle_id": str(latest_cycle.id) if latest_cycle else None,
+            "cycle_number": cycle_num,
+            "reason": reason,
+            "rejection_reason": reason,
+        },
     )
 
     audit_service.log_audit_event(
         db,
         user_id=current_user.id,
-        action="REMEDIATION_REJECTED",
+        action="REMEDIATION_CYCLE_REJECTED",
         organization_id=report.organization_id,
         entity="FindingRemediation",
         entity_id=str(rem.id),
@@ -732,13 +898,14 @@ def approve_remediation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RemediationResponse:
-    """Approve verified remediation. Requires Organization Admin role."""
-    finding, report, _ = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
+    """Approve remediation and mark as APPROVED. Only Organization Admins are permitted."""
+    finding, report, user_role = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
 
-    if not is_org_admin(db, current_user.id, report.organization_id):
+    role_str = (user_role.value if hasattr(user_role, "value") else str(user_role or "")).upper()
+    if role_str not in ("ADMIN", "ORGANIZATION_ADMIN", "SUPER_ADMIN"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Organization Admins are permitted to approve remediation work.",
+            detail="Only Organization Administrators are permitted to approve remediation.",
         )
 
     rem = db.query(FindingRemediation).filter(
@@ -757,11 +924,17 @@ def approve_remediation(
             detail="Remediation has already been approved.",
         )
 
-    if rem.status not in ("VERIFIED", "READY_FOR_REVIEW", "ADMIN_REVIEW"):
+    if rem.status != "VERIFIED":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot approve remediation in status '{rem.status}'. Remediation must be verified before approval.",
+            detail="Remediation must be verified before approval.",
         )
+
+    latest_cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).first()
+
+    cycle_num = latest_cycle.cycle_number if latest_cycle else 1
 
     rem.status = "APPROVED"
     rem.admin_approved_by = current_user.id
@@ -773,14 +946,21 @@ def approve_remediation(
     db.commit()
     db.refresh(rem)
 
+    note_str = f": {data.admin_note}" if (data and data.admin_note) else ""
     log_activity(
         db,
         user_id=current_user.id,
         event_type="REMEDIATION_APPROVED",
         title=f"Approved Remediation for Finding #{str(finding.id)[:8]}",
-        description=f"Approved by Administrator {current_user.full_name}",
+        description=f"{current_user.full_name} approved remediation (Cycle {cycle_num}){note_str}",
         icon_type="check",
-        extra_data={"finding_id": str(finding.id), "remediation_id": str(rem.id)},
+        extra_data={
+            "finding_id": str(finding.id),
+            "organization_id": str(report.organization_id),
+            "remediation_id": str(rem.id),
+            "cycle_number": cycle_num,
+            "admin_note": data.admin_note if data else None,
+        },
     )
 
     audit_service.log_audit_event(
@@ -792,24 +972,17 @@ def approve_remediation(
         entity_id=str(rem.id),
     )
 
-    recipient_ids = set()
-    if rem.assigned_to and rem.assigned_to != current_user.id:
-        recipient_ids.add(rem.assigned_to)
-    if rem.verified_by and rem.verified_by != current_user.id:
-        recipient_ids.add(rem.verified_by)
-
-    for rid in recipient_ids:
-        create_notification(
-            db=db,
-            recipient_id=rid,
-            organization_id=report.organization_id,
-            type="FINDING_STATUS_CHANGED",
-            title="Remediation Approved",
-            message=f"Remediation for Finding #{str(finding.id)[:8]} was approved by {current_user.full_name}.",
-            finding_id=finding.id,
-            report_id=report.id,
-            actor_id=current_user.id,
-        )
+    notify_finding_stakeholders(
+        db=db,
+        organization_id=report.organization_id,
+        finding_id=finding.id,
+        report_id=report.id,
+        assignee_id=rem.assigned_to,
+        actor_id=current_user.id,
+        event_type="FINDING_RESOLVED",
+        title="Remediation Approved",
+        message=f"Remediation for Finding #{str(finding.id)[:8]} was approved by Admin {current_user.full_name}.",
+    )
     db.commit()
 
     return _format_remediation_response(db, rem)
@@ -818,7 +991,7 @@ def approve_remediation(
 @router.post(
     "/findings/{finding_id}/remediation/return",
     response_model=RemediationResponse,
-    summary="Return remediation to In Progress (Admin only)",
+    summary="Return approved remediation for rework (Admin only)",
 )
 def return_remediation(
     finding_id: uuid.UUID,
@@ -826,13 +999,14 @@ def return_remediation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RemediationResponse:
-    """Return remediation back to IN_PROGRESS. Requires Organization Admin role."""
-    finding, report, _ = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
+    """Return an approved remediation back to IN_PROGRESS. Only Admins are permitted."""
+    finding, report, user_role = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
 
-    if not is_org_admin(db, current_user.id, report.organization_id):
+    role_str = (user_role.value if hasattr(user_role, "value") else str(user_role or "")).upper()
+    if role_str not in ("ADMIN", "ORGANIZATION_ADMIN", "SUPER_ADMIN"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Organization Admins are permitted to return remediation work.",
+            detail="Only Organization Administrators are permitted to return approved remediation.",
         )
 
     rem = db.query(FindingRemediation).filter(
@@ -845,18 +1019,22 @@ def return_remediation(
             detail="Remediation record not found.",
         )
 
-    if rem.status not in ("VERIFIED", "APPROVED", "READY_FOR_REVIEW", "ADMIN_REVIEW"):
+    if rem.status != "APPROVED":
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot return remediation currently in status '{rem.status}'.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only approved remediations can be returned.",
         )
 
-    reason = data.return_reason if (data and data.return_reason) else "Returned by Administrator"
+    reason = data.return_reason if (data and data.return_reason) else "Returned by administrator for rework"
+
     rem.status = "IN_PROGRESS"
-    rem.admin_note = f"Returned by {current_user.full_name}: {reason}"
     rem.admin_approved_by = None
     rem.admin_approved_at = None
+    rem.admin_note = f"Returned: {reason}"
     rem.updated_at = datetime.now(timezone.utc)
+
+    finding.lifecycle_status = "REOPENED"
+    finding.reopen_reason = f"Remediation returned: {reason}"
 
     db.commit()
     db.refresh(rem)
@@ -867,8 +1045,13 @@ def return_remediation(
         event_type="REMEDIATION_RETURNED",
         title=f"Returned Remediation for Finding #{str(finding.id)[:8]}",
         description=f"Returned to In Progress: {reason}",
-        icon_type="alert",
-        extra_data={"finding_id": str(finding.id), "remediation_id": str(rem.id), "reason": reason},
+        icon_type="rotate",
+        extra_data={
+            "finding_id": str(finding.id),
+            "organization_id": str(report.organization_id),
+            "remediation_id": str(rem.id),
+            "reason": reason,
+        },
     )
 
     audit_service.log_audit_event(
@@ -880,21 +1063,85 @@ def return_remediation(
         entity_id=str(rem.id),
     )
 
-    if rem.assigned_to and rem.assigned_to != current_user.id:
-        create_notification(
-            db=db,
-            recipient_id=rem.assigned_to,
-            organization_id=report.organization_id,
-            type="FINDING_STATUS_CHANGED",
-            title="Remediation Returned",
-            message=f"Remediation for Finding #{str(finding.id)[:8]} was returned by {current_user.full_name}: {reason}.",
-            finding_id=finding.id,
-            report_id=report.id,
-            actor_id=current_user.id,
-        )
-        db.commit()
+    notify_finding_stakeholders(
+        db=db,
+        organization_id=report.organization_id,
+        finding_id=finding.id,
+        report_id=report.id,
+        assignee_id=rem.assigned_to,
+        actor_id=current_user.id,
+        event_type="FINDING_REOPENED",
+        title="Remediation Returned for Rework",
+        message=f"Approved remediation for Finding #{str(finding.id)[:8]} was returned for rework by Admin {current_user.full_name}: {reason}.",
+    )
+    db.commit()
 
     return _format_remediation_response(db, rem)
+
+
+@router.get(
+    "/findings/{finding_id}/remediation/cycles",
+    response_model=List[RemediationCycleResponse],
+    summary="List all remediation review cycles in descending order (Sprint 7.5)",
+)
+def list_remediation_cycles(
+    finding_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[RemediationCycleResponse]:
+    """Retrieve full chronological history of remediation review cycles."""
+    finding, report, _ = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
+
+    rem = db.query(FindingRemediation).filter(
+        FindingRemediation.finding_id == finding.id
+    ).first()
+
+    if not rem:
+        return []
+
+    cycles = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).all()
+
+    return [_format_cycle_response(db, c) for c in cycles]
+
+
+@router.get(
+    "/findings/{finding_id}/remediation/cycles/{cycle_id}",
+    response_model=RemediationCycleResponse,
+    summary="Get single remediation cycle details (Sprint 7.5)",
+)
+def get_remediation_cycle(
+    finding_id: uuid.UUID,
+    cycle_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RemediationCycleResponse:
+    """Retrieve details for a single remediation cycle."""
+    finding, report, _ = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
+
+    rem = db.query(FindingRemediation).filter(
+        FindingRemediation.finding_id == finding.id
+    ).first()
+
+    if not rem:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Remediation record not found.",
+        )
+
+    cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.id == cycle_id,
+        RemediationCycle.remediation_id == rem.id,
+    ).first()
+
+    if not cycle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Remediation cycle not found.",
+        )
+
+    return _format_cycle_response(db, cycle)
 
 
 @router.post(
@@ -907,6 +1154,7 @@ def upload_remediation_evidence(
     finding_id: uuid.UUID,
     file: UploadFile = File(..., description="Evidence file (PDF, DOCX, PNG, JPG, TXT)"),
     description: Optional[str] = Form(None, description="Optional description of evidence"),
+    cycle_number: Optional[int] = Form(None, description="Optional associated remediation cycle number"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RemediationEvidenceResponse:
@@ -933,6 +1181,14 @@ def upload_remediation_evidence(
         db.commit()
         db.refresh(rem)
 
+    # Determine active cycle number and cycle ID
+    active_cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).first()
+
+    target_cycle_num = cycle_number or (active_cycle.cycle_number if active_cycle else 1)
+    target_cycle_id = active_cycle.id if active_cycle and (cycle_number is None or active_cycle.cycle_number == cycle_number) else None
+
     # Store file safely
     stored = store_remediation_evidence(file)
 
@@ -947,6 +1203,8 @@ def upload_remediation_evidence(
         file_size=stored.size,
         mime_type=stored.mime_type,
         description=description.strip() if description else None,
+        cycle_id=target_cycle_id,
+        cycle_number=target_cycle_num,
         uploaded_by=current_user.id,
     )
     db.add(evidence)
@@ -958,13 +1216,14 @@ def upload_remediation_evidence(
         user_id=current_user.id,
         event_type="REMEDIATION_EVIDENCE_UPLOADED",
         title=f"Uploaded Evidence for Finding #{str(finding.id)[:8]}",
-        description=f"Attached evidence file: {evidence.original_filename}",
+        description=f"Attached evidence file: {evidence.original_filename} (Cycle {target_cycle_num})",
         icon_type="document",
         extra_data={
             "finding_id": str(finding.id),
             "remediation_id": str(rem.id),
             "evidence_id": str(evidence.id),
             "filename": evidence.original_filename,
+            "cycle_number": target_cycle_num,
         },
     )
 
@@ -977,23 +1236,123 @@ def upload_remediation_evidence(
         entity_id=str(evidence.id),
     )
 
-    return RemediationEvidenceResponse(
-        id=str(evidence.id),
-        remediation_id=str(evidence.remediation_id),
-        finding_id=str(evidence.finding_id),
-        organization_id=str(evidence.organization_id),
-        original_filename=evidence.original_filename,
-        file_size=evidence.file_size,
-        mime_type=evidence.mime_type,
-        description=evidence.description,
-        uploaded_by=str(evidence.uploaded_by),
-        uploaded_at=evidence.uploaded_at,
-        uploader=RemediationUserItem(
-            id=str(current_user.id),
-            full_name=current_user.full_name,
-            email=current_user.email,
-        ),
+    return _format_evidence_response(db, evidence)
+
+
+@router.post(
+    "/findings/{finding_id}/remediation/evidence/link-document",
+    response_model=RemediationEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Link existing organization document as remediation evidence (Sprint 7.10)",
+)
+def link_document_evidence(
+    finding_id: uuid.UUID,
+    data: LinkDocumentEvidenceRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RemediationEvidenceResponse:
+    """Link an existing document from organization library as finding evidence without duplicating storage."""
+    finding, report, _ = _get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
+
+    # Validate Document exists and belongs to the same organization
+    doc = db.get(Document, data.document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in organization library.",
+        )
+
+    if doc.organization_id != report.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cross-organization document linking is forbidden.",
+        )
+
+    rem = db.query(FindingRemediation).filter(
+        FindingRemediation.finding_id == finding.id
+    ).first()
+
+    if not rem:
+        rem = FindingRemediation(
+            id=uuid.uuid4(),
+            finding_id=finding.id,
+            organization_id=report.organization_id,
+            title=f"Remediation for Finding #{str(finding.id)[:8]}",
+            description=finding.recommendation or finding.reasoning,
+            assigned_to=current_user.id,
+            status="IN_PROGRESS",
+            created_by=current_user.id,
+        )
+        db.add(rem)
+        db.commit()
+        db.refresh(rem)
+
+    active_cycle = db.query(RemediationCycle).filter(
+        RemediationCycle.remediation_id == rem.id
+    ).order_by(RemediationCycle.cycle_number.desc()).first()
+
+    target_cycle_num = data.cycle_number or (active_cycle.cycle_number if active_cycle else 1)
+    target_cycle_id = active_cycle.id if active_cycle and (data.cycle_number is None or active_cycle.cycle_number == data.cycle_number) else None
+
+    # Check if this document is already linked to this remediation & cycle
+    existing_link = db.query(RemediationEvidence).filter(
+        RemediationEvidence.remediation_id == rem.id,
+        RemediationEvidence.document_id == doc.id,
+        RemediationEvidence.cycle_number == target_cycle_num,
+    ).first()
+
+    if existing_link:
+        return _format_evidence_response(db, existing_link)
+
+    evidence = RemediationEvidence(
+        id=uuid.uuid4(),
+        remediation_id=rem.id,
+        finding_id=finding.id,
+        organization_id=report.organization_id,
+        document_id=doc.id,
+        original_filename=doc.original_filename or "document.pdf",
+        stored_filename=doc.stored_filename or f"doc_{doc.id}",
+        file_path=doc.file_path or "",
+        file_size=doc.file_size or 0,
+        mime_type=doc.mime_type or "application/pdf",
+        document_type=getattr(doc, "document_type", None) or "POLICY",
+        version=getattr(doc, "version_tag", None) or (str(doc.version) if getattr(doc, "version", None) is not None else None),
+        description=data.description.strip() if data.description else f"Linked from document library: {doc.original_filename}",
+        cycle_id=target_cycle_id,
+        cycle_number=target_cycle_num,
+        uploaded_by=current_user.id,
     )
+    db.add(evidence)
+    db.commit()
+    db.refresh(evidence)
+
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="REMEDIATION_EVIDENCE_ATTACHED",
+        title=f"Attached Document Evidence for Finding #{str(finding.id)[:8]}",
+        description=f"Attached existing document: {evidence.original_filename} (Cycle {target_cycle_num})",
+        icon_type="document",
+        extra_data={
+            "finding_id": str(finding.id),
+            "remediation_id": str(rem.id),
+            "evidence_id": str(evidence.id),
+            "document_id": str(doc.id),
+            "filename": evidence.original_filename,
+            "cycle_number": target_cycle_num,
+        },
+    )
+
+    audit_service.log_audit_event(
+        db,
+        user_id=current_user.id,
+        action="REMEDIATION_EVIDENCE_ATTACHED",
+        organization_id=report.organization_id,
+        entity="RemediationEvidence",
+        entity_id=str(evidence.id),
+    )
+
+    return _format_evidence_response(db, evidence)
 
 
 @router.get(
@@ -1022,14 +1381,19 @@ def download_remediation_evidence(
             detail="Cross-organization evidence access is forbidden.",
         )
 
-    file_to_serve = Path(evidence.file_path)
-    if not file_to_serve.exists():
+    file_to_serve = Path(evidence.file_path) if evidence.file_path else None
+    if not file_to_serve or not file_to_serve.exists():
         from app.services.storage import _STORAGE_ROOT
         alt_path_evidence = _STORAGE_ROOT / "evidence" / evidence.stored_filename
+        alt_path_documents = _STORAGE_ROOT / "documents" / evidence.stored_filename
         alt_path_root = _STORAGE_ROOT / evidence.stored_filename
         if alt_path_evidence.exists():
             file_to_serve = alt_path_evidence
             evidence.file_path = str(alt_path_evidence)
+            db.commit()
+        elif alt_path_documents.exists():
+            file_to_serve = alt_path_documents
+            evidence.file_path = str(alt_path_documents)
             db.commit()
         elif alt_path_root.exists():
             file_to_serve = alt_path_root

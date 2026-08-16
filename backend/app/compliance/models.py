@@ -531,9 +531,71 @@ class ReportFinding(Base):
         nullable=True,
     )
 
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
+    reopened_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    reopened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
     reopen_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+    )
+
+    # Sprint 7.9: Reassessment & Change Detection
+    reassessment_trigger: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    reassessment_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    reassessment_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    reassessment_document_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    reassessment_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("compliance_reports.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    reassessment_detected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
     )
 
     remediation_due_date: Mapped[datetime | None] = mapped_column(
@@ -557,7 +619,20 @@ class ReportFinding(Base):
 
     report: Mapped["ComplianceReport"] = relationship(
         "ComplianceReport",
+        foreign_keys=[report_id],
         backref="findings_list",
+        lazy="select",
+    )
+
+    reassessment_report: Mapped[Optional["ComplianceReport"]] = relationship(
+        "ComplianceReport",
+        foreign_keys=[reassessment_report_id],
+        lazy="select",
+    )
+
+    reassessment_document: Mapped[Optional["Document"]] = relationship(
+        "Document",
+        foreign_keys=[reassessment_document_id],
         lazy="select",
     )
 
@@ -567,11 +642,31 @@ class ReportFinding(Base):
         lazy="select",
     )
 
+    resolver: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[resolved_by],
+        lazy="select",
+    )
+
+    reopener: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[reopened_by],
+        lazy="select",
+    )
+
     comments: Mapped[list["FindingComment"]] = relationship(
         "FindingComment",
         back_populates="finding",
         cascade="all, delete-orphan",
         order_by="FindingComment.created_at.asc()",
+    )
+
+    resolutions: Mapped[list["FindingResolutionHistory"]] = relationship(
+        "FindingResolutionHistory",
+        back_populates="finding",
+        cascade="all, delete-orphan",
+        order_by="FindingResolutionHistory.resolution_number.asc()",
+        lazy="select",
     )
 
     def __repr__(self) -> str:
@@ -684,4 +779,152 @@ class FindingComment(Base):
 
     def __repr__(self) -> str:
         return f"<FindingComment(id={self.id}, finding_id={self.finding_id}, user_id={self.user_id}, resolved={self.is_resolved})>"
+
+
+class FindingResolutionHistory(Base):
+    """
+    Historical record of finding resolution periods and reopening events.
+    Tracks multi-period resolution lifecycles for continuous compliance.
+    """
+
+    __tablename__ = "finding_resolution_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    finding_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("report_findings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    resolution_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        index=True,
+    )
+
+    resolved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    resolution_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    reopened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
+    reopened_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    reopen_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    approved_cycle_number: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    verification_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    evidence_snapshot: Mapped[dict | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="RESOLVED",
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    # Relationships
+    finding: Mapped["ReportFinding"] = relationship(
+        "ReportFinding",
+        back_populates="resolutions",
+        lazy="select",
+    )
+
+    resolver: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[resolved_by],
+        lazy="select",
+    )
+
+    verifier: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[verified_by],
+        lazy="select",
+    )
+
+    reopener: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[reopened_by],
+        lazy="select",
+    )
+
+    def __repr__(self) -> str:
+        return f"<FindingResolutionHistory(id={self.id}, finding_id={self.finding_id}, resolution_num={self.resolution_number}, status={self.status!r})>"
+
 

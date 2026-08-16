@@ -101,6 +101,11 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
         label: "REOPENED",
         className: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
       };
+    case "REASSESSMENT_REQUIRED":
+      return {
+        label: "REASSESSMENT REQUIRED",
+        className: "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/50 font-bold",
+      };
     case "REJECTED":
       return {
         label: "REJECTED (FALSE POSITIVE)",
@@ -183,6 +188,16 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
       setViewMode("ALL_FINDINGS");
     } else if (viewParam === "my-work") {
       setViewMode("MY_WORK");
+    }
+
+    const stParam = searchParams?.get("lifecycle_status") || searchParams?.get("status");
+    if (stParam) {
+      setStatusFilter(stParam.toUpperCase());
+    }
+
+    const sevParam = searchParams?.get("severity");
+    if (sevParam) {
+      setSeverityFilter(sevParam.toUpperCase());
     }
   }, [searchParams]);
 
@@ -454,6 +469,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
               { key: "POTENTIAL_FALSE_POSITIVE", label: "False Positive Review" },
               { key: "ADMIN_REVIEW", label: "Admin Review" },
               { key: "RESOLVED", label: "Resolved" },
+              { key: "REASSESSMENT_REQUIRED", label: "Reassessment Required" },
               { key: "REOPENED", label: "Reopened" },
               { key: "REJECTED", label: "Rejected" },
             ].map((pill) => (
