@@ -99,6 +99,11 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
         label: "REOPENED",
         className: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
       };
+    case "REASSESSMENT_REQUIRED":
+      return {
+        label: "REASSESSMENT REQUIRED",
+        className: "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/50 font-bold",
+      };
     case "REJECTED":
       return {
         label: "REJECTED (FALSE POSITIVE)",
@@ -424,6 +429,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
             <option value="POTENTIAL_FALSE_POSITIVE">False Positive Review</option>
             <option value="ADMIN_REVIEW">Admin Review</option>
             <option value="RESOLVED">Resolved</option>
+            <option value="REASSESSMENT_REQUIRED">Reassessment Required</option>
             <option value="REOPENED">Reopened</option>
             <option value="REJECTED">Rejected</option>
             <option value="ASSIGNED_TO_ME">Assigned to Me</option>

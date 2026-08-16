@@ -7,14 +7,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 
 if TYPE_CHECKING:
     from app.compliance.models import ReportFinding
+    from app.db.models.document import Document
     from app.db.models.organization import Organization
     from app.db.models.user import User
 
@@ -250,6 +251,36 @@ class RemediationEvidence(Base):
         nullable=True,
     )
 
+    cycle_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("remediation_cycles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    cycle_number: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
+    )
+
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    document_type: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    version: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -271,6 +302,18 @@ class RemediationEvidence(Base):
         lazy="select",
     )
 
+    cycle: Mapped[Optional["RemediationCycle"]] = relationship(
+        "RemediationCycle",
+        foreign_keys=[cycle_id],
+        lazy="select",
+    )
+
+    document: Mapped[Optional["Document"]] = relationship(
+        "Document",
+        foreign_keys=[document_id],
+        lazy="select",
+    )
+
     uploader: Mapped["User"] = relationship(
         "User",
         foreign_keys=[uploaded_by],
@@ -279,3 +322,124 @@ class RemediationEvidence(Base):
 
     def __repr__(self) -> str:
         return f"<RemediationEvidence(id={self.id}, filename={self.original_filename!r}, remediation_id={self.remediation_id})>"
+
+
+class RemediationCycle(Base):
+    """
+    Historical remediation cycle representing an iteration of remediation submission,
+    reviewer verification/rejection, and evidence snapshot.
+    """
+
+    __tablename__ = "remediation_cycles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    remediation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finding_remediations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    finding_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("report_findings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    cycle_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="SUBMITTED",
+        index=True,
+    )
+
+    submission_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    submitted_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    result: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    rejection_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    verification_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    evidence_snapshot: Mapped[dict | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
+
+    # Relationships
+    remediation: Mapped["FindingRemediation"] = relationship(
+        "FindingRemediation",
+        lazy="select",
+    )
+
+    submitter: Mapped["User"] = relationship(
+        "User",
+        foreign_keys=[submitted_by],
+        lazy="select",
+    )
+
+    reviewer: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[reviewed_by],
+        lazy="select",
+    )
+
+    def __repr__(self) -> str:
+        return f"<RemediationCycle(id={self.id}, remediation_id={self.remediation_id}, cycle={self.cycle_number}, status={self.status!r})>"

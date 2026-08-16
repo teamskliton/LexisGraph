@@ -30,6 +30,7 @@ import {
   AlertOctagon,
   AlertCircle,
   Calendar,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,6 +41,7 @@ import {
   ComplianceReport,
 } from "@/services/api/compliance";
 import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
+import { FindingAnalyticsDashboard } from "./FindingAnalyticsDashboard";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
 import { Organization } from "@/services/api/organizations";
 import { formatRoleLabel } from "@/utils/role-utils";
@@ -119,6 +121,7 @@ export function ComplianceOperationsOverview() {
     }
     return undefined;
   });
+  const [activeTab, setActiveTab] = useState<"OPERATIONS" | "ANALYTICS">("OPERATIONS");
   const [overviewData, setOverviewData] = useState<ComplianceOverviewData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -290,19 +293,68 @@ export function ComplianceOperationsOverview() {
           </div>
         </div>
 
-        {/* ── 3. Error Banner ── */}
-        {error && (
-          <Card className="border border-rose-500/30 bg-rose-500/5 p-6 text-center space-y-3">
-            <AlertTriangle className="h-8 w-8 text-rose-500 mx-auto" />
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-foreground">Compliance Overview Unavailable</h3>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">{error}</p>
-            </div>
-            <Button size="sm" onClick={fetchOverview} className="text-xs font-semibold cursor-pointer bg-indigo-600 text-white">
-              Retry
-            </Button>
-          </Card>
-        )}
+        {/* ── Subnav Navigation Tabs ── */}
+        <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab("OPERATIONS")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+              activeTab === "OPERATIONS"
+                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+            )}
+          >
+            <ShieldAlert className="h-3.5 w-3.5" />
+            <span>Operations & Priority Work</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("ANALYTICS")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+              activeTab === "ANALYTICS"
+                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+            )}
+          >
+            <TrendingUp className="h-3.5 w-3.5" />
+            <span>Finding Analytics & Health</span>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[9px] px-1.5 py-0 font-bold",
+                activeTab === "ANALYTICS"
+                  ? "bg-white/20 text-white border-white/40"
+                  : "bg-indigo-500/10 text-indigo-600 border-indigo-500/30"
+              )}
+            >
+              Sprint 7.11
+            </Badge>
+          </button>
+        </div>
+
+        {activeTab === "ANALYTICS" ? (
+          <FindingAnalyticsDashboard
+            organizationId={activeOrgId}
+            organizationName={overviewData?.organization_name}
+          />
+        ) : (
+          <>
+            {/* ── 3. Error Banner ── */}
+            {error && (
+              <Card className="border border-rose-500/30 bg-rose-500/5 p-6 text-center space-y-3">
+                <AlertTriangle className="h-8 w-8 text-rose-500 mx-auto" />
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-foreground">Compliance Overview Unavailable</h3>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto">{error}</p>
+                </div>
+                <Button size="sm" onClick={fetchOverview} className="text-xs font-semibold cursor-pointer bg-indigo-600 text-white">
+                  Retry
+                </Button>
+              </Card>
+            )}
 
         {/* ── 4. Summary Metrics (6 KPI Cards) ── */}
         {isLoading ? (
@@ -893,6 +945,8 @@ export function ComplianceOperationsOverview() {
             </Button>
           </div>
         </Card>
+        </>
+        )}
       </main>
 
       {/* ── Slide-over Finding Detail Drawer ── */}

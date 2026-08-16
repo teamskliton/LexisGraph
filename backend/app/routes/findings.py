@@ -6,22 +6,27 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional, Dict, Any
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, case
 from sqlalchemy.orm import Session
 
-from app.compliance.models import ComplianceReport, ReportFinding, FindingComment
+from app.compliance.models import ComplianceReport, ReportFinding, FindingComment, FindingResolutionHistory
+from app.db.models.remediation import FindingRemediation, RemediationEvidence, RemediationCycle
 from app.core.dependencies import get_current_user
 from app.core.rbac_dependencies import is_org_admin, is_org_analyst_or_admin, get_user_org_role, ROLE_RANK
 from app.db.models import User, Organization
 from app.db.models.rbac import OrganizationMember, MemberStatus, UserRole
 from app.db.models.activity import Activity
 from app.db.session import get_db
+from app.schemas.remediation import FindingResolutionProofResponse, FindingVerificationSummary, RemediationEvidenceResponse
 from app.schemas.finding import (
+    FindingActivityActor,
     FindingActivityItem,
+    FindingActivityPaginatedResponse,
     FindingAssignRequest,
     FindingAssigneeResponse,
     FindingCommentCreateRequest,
@@ -31,10 +36,25 @@ from app.schemas.finding import (
     FindingPaginatedResponse,
     FindingRejectRequest,
     FindingReopenRequest,
+    FindingResolutionHistoryItem,
     FindingResolveRequest,
     FindingStatusUpdateRequest,
     FindingSubmitReviewRequest,
     FindingRemediationUpdateRequest,
+    FindingReassessmentDetailResponse,
+    FindingReassessmentKeepResolvedRequest,
+    FindingReassessmentTriggerRequest,
+    FindingPreviousResolutionSummary,
+    FindingCandidateAnalysisSummary,
+    FindingAnalyticsResponse,
+    ComplianceHealthSummary,
+    StatusDistributionItem,
+    SeverityDistributionItem,
+    FindingTrendPoint,
+    ResolutionTrendPoint,
+    RemediationPerformanceMetrics,
+    HighRiskFindingItem,
+    AgingFindingItem,
 )
 from app.services import audit_service
 from app.services.activity_service import log_activity
@@ -207,6 +227,418 @@ def list_findings(
 
 
 @router.get(
+    "/analytics",
+    response_model=FindingAnalyticsResponse,
+    summary="Get organization-scoped Finding Analytics, Trends & Compliance Health (Sprint 7.11)",
+)
+def get_finding_analytics(
+    organization_id: Optional[uuid.UUID] = Query(None, description="Organization UUID (optional; defaults to user's active organization)"),
+    date_range: Optional[str] = Query("all", description="Date range: '7d', '30d', '90d', 'this_year', 'all', 'custom'"),
+    from_date: Optional[datetime] = Query(None, description="Custom start date timestamp"),
+    to_date: Optional[datetime] = Query(None, description="Custom end date timestamp"),
+    policy_document_id: Optional[uuid.UUID] = Query(None, description="Filter by policy document UUID"),
+    regulation_id: Optional[uuid.UUID] = Query(None, description="Filter by regulation UUID"),
+    severity: Optional[str] = Query(None, description="Filter by severity: CRITICAL, HIGH, MEDIUM, LOW"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status: COMPLIANT, NON_COMPLIANT, etc."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingAnalyticsResponse:
+    """
+    Returns lightweight, database-aggregated Finding Analytics, Trends, and Compliance Health
+    for the authenticated user's organization.
+    Enforces strict tenant isolation and deterministic SQL aggregations without data fabrication.
+    """
+    if organization_id:
+        target_org = db.get(Organization, organization_id)
+        if not target_org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization with ID '{organization_id}' not found.",
+            )
+
+        is_creator = target_org.created_by == current_user.id
+        is_active_member = db.scalar(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        ) > 0
+
+        if not is_creator and not is_active_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's finding analytics.",
+            )
+        target_org_id = target_org.id
+        target_org_name = target_org.name
+    else:
+        member_org = db.scalar(
+            select(Organization)
+            .join(OrganizationMember, OrganizationMember.organization_id == Organization.id)
+            .where(
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        )
+        if not member_org:
+            member_org = db.scalar(
+                select(Organization).where(Organization.created_by == current_user.id)
+            )
+
+        if not member_org:
+            return FindingAnalyticsResponse(
+                organization_id="",
+                organization_name="",
+                date_range_applied=date_range or "all",
+                health_summary=ComplianceHealthSummary(
+                    total_findings=0,
+                    open_findings=0,
+                    critical_count=0,
+                    high_count=0,
+                    medium_count=0,
+                    low_count=0,
+                    in_review=0,
+                    in_remediation=0,
+                    reassessment_required=0,
+                    resolved=0,
+                    reopened_count=0,
+                    summary_bullets=["No compliance Findings yet."],
+                ),
+                status_distribution=[],
+                severity_distribution=[],
+                open_finding_trend=[],
+                resolution_trend=[],
+                remediation_performance=RemediationPerformanceMetrics(),
+                high_risk_findings=[],
+                aging_findings=[],
+                needs_reassessment_count=0,
+                reopened_findings_count=0,
+            )
+        target_org_id = member_org.id
+        target_org_name = member_org.name
+
+    # 1. Parse Date Range
+    now_utc = datetime.now(timezone.utc)
+    start_dt: Optional[datetime] = None
+    end_dt: Optional[datetime] = None
+    applied_range = (date_range or "all").lower()
+
+    if applied_range == "7d":
+        start_dt = now_utc - timedelta(days=7)
+    elif applied_range == "30d":
+        start_dt = now_utc - timedelta(days=30)
+    elif applied_range == "90d":
+        start_dt = now_utc - timedelta(days=90)
+    elif applied_range == "this_year":
+        start_dt = datetime(now_utc.year, 1, 1, tzinfo=timezone.utc)
+    elif applied_range == "custom":
+        start_dt = from_date
+        end_dt = to_date
+
+    # 2. Build Base Where Clause
+    base_where = [
+        ComplianceReport.organization_id == target_org_id,
+        ReportFinding.report_id == ComplianceReport.id,
+    ]
+    if policy_document_id:
+        base_where.append(ComplianceReport.policy_document_id == policy_document_id)
+    if regulation_id:
+        base_where.append(ComplianceReport.regulation_id == regulation_id)
+    if severity:
+        base_where.append(ReportFinding.severity == severity.upper())
+    if status_filter:
+        st_up = status_filter.upper()
+        base_where.append(or_(ReportFinding.status == st_up, ReportFinding.lifecycle_status == st_up))
+    if start_dt:
+        base_where.append(ReportFinding.created_at >= start_dt)
+    if end_dt:
+        base_where.append(ReportFinding.created_at <= end_dt)
+
+    # 3. Status Distribution & Counts (Database SQL Aggregation)
+    status_rows = db.execute(
+        select(ReportFinding.lifecycle_status, func.count(ReportFinding.id))
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(*base_where)
+        .group_by(ReportFinding.lifecycle_status)
+    ).all()
+    status_map = {row[0] or "OPEN": row[1] for row in status_rows}
+
+    # 4. Severity Distribution (Database SQL Aggregation)
+    sev_rows = db.execute(
+        select(ReportFinding.severity, func.count(ReportFinding.id))
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(*base_where)
+        .group_by(ReportFinding.severity)
+    ).all()
+    sev_map = {row[0] or "LOW": row[1] for row in sev_rows}
+
+    total_findings = sum(status_map.values())
+    open_findings = status_map.get("OPEN", 0) + status_map.get("REOPENED", 0)
+    in_review = status_map.get("IN_REVIEW", 0) + status_map.get("ADMIN_REVIEW", 0)
+    in_remediation = status_map.get("REMEDIATION", 0) + status_map.get("REMEDIATION_REQUIRED", 0)
+    reassessment_required = status_map.get("REASSESSMENT_REQUIRED", 0)
+    resolved = status_map.get("RESOLVED", 0)
+    reopened_count = status_map.get("REOPENED", 0)
+
+    critical_count = sev_map.get("CRITICAL", 0)
+    high_count = sev_map.get("HIGH", 0)
+    medium_count = sev_map.get("MEDIUM", 0)
+    low_count = sev_map.get("LOW", 0)
+
+    summary_bullets: List[str] = []
+    if total_findings == 0:
+        summary_bullets.append("No compliance Findings yet.")
+    else:
+        summary_bullets.append(f"✓ {resolved} Findings resolved")
+        summary_bullets.append(f"⚠ {in_remediation} Findings under remediation")
+        if reassessment_required > 0:
+            summary_bullets.append(f"⚠ {reassessment_required} Findings require reassessment")
+        if critical_count > 0:
+            summary_bullets.append(f"🔴 {critical_count} Critical Findings remain open")
+        elif high_count > 0:
+            summary_bullets.append(f"🟠 {high_count} High Severity Findings")
+
+    health_summary = ComplianceHealthSummary(
+        total_findings=total_findings,
+        open_findings=open_findings,
+        critical_count=critical_count,
+        high_count=high_count,
+        medium_count=medium_count,
+        low_count=low_count,
+        in_review=in_review,
+        in_remediation=in_remediation,
+        reassessment_required=reassessment_required,
+        resolved=resolved,
+        reopened_count=reopened_count,
+        summary_bullets=summary_bullets,
+    )
+
+    status_distribution = [
+        StatusDistributionItem(status="OPEN", label="Open", count=status_map.get("OPEN", 0)),
+        StatusDistributionItem(status="IN_REVIEW", label="Under Review", count=in_review),
+        StatusDistributionItem(status="REMEDIATION", label="In Remediation", count=in_remediation),
+        StatusDistributionItem(status="REASSESSMENT_REQUIRED", label="Needs Reassessment", count=reassessment_required),
+        StatusDistributionItem(status="RESOLVED", label="Resolved", count=resolved),
+        StatusDistributionItem(status="REOPENED", label="Reopened", count=reopened_count),
+        StatusDistributionItem(status="REJECTED", label="False Positive / Rejected", count=status_map.get("REJECTED", 0) + status_map.get("POTENTIAL_FALSE_POSITIVE", 0)),
+    ]
+
+    severity_distribution = [
+        SeverityDistributionItem(severity="CRITICAL", label="Critical", count=critical_count),
+        SeverityDistributionItem(severity="HIGH", label="High", count=high_count),
+        SeverityDistributionItem(severity="MEDIUM", label="Medium", count=medium_count),
+        SeverityDistributionItem(severity="LOW", label="Low", count=low_count),
+    ]
+
+    # 5. Open Finding & Resolution Trends (Database Timestamps)
+    finding_created_dates = db.scalars(
+        select(ReportFinding.created_at)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(*base_where)
+        .order_by(ReportFinding.created_at.asc())
+    ).all()
+
+    resolution_dates = db.scalars(
+        select(FindingResolutionHistory.resolved_at)
+        .join(ReportFinding, FindingResolutionHistory.finding_id == ReportFinding.id)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(
+            ComplianceReport.organization_id == target_org_id,
+            FindingResolutionHistory.resolved_at.isnot(None),
+        )
+        .order_by(FindingResolutionHistory.resolved_at.asc())
+    ).all()
+
+    created_by_period: Dict[str, int] = defaultdict(int)
+    resolved_by_period: Dict[str, int] = defaultdict(int)
+    period_labels: Dict[str, str] = {}
+
+    use_daily = applied_range in ("7d", "30d")
+
+    for dt in finding_created_dates:
+        if not dt:
+            continue
+        if use_daily:
+            p = dt.strftime("%Y-%m-%d")
+            lbl = dt.strftime("%d %b")
+        else:
+            p = dt.strftime("%Y-%m")
+            lbl = dt.strftime("%b %Y")
+        created_by_period[p] += 1
+        period_labels[p] = lbl
+
+    for dt in resolution_dates:
+        if not dt:
+            continue
+        if use_daily:
+            p = dt.strftime("%Y-%m-%d")
+            lbl = dt.strftime("%d %b")
+        else:
+            p = dt.strftime("%Y-%m")
+            lbl = dt.strftime("%b %Y")
+        resolved_by_period[p] += 1
+        period_labels[p] = lbl
+
+    sorted_periods = sorted(period_labels.keys())
+    open_finding_trend: List[FindingTrendPoint] = []
+    resolution_trend: List[ResolutionTrendPoint] = []
+
+    if sorted_periods:
+        cumulative_created = 0
+        cumulative_resolved = 0
+        for p in sorted_periods:
+            c = created_by_period.get(p, 0)
+            r = resolved_by_period.get(p, 0)
+            cumulative_created += c
+            cumulative_resolved += r
+            snapshot = max(0, cumulative_created - cumulative_resolved)
+            open_finding_trend.append(
+                FindingTrendPoint(
+                    period=p,
+                    label=period_labels[p],
+                    created_count=c,
+                    open_snapshot=snapshot,
+                )
+            )
+            resolution_trend.append(
+                ResolutionTrendPoint(
+                    period=p,
+                    label=period_labels[p],
+                    created_count=c,
+                    resolved_count=r,
+                )
+            )
+
+    # 6. Remediation Performance (Database Records)
+    resolutions = db.scalars(
+        select(FindingResolutionHistory)
+        .join(ReportFinding, FindingResolutionHistory.finding_id == ReportFinding.id)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(ComplianceReport.organization_id == target_org_id)
+    ).all()
+
+    approved_cycles = [r.approved_cycle_number or 1 for r in resolutions if r.approved_cycle_number]
+    avg_cycles = round(sum(approved_cycles) / len(approved_cycles), 1) if approved_cycles else (1.0 if resolved > 0 else 0.0)
+    first_cycle_count = sum(1 for c in approved_cycles if c == 1)
+    multi_cycle_count = sum(1 for c in approved_cycles if c > 1)
+
+    rejected_cycles_count = db.scalar(
+        select(func.count(RemediationCycle.id))
+        .join(FindingRemediation, RemediationCycle.remediation_id == FindingRemediation.id)
+        .join(ReportFinding, FindingRemediation.finding_id == ReportFinding.id)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(ComplianceReport.organization_id == target_org_id, RemediationCycle.status == "REJECTED")
+    ) or 0
+
+    rem_status_rows = db.execute(
+        select(FindingRemediation.status, func.count(FindingRemediation.id))
+        .join(ReportFinding, FindingRemediation.finding_id == ReportFinding.id)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(ComplianceReport.organization_id == target_org_id)
+        .group_by(FindingRemediation.status)
+    ).all()
+    rem_status_map = {row[0]: row[1] for row in rem_status_rows}
+
+    remediation_performance = RemediationPerformanceMetrics(
+        average_cycles_per_resolved=avg_cycles,
+        resolved_first_cycle_count=first_cycle_count,
+        resolved_multiple_cycles_count=multi_cycle_count,
+        rejected_remediation_count=rejected_cycles_count,
+        pending_remediation_count=rem_status_map.get("NOT_STARTED", 0) + rem_status_map.get("IN_PROGRESS", 0),
+        verified_remediation_count=rem_status_map.get("VERIFIED", 0) + rem_status_map.get("READY_FOR_REVIEW", 0),
+        approved_remediation_count=rem_status_map.get("APPROVED", 0),
+    )
+
+    # 7. High-Risk Findings (Top 5 Unresolved by Severity & Age)
+    sev_sort = case(
+        (ReportFinding.severity == "CRITICAL", 1),
+        (ReportFinding.severity == "HIGH", 2),
+        (ReportFinding.severity == "MEDIUM", 3),
+        else_=4,
+    )
+    high_risk_rows = db.scalars(
+        select(ReportFinding)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(
+            *base_where,
+            ReportFinding.lifecycle_status.notin_(["RESOLVED", "REJECTED"]),
+        )
+        .order_by(sev_sort, ReportFinding.created_at.asc())
+        .limit(5)
+    ).all()
+
+    high_risk_findings: List[HighRiskFindingItem] = []
+    now = datetime.now(timezone.utc)
+    for f in high_risk_rows:
+        c_at = f.created_at if f.created_at and f.created_at.tzinfo else (f.created_at.replace(tzinfo=timezone.utc) if f.created_at else now)
+        age = max(0, (now - c_at).days)
+        high_risk_findings.append(
+            HighRiskFindingItem(
+                id=str(f.id),
+                report_id=str(f.report_id),
+                clause_id=f.regulation_clause_id or f.policy_clause_id,
+                severity=f.severity or "HIGH",
+                status=f.status or "NON_COMPLIANT",
+                lifecycle_status=f.lifecycle_status or "OPEN",
+                reasoning=f.reasoning,
+                age_days=age,
+                created_at=c_at,
+                remediation_due_date=f.remediation_due_date,
+                is_reopened=f.lifecycle_status == "REOPENED",
+            )
+        )
+
+    # 8. Aging Findings (Top 5 Oldest Unresolved)
+    aging_rows = db.scalars(
+        select(ReportFinding)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(
+            *base_where,
+            ReportFinding.lifecycle_status.notin_(["RESOLVED", "REJECTED"]),
+        )
+        .order_by(ReportFinding.created_at.asc())
+        .limit(5)
+    ).all()
+
+    aging_findings: List[AgingFindingItem] = []
+    for f in aging_rows:
+        c_at = f.created_at if f.created_at and f.created_at.tzinfo else (f.created_at.replace(tzinfo=timezone.utc) if f.created_at else now)
+        age = max(0, (now - c_at).days)
+        aging_findings.append(
+            AgingFindingItem(
+                id=str(f.id),
+                report_id=str(f.report_id),
+                clause_id=f.regulation_clause_id or f.policy_clause_id,
+                severity=f.severity or "HIGH",
+                lifecycle_status=f.lifecycle_status or "OPEN",
+                age_days=age,
+                created_at=c_at,
+                is_reopened=f.lifecycle_status == "REOPENED",
+                reopened_at=f.reopened_at,
+            )
+        )
+
+    return FindingAnalyticsResponse(
+        organization_id=str(target_org_id),
+        organization_name=target_org_name,
+        date_range_applied=applied_range,
+        from_date=start_dt,
+        to_date=end_dt,
+        health_summary=health_summary,
+        status_distribution=status_distribution,
+        severity_distribution=severity_distribution,
+        open_finding_trend=open_finding_trend,
+        resolution_trend=resolution_trend,
+        remediation_performance=remediation_performance,
+        high_risk_findings=high_risk_findings,
+        aging_findings=aging_findings,
+        needs_reassessment_count=reassessment_required,
+        reopened_findings_count=reopened_count,
+    )
+
+
+@router.get(
     "/my-work",
     response_model=List[FindingItemResponse],
     summary="Get findings assigned to the authenticated user",
@@ -359,6 +791,80 @@ def _format_finding_response(db: Session, finding: ReportFinding) -> FindingItem
 
     comments_cnt = db.query(FindingComment).filter(FindingComment.finding_id == finding.id).count()
 
+    resolved_by_name = None
+    if finding.resolved_by:
+        resolver_user = getattr(finding, "resolver", None) or db.get(User, finding.resolved_by)
+        if resolver_user:
+            resolved_by_name = resolver_user.full_name
+
+    reopened_by_name = None
+    if finding.reopened_by:
+        reopener_user = getattr(finding, "reopener", None) or db.get(User, finding.reopened_by)
+        if reopener_user:
+            reopened_by_name = reopener_user.full_name
+
+    # Query multi-period resolution history
+    db_resolutions = (
+        db.query(FindingResolutionHistory)
+        .filter(FindingResolutionHistory.finding_id == finding.id)
+        .order_by(FindingResolutionHistory.resolution_number.asc())
+        .all()
+    )
+
+    resolution_history_items: List[FindingResolutionHistoryItem] = []
+    if db_resolutions:
+        for r in db_resolutions:
+            r_resolver_name = None
+            if r.resolved_by:
+                res_u = getattr(r, "resolver", None) or db.get(User, r.resolved_by)
+                if res_u:
+                    r_resolver_name = res_u.full_name
+
+            r_reopener_name = None
+            if r.reopened_by:
+                reop_u = getattr(r, "reopener", None) or db.get(User, r.reopened_by)
+                if reop_u:
+                    r_reopener_name = reop_u.full_name
+
+            resolution_history_items.append(
+                FindingResolutionHistoryItem(
+                    id=str(r.id),
+                    finding_id=str(r.finding_id),
+                    organization_id=str(r.organization_id) if r.organization_id else None,
+                    resolution_number=r.resolution_number,
+                    resolved_at=r.resolved_at,
+                    resolved_by=str(r.resolved_by) if r.resolved_by else None,
+                    resolved_by_name=r_resolver_name,
+                    resolution_note=r.resolution_note,
+                    reopened_at=r.reopened_at,
+                    reopened_by=str(r.reopened_by) if r.reopened_by else None,
+                    reopened_by_name=r_reopener_name,
+                    reopen_reason=r.reopen_reason,
+                    status=r.status,
+                    created_at=r.created_at,
+                )
+            )
+    elif finding.resolved_at:
+        # Backward compatibility for findings resolved prior to Sprint 7.8
+        resolution_history_items.append(
+            FindingResolutionHistoryItem(
+                id=str(finding.id),
+                finding_id=str(finding.id),
+                organization_id=None,
+                resolution_number=1,
+                resolved_at=finding.resolved_at,
+                resolved_by=str(finding.resolved_by) if finding.resolved_by else None,
+                resolved_by_name=resolved_by_name,
+                resolution_note=finding.resolution_note,
+                reopened_at=finding.reopened_at,
+                reopened_by=str(finding.reopened_by) if finding.reopened_by else None,
+                reopened_by_name=reopened_by_name,
+                reopen_reason=finding.reopen_reason,
+                status="REOPENED" if (finding.reopened_at or (finding.lifecycle_status or "").upper() == "REOPENED") else "RESOLVED",
+                created_at=finding.resolved_at,
+            )
+        )
+
     now_utc = datetime.now(timezone.utc)
     due_dt = (
         finding.remediation_due_date.replace(tzinfo=timezone.utc)
@@ -391,11 +897,24 @@ def _format_finding_response(db: Session, finding: ReportFinding) -> FindingItem
         assigned_to=str(finding.assigned_to) if finding.assigned_to else None,
         assignee=assignee_resp,
         resolution_note=finding.resolution_note,
+        resolved_by=str(finding.resolved_by) if finding.resolved_by else None,
+        resolved_by_name=resolved_by_name,
+        resolved_at=finding.resolved_at,
+        reopened_by=str(finding.reopened_by) if finding.reopened_by else None,
+        reopened_by_name=reopened_by_name,
+        reopened_at=finding.reopened_at,
         reopen_reason=finding.reopen_reason,
+        reassessment_trigger=finding.reassessment_trigger,
+        reassessment_reason=finding.reassessment_reason,
+        reassessment_document_id=str(finding.reassessment_document_id) if finding.reassessment_document_id else None,
+        reassessment_document_name=finding.reassessment_document_name,
+        reassessment_report_id=str(finding.reassessment_report_id) if finding.reassessment_report_id else None,
+        reassessment_detected_at=finding.reassessment_detected_at,
         remediation_due_date=finding.remediation_due_date,
         is_overdue=is_overdue,
         comments_count=comments_cnt,
         organization_id=org_id_str,
+        resolution_history=resolution_history_items,
         created_at=finding.created_at,
         updated_at=finding.updated_at or finding.created_at,
     )
@@ -470,7 +989,8 @@ ALLOWED_TRANSITIONS = {
     "REMEDIATION_REQUIRED": {"ADMIN_REVIEW", "IN_REVIEW", "RESOLVED", "REMEDIATION"},
     "POTENTIAL_FALSE_POSITIVE": {"ADMIN_REVIEW", "IN_REVIEW", "REJECTED"},
     "ADMIN_REVIEW": {"RESOLVED", "REJECTED", "IN_REVIEW", "REMEDIATION", "POTENTIAL_FALSE_POSITIVE"},
-    "RESOLVED": {"OPEN", "REOPENED", "IN_REVIEW"},
+    "RESOLVED": {"OPEN", "REOPENED", "IN_REVIEW", "REASSESSMENT_REQUIRED"},
+    "REASSESSMENT_REQUIRED": {"RESOLVED", "REOPENED"},
     "REOPENED": {"IN_REVIEW", "OPEN", "REMEDIATION"},
     "REJECTED": {"IN_REVIEW", "OPEN", "REOPENED"},
 }
@@ -527,18 +1047,90 @@ def update_finding_status(
         )
 
     # Enforce that RESOLVED, REOPENED, and REJECTED statuses can ONLY be set by Admin
+    now_utc = datetime.now(timezone.utc)
     if new_status == "RESOLVED":
-        if not is_org_admin(db, current_user.id, report.organization_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only Organization Admins are permitted to resolve findings. Reviewers can submit reviews and move findings to remediation.",
-            )
+        _verify_finding_resolution_eligibility(db, finding, current_user, report.organization_id)
+        finding.resolved_by = current_user.id
+        finding.resolved_at = now_utc
+        if not finding.resolution_note:
+            finding.resolution_note = "Resolved by Administrator"
+
+        last_res = (
+            db.query(FindingResolutionHistory)
+            .filter(FindingResolutionHistory.finding_id == finding.id)
+            .order_by(FindingResolutionHistory.resolution_number.desc())
+            .first()
+        )
+        next_res_num = (last_res.resolution_number + 1) if last_res else 1
+        res_history = FindingResolutionHistory(
+            id=uuid.uuid4(),
+            finding_id=finding.id,
+            organization_id=report.organization_id,
+            resolution_number=next_res_num,
+            resolved_at=now_utc,
+            resolved_by=current_user.id,
+            resolution_note=finding.resolution_note,
+            status="RESOLVED",
+        )
+        db.add(res_history)
     elif new_status in ("REOPENED", "REJECTED"):
         if not is_org_admin(db, current_user.id, report.organization_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Only Organization Admins are permitted to set finding status to '{new_status}'. Reviewers can submit findings for Admin review.",
             )
+
+        if new_status == "REOPENED":
+            old_lifecycle = (finding.lifecycle_status or "OPEN").upper()
+            if old_lifecycle != "RESOLVED":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Only resolved findings can be reopened. Current status: {old_lifecycle}",
+                )
+            finding.reopened_by = current_user.id
+            finding.reopened_at = now_utc
+            if not finding.reopen_reason:
+                finding.reopen_reason = "Reopened by Administrator"
+
+            latest_res = (
+                db.query(FindingResolutionHistory)
+                .filter(FindingResolutionHistory.finding_id == finding.id)
+                .order_by(FindingResolutionHistory.resolution_number.desc())
+                .first()
+            )
+            if latest_res:
+                latest_res.reopened_at = now_utc
+                latest_res.reopened_by = current_user.id
+                latest_res.reopen_reason = finding.reopen_reason
+                latest_res.status = "REOPENED"
+                latest_res.updated_at = now_utc
+            else:
+                res_record = FindingResolutionHistory(
+                    id=uuid.uuid4(),
+                    finding_id=finding.id,
+                    organization_id=report.organization_id,
+                    resolution_number=1,
+                    resolved_at=finding.resolved_at or now_utc,
+                    resolved_by=finding.resolved_by or current_user.id,
+                    resolution_note=finding.resolution_note,
+                    reopened_at=now_utc,
+                    reopened_by=current_user.id,
+                    reopen_reason=finding.reopen_reason,
+                    status="REOPENED",
+                )
+                db.add(res_record)
+
+            rem = (
+                db.query(FindingRemediation)
+                .filter(FindingRemediation.finding_id == finding.id)
+                .first()
+            )
+            if rem:
+                rem.status = "IN_PROGRESS"
+                rem.admin_approved_by = None
+                rem.admin_approved_at = None
+                rem.admin_note = f"Finding reopened: {finding.reopen_reason}"
+                rem.updated_at = now_utc
 
     old_status = (finding.lifecycle_status or "OPEN").upper()
 
@@ -551,7 +1143,7 @@ def update_finding_status(
             )
 
     finding.lifecycle_status = new_status
-    finding.updated_at = datetime.now(timezone.utc)
+    finding.updated_at = now_utc
     db.commit()
     db.refresh(finding)
 
@@ -952,6 +1544,63 @@ def assign_finding(
     return _format_finding_response(db, finding)
 
 
+def _verify_finding_resolution_eligibility(
+    db: Session,
+    finding: ReportFinding,
+    current_user: User,
+    org_id: uuid.UUID,
+) -> None:
+    """
+    Verify strict eligibility pre-conditions for resolving a compliance finding (Sprint 7.7):
+    1. Organization Administrator role required.
+    2. Finding must not already be RESOLVED (409 Conflict).
+    3. If associated remediation exists, it MUST be in APPROVED status.
+    """
+    if not is_org_admin(db, current_user.id, org_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Organization Admins are permitted to resolve findings. Reviewers can submit reviews and move findings to remediation.",
+        )
+
+    current_lifecycle = (finding.lifecycle_status or "OPEN").upper()
+    if current_lifecycle == "RESOLVED":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Finding is already resolved.",
+        )
+
+    # Verify remediation status if remediation plan exists
+    rem = db.query(FindingRemediation).filter(FindingRemediation.finding_id == finding.id).first()
+    if rem:
+        rem_status = (rem.status or "NOT_STARTED").upper()
+        if rem_status != "APPROVED":
+            if rem_status in ("IN_PROGRESS", "NOT_STARTED"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Finding cannot be resolved while remediation is in progress. Remediation must be approved before resolution.",
+                )
+            elif rem_status == "READY_FOR_REVIEW":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Finding cannot be resolved while remediation is pending review. Complete verification and approval first.",
+                )
+            elif rem_status == "VERIFIED":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Remediation has been verified by the reviewer, but requires Admin approval before this finding can be resolved.",
+                )
+            elif rem_status == "REJECTED":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Finding cannot be resolved because remediation was rejected. Further remediation work is required.",
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Remediation must be approved before this finding can be resolved. Current remediation status: {rem.status}",
+                )
+
+
 @router.post(
     "/{finding_id}/resolve",
     response_model=FindingItemResponse,
@@ -959,36 +1608,118 @@ def assign_finding(
 )
 def resolve_finding(
     finding_id: uuid.UUID,
-    data: FindingResolveRequest,
+    data: Optional[FindingResolveRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FindingItemResponse:
-    """Mark finding as RESOLVED with resolution note. Requires Organization Admin role."""
+    """Mark finding as RESOLVED with resolution note. Requires Organization Admin role and completed remediation."""
     finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
 
-    if not is_org_admin(db, current_user.id, report.organization_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Organization Admins are permitted to resolve findings. Reviewers can submit reviews and move findings to remediation.",
+    # Row-level lock for atomic concurrency protection
+    locked_finding = db.query(ReportFinding).filter(
+        ReportFinding.id == finding.id
+    ).with_for_update().first()
+    if not locked_finding:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found.")
+
+    _verify_finding_resolution_eligibility(db, locked_finding, current_user, report.organization_id)
+
+    now_utc = datetime.now(timezone.utc)
+    note_text = data.resolution_note if data else None
+
+    locked_finding.lifecycle_status = "RESOLVED"
+    locked_finding.resolution_note = note_text
+    locked_finding.resolved_by = current_user.id
+    locked_finding.resolved_at = now_utc
+    locked_finding.updated_at = now_utc
+
+    # Append to FindingResolutionHistory with approved cycle & evidence snapshot
+    last_res = (
+        db.query(FindingResolutionHistory)
+        .filter(FindingResolutionHistory.finding_id == locked_finding.id)
+        .order_by(FindingResolutionHistory.resolution_number.desc())
+        .first()
+    )
+    next_res_num = (last_res.resolution_number + 1) if last_res else 1
+
+    rem = (
+        db.query(FindingRemediation)
+        .filter(FindingRemediation.finding_id == locked_finding.id)
+        .first()
+    )
+    approved_cycle_num = None
+    verified_by_id = None
+    verified_at_time = None
+    verification_note_text = None
+    ev_snapshot = []
+
+    if rem:
+        latest_cycle = (
+            db.query(RemediationCycle)
+            .filter(RemediationCycle.remediation_id == rem.id)
+            .order_by(RemediationCycle.cycle_number.desc())
+            .first()
         )
+        approved_cycle_num = latest_cycle.cycle_number if latest_cycle else 1
+        verified_by_id = rem.verified_by
+        verified_at_time = rem.verified_at
+        verification_note_text = rem.verification_note
 
-    finding.lifecycle_status = "RESOLVED"
-    finding.resolution_note = data.resolution_note
-    finding.updated_at = datetime.now(timezone.utc)
+        ev_items = (
+            db.query(RemediationEvidence)
+            .filter(RemediationEvidence.remediation_id == rem.id)
+            .all()
+        )
+        for ev in ev_items:
+            ev_snapshot.append({
+                "id": str(ev.id),
+                "original_filename": ev.original_filename,
+                "file_size": ev.file_size,
+                "mime_type": ev.mime_type,
+                "description": ev.description,
+                "cycle_number": ev.cycle_number,
+                "document_id": str(ev.document_id) if ev.document_id else None,
+                "document_type": ev.document_type,
+                "version": ev.version,
+                "uploaded_at": ev.uploaded_at.isoformat() if ev.uploaded_at else None,
+            })
+
+    res_history = FindingResolutionHistory(
+        id=uuid.uuid4(),
+        finding_id=locked_finding.id,
+        organization_id=report.organization_id,
+        resolution_number=next_res_num,
+        resolved_at=now_utc,
+        resolved_by=current_user.id,
+        resolution_note=note_text,
+        approved_cycle_number=approved_cycle_num,
+        verified_by=verified_by_id,
+        verified_at=verified_at_time,
+        verification_note=verification_note_text,
+        evidence_snapshot=ev_snapshot if ev_snapshot else None,
+        status="RESOLVED",
+    )
+    db.add(res_history)
     db.commit()
-    db.refresh(finding)
+    db.refresh(locked_finding)
 
+    desc_note = f": {note_text}" if note_text else ""
     log_activity(
         db,
         user_id=current_user.id,
         event_type="FINDING_RESOLVED",
-        title=f"Resolved Finding #{str(finding.id)[:8]}",
-        description=f"Marked RESOLVED: {data.resolution_note or 'Remediation completed'}",
+        title=f"Resolved Finding #{str(locked_finding.id)[:8]}",
+        description=f"Marked RESOLVED by {current_user.full_name}{desc_note}",
         icon_type="check",
         extra_data={
-            "finding_id": str(finding.id),
+            "finding_id": str(locked_finding.id),
             "report_id": str(report.id),
-            "resolution_note": data.resolution_note,
+            "organization_id": str(report.organization_id),
+            "resolution_number": next_res_num,
+            "resolution_note": note_text,
+            "resolved_by": str(current_user.id),
+            "resolved_at": now_utc.isoformat(),
+            "approved_cycle_number": approved_cycle_num,
         },
     )
 
@@ -998,23 +1729,166 @@ def resolve_finding(
         action="FINDING_RESOLVED",
         organization_id=report.organization_id,
         entity="ReportFinding",
-        entity_id=str(finding.id),
+        entity_id=str(locked_finding.id),
     )
 
     notify_finding_stakeholders(
         db=db,
         organization_id=report.organization_id,
-        finding_id=finding.id,
+        finding_id=locked_finding.id,
         report_id=report.id,
-        assignee_id=finding.assigned_to,
+        assignee_id=locked_finding.assigned_to,
         actor_id=current_user.id,
         event_type="FINDING_RESOLVED",
         title="Finding Resolved",
-        message=f"Finding #{str(finding.id)[:8]} was marked RESOLVED by {current_user.full_name}: {data.resolution_note or 'Remediation completed'}.",
+        message=f"Finding #{str(locked_finding.id)[:8]} was resolved by Admin {current_user.full_name}{desc_note}.",
     )
     db.commit()
 
-    return _format_finding_response(db, finding)
+    return _format_finding_response(db, locked_finding)
+
+
+@router.get(
+    "/{finding_id}/resolution-proof",
+    response_model=FindingResolutionProofResponse,
+    summary="Get comprehensive resolution proof, verification summary, and evidence (Sprint 7.10)",
+)
+def get_finding_resolution_proof(
+    finding_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingResolutionProofResponse:
+    """Retrieve full audit proof including resolution metadata, verifier details, supporting evidence, and cycle history."""
+    finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
+
+    resolver_name = None
+    if finding.resolved_by:
+        r_user = db.get(User, finding.resolved_by)
+        if r_user:
+            resolver_name = r_user.full_name
+
+    rem = db.query(FindingRemediation).filter(
+        FindingRemediation.finding_id == finding.id
+    ).first()
+
+    verification_summary = None
+    approved_cycle_number = None
+
+    if rem:
+        latest_cycle = db.query(RemediationCycle).filter(
+            RemediationCycle.remediation_id == rem.id
+        ).order_by(RemediationCycle.cycle_number.desc()).first()
+        approved_cycle_number = latest_cycle.cycle_number if latest_cycle else 1
+
+        verifier_name = None
+        if rem.verified_by:
+            v_user = db.get(User, rem.verified_by)
+            if v_user:
+                verifier_name = v_user.full_name
+
+        verification_summary = FindingVerificationSummary(
+            verification_status="VERIFIED" if rem.status in ("VERIFIED", "APPROVED") else rem.status,
+            verified_by=str(rem.verified_by) if rem.verified_by else None,
+            verified_by_name=verifier_name,
+            verified_at=rem.verified_at,
+            verification_note=rem.verification_note,
+            cycle_number=approved_cycle_number,
+        )
+
+    # Fetch all evidence for this finding
+    all_evidence = db.query(RemediationEvidence).filter(
+        RemediationEvidence.finding_id == finding.id,
+        RemediationEvidence.organization_id == report.organization_id,
+    ).order_by(RemediationEvidence.uploaded_at.desc()).all()
+
+    from app.routes.remediations import _format_evidence_response
+
+    supporting_ev: List[RemediationEvidenceResponse] = []
+    historical_ev: List[RemediationEvidenceResponse] = []
+
+    for ev in all_evidence:
+        formatted = _format_evidence_response(db, ev)
+        # If finding is currently resolved or in review for a specific cycle:
+        if approved_cycle_number is not None and ev.cycle_number == approved_cycle_number:
+            supporting_ev.append(formatted)
+        elif approved_cycle_number is not None and ev.cycle_number and ev.cycle_number < approved_cycle_number:
+            historical_ev.append(formatted)
+        else:
+            supporting_ev.append(formatted)
+
+    # Fetch resolution history
+    res_histories = db.query(FindingResolutionHistory).filter(
+        FindingResolutionHistory.finding_id == finding.id
+    ).order_by(FindingResolutionHistory.resolution_number.desc()).all()
+
+    hist_list = []
+    for rh in res_histories:
+        rh_resolver_name = None
+        if rh.resolved_by:
+            ru = db.get(User, rh.resolved_by)
+            if ru:
+                rh_resolver_name = ru.full_name
+
+        rh_reopener_name = None
+        if rh.reopened_by:
+            ro = db.get(User, rh.reopened_by)
+            if ro:
+                rh_reopener_name = ro.full_name
+
+        rh_verifier_name = None
+        if rh.verified_by:
+            vu = db.get(User, rh.verified_by)
+            if vu:
+                rh_verifier_name = vu.full_name
+
+        hist_list.append({
+            "id": str(rh.id),
+            "resolution_number": rh.resolution_number,
+            "status": rh.status,
+            "resolved_at": rh.resolved_at.isoformat() if rh.resolved_at else None,
+            "resolved_by": str(rh.resolved_by) if rh.resolved_by else None,
+            "resolved_by_name": rh_resolver_name,
+            "resolution_note": rh.resolution_note,
+            "approved_cycle_number": rh.approved_cycle_number,
+            "verified_by": str(rh.verified_by) if rh.verified_by else None,
+            "verified_by_name": rh_verifier_name,
+            "verified_at": rh.verified_at.isoformat() if rh.verified_at else None,
+            "verification_note": rh.verification_note,
+            "evidence_snapshot": rh.evidence_snapshot,
+            "reopened_at": rh.reopened_at.isoformat() if rh.reopened_at else None,
+            "reopened_by": str(rh.reopened_by) if rh.reopened_by else None,
+            "reopened_by_name": rh_reopener_name,
+            "reopen_reason": rh.reopen_reason,
+        })
+
+    reassessment_dict = None
+    if finding.lifecycle_status == "REASSESSMENT_REQUIRED" or finding.reassessment_trigger:
+        reassessment_dict = {
+            "reassessment_trigger": finding.reassessment_trigger,
+            "reassessment_reason": finding.reassessment_reason,
+            "reassessment_document_id": str(finding.reassessment_document_id) if finding.reassessment_document_id else None,
+            "reassessment_document_name": finding.reassessment_document_name,
+            "reassessment_report_id": str(finding.reassessment_report_id) if finding.reassessment_report_id else None,
+            "reassessment_detected_at": finding.reassessment_detected_at.isoformat() if finding.reassessment_detected_at else None,
+        }
+
+    return FindingResolutionProofResponse(
+        finding_id=str(finding.id),
+        finding_clause_id=finding.regulation_clause_id,
+        severity=finding.severity,
+        lifecycle_status=finding.lifecycle_status or "OPEN",
+        resolved_by=str(finding.resolved_by) if finding.resolved_by else None,
+        resolved_by_name=resolver_name,
+        resolved_at=finding.resolved_at,
+        resolution_note=finding.resolution_note,
+        approved_cycle_number=approved_cycle_number,
+        verification=verification_summary,
+        supporting_evidence=supporting_ev,
+        historical_evidence=historical_ev,
+        historical_resolutions=hist_list,
+        reassessment_info=reassessment_dict,
+        has_supporting_evidence=len(supporting_ev) > 0,
+    )
 
 
 @router.post(
@@ -1028,7 +1902,7 @@ def reopen_finding(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FindingItemResponse:
-    """Reopen a previously resolved finding with reason. Requires Organization Admin role."""
+    """Reopen a previously resolved finding with mandatory reason. Requires Organization Admin role."""
     finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
 
     if not is_org_admin(db, current_user.id, report.organization_id):
@@ -1037,23 +1911,101 @@ def reopen_finding(
             detail="Only Organization Admins are permitted to reopen findings.",
         )
 
-    finding.lifecycle_status = "REOPENED"
-    finding.reopen_reason = data.reopen_reason
-    finding.updated_at = datetime.now(timezone.utc)
+    # Row-level lock for atomic concurrency protection
+    locked_finding = db.query(ReportFinding).filter(
+        ReportFinding.id == finding.id
+    ).with_for_update().first()
+    if not locked_finding:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found.")
+
+    current_status = (locked_finding.lifecycle_status or "OPEN").upper()
+    if current_status not in ("RESOLVED", "REASSESSMENT_REQUIRED"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Only resolved findings can be reopened (or findings pending reassessment). Current status: {current_status}",
+        )
+
+    reason = (data.reopen_reason or "").strip()
+    if not reason:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reason for reopening finding is mandatory.",
+        )
+
+    now_utc = datetime.now(timezone.utc)
+    locked_finding.lifecycle_status = "REOPENED"
+    locked_finding.reopened_by = current_user.id
+    locked_finding.reopened_at = now_utc
+    locked_finding.reopen_reason = reason
+    locked_finding.reassessment_trigger = None
+    locked_finding.reassessment_reason = None
+    locked_finding.reassessment_document_id = None
+    locked_finding.reassessment_document_name = None
+    locked_finding.reassessment_report_id = None
+    locked_finding.reassessment_detected_at = None
+    locked_finding.updated_at = now_utc
+
+    # Update latest active FindingResolutionHistory entry or create Resolution #1 if none existed
+    latest_res = (
+        db.query(FindingResolutionHistory)
+        .filter(FindingResolutionHistory.finding_id == locked_finding.id)
+        .order_by(FindingResolutionHistory.resolution_number.desc())
+        .first()
+    )
+    if latest_res:
+        latest_res.reopened_at = now_utc
+        latest_res.reopened_by = current_user.id
+        latest_res.reopen_reason = reason
+        latest_res.status = "REOPENED"
+        latest_res.updated_at = now_utc
+    else:
+        # Create Resolution #1 record with previous resolution data and this reopen event
+        res_record = FindingResolutionHistory(
+            id=uuid.uuid4(),
+            finding_id=locked_finding.id,
+            organization_id=report.organization_id,
+            resolution_number=1,
+            resolved_at=locked_finding.resolved_at or now_utc,
+            resolved_by=locked_finding.resolved_by or current_user.id,
+            resolution_note=locked_finding.resolution_note,
+            reopened_at=now_utc,
+            reopened_by=current_user.id,
+            reopen_reason=reason,
+            status="REOPENED",
+        )
+        db.add(res_record)
+
+    # Reopen associated remediation workflow if it exists (allows starting new cycle while keeping history)
+    rem = (
+        db.query(FindingRemediation)
+        .filter(FindingRemediation.finding_id == locked_finding.id)
+        .with_for_update()
+        .first()
+    )
+    if rem:
+        rem.status = "IN_PROGRESS"
+        rem.admin_approved_by = None
+        rem.admin_approved_at = None
+        rem.admin_note = f"Finding reopened: {reason}"
+        rem.updated_at = now_utc
+
     db.commit()
-    db.refresh(finding)
+    db.refresh(locked_finding)
 
     log_activity(
         db,
         user_id=current_user.id,
         event_type="FINDING_REOPENED",
-        title=f"Reopened Finding #{str(finding.id)[:8]}",
-        description=f"Reopened finding: {data.reopen_reason or 'Returned to active remediation'}",
+        title=f"Reopened Finding #{str(locked_finding.id)[:8]}",
+        description=f"Reopened finding: {reason}",
         icon_type="alert",
         extra_data={
-            "finding_id": str(finding.id),
+            "finding_id": str(locked_finding.id),
             "report_id": str(report.id),
-            "reopen_reason": data.reopen_reason,
+            "organization_id": str(report.organization_id),
+            "reopen_reason": reason,
+            "reopened_by": str(current_user.id),
+            "reopened_at": now_utc.isoformat(),
         },
     )
 
@@ -1063,23 +2015,298 @@ def reopen_finding(
         action="FINDING_REOPENED",
         organization_id=report.organization_id,
         entity="ReportFinding",
-        entity_id=str(finding.id),
+        entity_id=str(locked_finding.id),
     )
 
     notify_finding_stakeholders(
         db=db,
         organization_id=report.organization_id,
-        finding_id=finding.id,
+        finding_id=locked_finding.id,
         report_id=report.id,
-        assignee_id=finding.assigned_to,
+        assignee_id=locked_finding.assigned_to,
         actor_id=current_user.id,
         event_type="FINDING_REOPENED",
         title="Finding Reopened",
-        message=f"Finding #{str(finding.id)[:8]} was reopened by {current_user.full_name}: {data.reopen_reason or 'Returned to active remediation'}.",
+        message=f"Finding #{str(locked_finding.id)[:8]} was reopened by Admin {current_user.full_name}: {reason}.",
     )
     db.commit()
 
-    return _format_finding_response(db, finding)
+    return _format_finding_response(db, locked_finding)
+
+
+@router.get(
+    "/{finding_id}/resolutions",
+    response_model=List[FindingResolutionHistoryItem],
+    summary="List resolution history periods for a finding",
+)
+def get_finding_resolutions(
+    finding_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+) -> List[FindingResolutionHistoryItem]:
+    """Retrieve full multi-period resolution and reopen history for a finding."""
+    finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
+    resp = _format_finding_response(db, finding)
+    return resp.resolution_history
+
+
+# =========================================================================
+# SPRINT 7.9: Reassessment & Finding Change Detection Endpoints
+# =========================================================================
+
+@router.get(
+    "/{finding_id}/reassessment",
+    response_model=FindingReassessmentDetailResponse,
+    summary="Get reassessment context and change delta for a finding",
+)
+def get_finding_reassessment(
+    finding_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+) -> FindingReassessmentDetailResponse:
+    """Retrieve structured reassessment context including previous resolution, changed source, and candidate analysis."""
+    finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
+
+    prev_res = None
+    if finding.resolved_at:
+        res_name = None
+        if finding.resolved_by:
+            res_u = getattr(finding, "resolver", None) or db.get(User, finding.resolved_by)
+            if res_u:
+                res_name = res_u.full_name
+        prev_res = FindingPreviousResolutionSummary(
+            resolved_at=finding.resolved_at,
+            resolved_by=str(finding.resolved_by) if finding.resolved_by else None,
+            resolved_by_name=res_name,
+            resolution_note=finding.resolution_note,
+        )
+
+    candidate_summary = None
+    if finding.reassessment_report_id:
+        trigger_rep = db.get(ComplianceReport, finding.reassessment_report_id)
+        if trigger_rep:
+            trigger_finding = (
+                db.query(ReportFinding)
+                .filter(
+                    ReportFinding.report_id == trigger_rep.id,
+                    ReportFinding.regulation_clause_id == finding.regulation_clause_id,
+                )
+                .first()
+            )
+            candidate_summary = FindingCandidateAnalysisSummary(
+                status=trigger_finding.status if trigger_finding else "NON_COMPLIANT",
+                severity=trigger_finding.severity if trigger_finding else finding.severity,
+                reasoning=trigger_finding.reasoning if trigger_finding else finding.reasoning,
+                recommendation=trigger_finding.recommendation if trigger_finding else finding.recommendation,
+                report_id=str(trigger_rep.id),
+                created_at=trigger_rep.created_at,
+            )
+
+    return FindingReassessmentDetailResponse(
+        finding_id=str(finding.id),
+        lifecycle_status=finding.lifecycle_status or "OPEN",
+        reassessment_trigger=finding.reassessment_trigger,
+        reassessment_reason=finding.reassessment_reason,
+        reassessment_document_id=str(finding.reassessment_document_id) if finding.reassessment_document_id else None,
+        reassessment_document_name=finding.reassessment_document_name,
+        reassessment_report_id=str(finding.reassessment_report_id) if finding.reassessment_report_id else None,
+        reassessment_detected_at=finding.reassessment_detected_at,
+        previous_resolution=prev_res,
+        candidate_analysis=candidate_summary,
+    )
+
+
+@router.post(
+    "/{finding_id}/reassessment/keep-resolved",
+    response_model=FindingItemResponse,
+    summary="Admin decision to confirm previous resolution remains valid (Keep Resolved)",
+)
+def keep_finding_resolved(
+    finding_id: uuid.UUID,
+    payload: Optional[FindingReassessmentKeepResolvedRequest] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingItemResponse:
+    """Admin reviews the reassessment and confirms that previous resolution remains valid."""
+    finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
+
+    if not is_org_admin(db, current_user.id, report.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Organization Admins are permitted to make reassessment decisions.",
+        )
+
+    locked_finding = (
+        db.query(ReportFinding)
+        .filter(ReportFinding.id == finding_id)
+        .with_for_update()
+        .first()
+    )
+    if not locked_finding:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found.")
+
+    current_status = (locked_finding.lifecycle_status or "OPEN").upper()
+    if current_status != "REASSESSMENT_REQUIRED":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Only findings in REASSESSMENT_REQUIRED status can be reviewed and kept resolved (current: {current_status}).",
+        )
+
+    now_utc = datetime.now(timezone.utc)
+    admin_note = payload.admin_note.strip() if (payload and payload.admin_note) else None
+
+    # Transition back to RESOLVED and clear pending reassessment flags
+    locked_finding.lifecycle_status = "RESOLVED"
+    locked_finding.reassessment_trigger = None
+    locked_finding.reassessment_reason = None
+    locked_finding.reassessment_document_id = None
+    locked_finding.reassessment_document_name = None
+    locked_finding.reassessment_report_id = None
+    locked_finding.reassessment_detected_at = None
+    locked_finding.updated_at = now_utc
+
+    db.commit()
+    db.refresh(locked_finding)
+
+    desc = f"Admin {current_user.full_name} reviewed reassessment and confirmed previous resolution remains valid."
+    if admin_note:
+        desc += f" Note: {admin_note}"
+
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="FINDING_REASSESSMENT_COMPLETED",
+        title=f"Reassessment Completed — Kept Resolved (#{str(locked_finding.id)[:8]})",
+        description=desc,
+        icon_type="check",
+        extra_data={
+            "finding_id": str(locked_finding.id),
+            "report_id": str(report.id),
+            "organization_id": str(report.organization_id),
+            "decision": "KEEP_RESOLVED",
+            "admin_note": admin_note,
+            "reviewed_by": str(current_user.id),
+        },
+    )
+
+    audit_service.log_audit_event(
+        db,
+        user_id=current_user.id,
+        action="FINDING_REASSESSMENT_KEPT_RESOLVED",
+        organization_id=report.organization_id,
+        entity="ReportFinding",
+        entity_id=str(locked_finding.id),
+    )
+    db.commit()
+
+    return _format_finding_response(db, locked_finding)
+
+
+@router.post(
+    "/{finding_id}/reassessment/reopen",
+    response_model=FindingItemResponse,
+    summary="Admin decision to reopen finding from reassessment",
+)
+def reopen_finding_from_reassessment(
+    finding_id: uuid.UUID,
+    payload: FindingReopenRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingItemResponse:
+    """Admin decision: Reopen finding from reassessment review (reusing Sprint 7.8 reopening workflow)."""
+    return reopen_finding(finding_id, payload, db, current_user)
+
+
+@router.post(
+    "/{finding_id}/reassessment/trigger",
+    response_model=FindingItemResponse,
+    summary="Trigger reassessment for a resolved finding upon document/policy change",
+)
+def trigger_finding_reassessment(
+    finding_id: uuid.UUID,
+    payload: FindingReassessmentTriggerRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingItemResponse:
+    """Mark a resolved finding as REASSESSMENT_REQUIRED due to document/policy/regulation changes."""
+    finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
+
+    locked_finding = (
+        db.query(ReportFinding)
+        .filter(ReportFinding.id == finding_id)
+        .with_for_update()
+        .first()
+    )
+    if not locked_finding:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found.")
+
+    current_status = (locked_finding.lifecycle_status or "OPEN").upper()
+    if current_status != "RESOLVED":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Only RESOLVED findings can be marked for reassessment (current: {current_status}).",
+        )
+
+    now_utc = datetime.now(timezone.utc)
+    locked_finding.lifecycle_status = "REASSESSMENT_REQUIRED"
+    locked_finding.reassessment_trigger = payload.trigger
+    locked_finding.reassessment_reason = payload.reason
+    locked_finding.reassessment_document_id = payload.document_id
+    locked_finding.reassessment_document_name = payload.document_name
+    locked_finding.reassessment_report_id = payload.report_id
+    locked_finding.reassessment_detected_at = now_utc
+    locked_finding.updated_at = now_utc
+
+    db.commit()
+    db.refresh(locked_finding)
+
+    # Activity log
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="FINDING_REASSESSMENT_REQUIRED",
+        title=f"Reassessment Required for Finding #{str(locked_finding.id)[:8]}",
+        description=f"Reassessment triggered ({payload.trigger}): {payload.reason}",
+        icon_type="alert",
+        extra_data={
+            "finding_id": str(locked_finding.id),
+            "report_id": str(report.id),
+            "trigger": payload.trigger,
+            "document_name": payload.document_name,
+        },
+    )
+
+    # Notification to Org Admins
+    org_admins = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.organization_id == report.organization_id,
+            OrganizationMember.role == UserRole.ADMIN,
+            OrganizationMember.status == MemberStatus.ACTIVE,
+        )
+        .all()
+    )
+    recipient_user_ids = {m.user_id for m in org_admins}
+    if locked_finding.assigned_to:
+        recipient_user_ids.add(locked_finding.assigned_to)
+
+    from app.db.models.notification import Notification
+    for rec_id in recipient_user_ids:
+        db.add(
+            Notification(
+                user_id=rec_id,
+                organization_id=report.organization_id,
+                type="FINDING_REASSESSMENT_REQUIRED",
+                title="Finding Reassessment Required",
+                message=f"Finding #{str(locked_finding.id)[:8]} requires reassessment: {payload.reason}",
+                finding_id=locked_finding.id,
+                report_id=report.id,
+            )
+        )
+    db.commit()
+
+    return _format_finding_response(db, locked_finding)
+
 
 
 @router.get(
@@ -1383,49 +2610,183 @@ def delete_comment(
     return None
 
 
+def _categorize_event(event_type: str) -> str:
+    """Categorize an activity event into FINDING, DISCUSSION, REMEDIATION, or STATUS."""
+    et = (event_type or "").upper()
+    if et in (
+        "FINDING_COMMENTED",
+        "FINDING_COMMENT_RESOLVED",
+        "FINDING_COMMENT_REPLIED",
+        "FINDING_MENTIONED",
+    ):
+        return "DISCUSSION"
+    if et.startswith("REMEDIATION_") or "CYCLE" in et:
+        return "REMEDIATION"
+    if et in (
+        "FINDING_STATUS_CHANGED",
+        "FINDING_SUBMITTED_FOR_REVIEW",
+        "FINDING_RESOLVED",
+        "FINDING_REOPENED",
+        "FINDING_REJECTED",
+        "FINDING_FALSE_POSITIVE_FLAGGED",
+    ):
+        return "STATUS"
+    return "FINDING"
+
+
 @router.get(
     "/{finding_id}/activity",
-    response_model=List[FindingActivityItem],
-    summary="Get finding lifecycle activity timeline",
+    response_model=FindingActivityPaginatedResponse,
+    summary="Get finding lifecycle activity and audit timeline (Sprint 7.6)",
 )
 def get_finding_activity(
     finding_id: uuid.UUID,
+    category: Optional[str] = Query(None, description="Category filter: ALL, FINDING, DISCUSSION, REMEDIATION, STATUS"),
+    page: int = Query(1, ge=1, description="Page number starting from 1"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),
-) -> List[FindingActivityItem]:
-    """Retrieve chronological activity log events for a finding."""
-    finding, _, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
+) -> FindingActivityPaginatedResponse:
+    """Retrieve chronological, unified Activity & Audit Trail events for a finding."""
+    finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
 
     finding_str = str(finding.id)
-    activities = db.query(Activity).filter(
-        Activity.event_type.in_([
-            "FINDING_STATUS_CHANGED",
-            "FINDING_ASSIGNED",
-            "FINDING_SUBMITTED_FOR_REVIEW",
-            "FINDING_RESOLVED",
-            "FINDING_REOPENED",
-            "FINDING_FALSE_POSITIVE_FLAGGED",
-            "FINDING_REJECTED",
-            "FINDING_COMMENTED",
-            "FINDING_COMMENT_RESOLVED",
-            "FINDING_DUE_DATE_CHANGED",
-        ])
-    ).order_by(Activity.created_at.desc()).limit(100).all()
+    org_id_str = str(report.organization_id)
 
-    filtered = [
-        act for act in activities
-        if act.extra_data and act.extra_data.get("finding_id") == finding_str
+    # Query all activities matching finding_id
+    all_activities = db.query(Activity).order_by(Activity.created_at.desc()).all()
+    matched_activities = [
+        act for act in all_activities
+        if act.extra_data and str(act.extra_data.get("finding_id", "")) == finding_str
     ]
 
-    return [
-        FindingActivityItem(
-            id=str(act.id),
-            finding_id=finding_str,
-            user_name=act.user.full_name if act.user else "System",
-            event_type=act.event_type,
-            title=act.title,
-            description=act.description,
-            created_at=act.created_at,
+    # Resolve actor organization roles
+    user_ids = {act.user_id for act in matched_activities if act.user_id}
+    if report.created_by:
+        user_ids.add(report.created_by)
+    if finding.assigned_to:
+        user_ids.add(uuid.UUID(str(finding.assigned_to)) if isinstance(finding.assigned_to, str) else finding.assigned_to)
+
+    role_map: dict[str, str] = {}
+    if user_ids:
+        members = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == report.organization_id,
+            OrganizationMember.user_id.in_(list(user_ids)),
+        ).all()
+        for m in members:
+            r_val = m.role.value if hasattr(m.role, "value") else str(m.role)
+            role_map[str(m.user_id)] = r_val
+
+    items: List[FindingActivityItem] = []
+    has_created_event = False
+
+    for act in matched_activities:
+        if act.event_type == "FINDING_CREATED":
+            has_created_event = True
+
+        actor_user = act.user
+        actor_role = role_map.get(str(act.user_id)) if act.user_id else None
+        actor = FindingActivityActor(
+            id=str(actor_user.id) if actor_user else "system",
+            full_name=actor_user.full_name if actor_user else "System",
+            email=actor_user.email if actor_user else "system@lexisgraph.internal",
+            role=actor_role,
         )
-        for act in filtered
-    ]
+
+        cat = _categorize_event(act.event_type)
+        items.append(
+            FindingActivityItem(
+                id=str(act.id),
+                finding_id=finding_str,
+                organization_id=org_id_str,
+                event_type=act.event_type,
+                category=cat,
+                title=act.title,
+                description=act.description,
+                icon_type=act.icon_type or "file",
+                user_name=actor_user.full_name if actor_user else "System",
+                actor=actor,
+                created_at=act.created_at,
+                metadata=act.extra_data,
+            )
+        )
+
+    # If no explicit FINDING_CREATED was logged, synthesize the initial creation event at finding.created_at
+    if not has_created_event:
+        creator_user = db.get(User, report.created_by) if report.created_by else None
+        creator_role = role_map.get(str(report.created_by)) if report.created_by else None
+        creator_actor = FindingActivityActor(
+            id=str(creator_user.id) if creator_user else "system",
+            full_name=creator_user.full_name if creator_user else "System",
+            email=creator_user.email if creator_user else "system@lexisgraph.internal",
+            role=creator_role,
+        )
+        created_time = finding.created_at or report.created_at or datetime.now(timezone.utc)
+        items.append(
+            FindingActivityItem(
+                id=f"created-{finding_str}",
+                finding_id=finding_str,
+                organization_id=org_id_str,
+                event_type="FINDING_CREATED",
+                category="FINDING",
+                title=f"Finding #{finding_str[:8]} Created",
+                description="Finding identified during compliance evaluation.",
+                icon_type="alert",
+                user_name=creator_user.full_name if creator_user else "System",
+                actor=creator_actor,
+                created_at=created_time,
+                metadata={
+                    "finding_id": finding_str,
+                    "status": finding.status,
+                    "lifecycle_status": "OPEN",
+                    "severity": finding.severity,
+                },
+            )
+        )
+
+    # Sort all items newest first
+    items.sort(key=lambda x: x.created_at, reverse=True)
+
+    # Apply category filter
+    if category and category.strip().upper() != "ALL":
+        cat_filter = category.strip().upper()
+        if cat_filter == "STATUS":
+            status_events = {
+                "FINDING_STATUS_CHANGED",
+                "FINDING_SUBMITTED_FOR_REVIEW",
+                "FINDING_RESOLVED",
+                "FINDING_REOPENED",
+                "FINDING_REJECTED",
+                "FINDING_FALSE_POSITIVE_FLAGGED",
+                "REMEDIATION_APPROVED",
+                "REMEDIATION_CYCLE_VERIFIED",
+                "REMEDIATION_VERIFIED",
+                "REMEDIATION_CYCLE_REJECTED",
+                "REMEDIATION_REJECTED",
+                "REMEDIATION_RETURNED",
+                "REMEDIATION_CYCLE_SUBMITTED",
+                "REMEDIATION_SUBMITTED",
+            }
+            items = [it for it in items if it.category == "STATUS" or it.event_type in status_events]
+        elif cat_filter == "FINDING":
+            items = [it for it in items if it.category == "FINDING" or (it.event_type.startswith("FINDING_") and it.category != "DISCUSSION")]
+        elif cat_filter == "DISCUSSION":
+            items = [it for it in items if it.category == "DISCUSSION"]
+        elif cat_filter == "REMEDIATION":
+            items = [it for it in items if it.category == "REMEDIATION"]
+
+    total = len(items)
+    total_pages = max(1, (total + limit - 1) // limit)
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    paginated_items = items[start_idx:end_idx]
+    has_more = end_idx < total
+
+    return FindingActivityPaginatedResponse(
+        total=total,
+        page=page,
+        limit=limit,
+        total_pages=total_pages,
+        has_more=has_more,
+        items=paginated_items,
+    )

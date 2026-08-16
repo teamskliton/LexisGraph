@@ -15,6 +15,11 @@ export interface RemediationEvidenceItem {
   file_size: number;
   mime_type: string;
   description?: string | null;
+  cycle_id?: string | null;
+  cycle_number?: number | null;
+  document_id?: string | null;
+  document_type?: string | null;
+  version?: string | null;
   uploaded_by: string;
   uploaded_at: string;
   uploader?: RemediationUserItem | null;
@@ -146,12 +151,16 @@ export const remediationsService = {
   uploadEvidence: async (
     findingId: string,
     file: File,
-    description?: string
+    description?: string,
+    cycleNumber?: number
   ): Promise<RemediationEvidenceItem> => {
     const formData = new FormData();
     formData.append("file", file);
     if (description) {
       formData.append("description", description);
+    }
+    if (cycleNumber !== undefined) {
+      formData.append("cycle_number", cycleNumber.toString());
     }
 
     const response = await api.post<RemediationEvidenceItem>(
@@ -159,6 +168,23 @@ export const remediationsService = {
       formData,
       {
         headers: { "Content-Type": "multipart/form-data" },
+      }
+    );
+    return response.data;
+  },
+
+  linkDocumentEvidence: async (
+    findingId: string,
+    documentId: string,
+    description?: string,
+    cycleNumber?: number
+  ): Promise<RemediationEvidenceItem> => {
+    const response = await api.post<RemediationEvidenceItem>(
+      `/findings/${findingId}/remediation/evidence/link-document`,
+      {
+        document_id: documentId,
+        description,
+        cycle_number: cycleNumber,
       }
     );
     return response.data;

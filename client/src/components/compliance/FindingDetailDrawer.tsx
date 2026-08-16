@@ -34,6 +34,12 @@ import {
   AtSign,
   User as UserIcon,
   MessageCircle,
+  Paperclip,
+  Download,
+  ChevronDown,
+  ChevronUp,
+  Link2,
+  FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,13 +50,20 @@ import {
   FindingComment,
   FindingActivity,
   FindingDetail,
+  FindingResolutionHistory,
+  FindingResolutionProof,
 } from "@/services/api/findings";
+import {
+  remediationsService,
+  RemediationDetail,
+} from "@/services/api/remediations";
 import {
   organizationsService,
   OrganizationMember,
 } from "@/services/api/organizations";
 import { formatRoleLabel } from "@/utils/role-utils";
 import { RemediationSection } from "./RemediationSection";
+import { FindingActivityTimeline } from "./FindingActivityTimeline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -77,11 +90,24 @@ export interface FindingItem {
     email: string;
   } | null;
   resolution_note?: string | null;
+  resolved_by?: string | null;
+  resolved_by_name?: string | null;
+  resolved_at?: string | null;
+  reopened_by?: string | null;
+  reopened_by_name?: string | null;
+  reopened_at?: string | null;
   reopen_reason?: string | null;
+  reassessment_trigger?: string | null;
+  reassessment_reason?: string | null;
+  reassessment_document_id?: string | null;
+  reassessment_document_name?: string | null;
+  reassessment_report_id?: string | null;
+  reassessment_detected_at?: string | null;
   remediation_due_date?: string | null;
   is_overdue?: boolean;
   comments_count?: number;
   organization_id?: string | null;
+  resolution_history?: FindingResolutionHistory[];
   created_at?: string;
   updated_at?: string;
 }
@@ -155,6 +181,11 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
         label: "REOPENED",
         className: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
       };
+    case "REASSESSMENT_REQUIRED":
+      return {
+        label: "REASSESSMENT REQUIRED",
+        className: "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/50 font-bold",
+      };
     case "REJECTED":
       return {
         label: "REJECTED (FALSE POSITIVE)",
@@ -182,15 +213,16 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
   const [mounted, setMounted] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
+  const discussionsRef = useRef<HTMLDivElement | null>(null);
+  const remediationRef = useRef<HTMLDivElement | null>(null);
 
   // State
   const [currentFinding, setCurrentFinding] = useState<FindingItem | null>(finding);
   const [comments, setComments] = useState<FindingComment[]>([]);
-  const [activities, setActivities] = useState<FindingActivity[]>([]);
   const [orgMembers, setOrgMembers] = useState<OrganizationMember[]>([]);
+  const [activityRefreshTrigger, setActivityRefreshTrigger] = useState(0);
 
   const [isLoadingComments, setIsLoadingComments] = useState(false);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
 
   // Mutation states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -206,7 +238,11 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
   const [replyMentionQuery, setReplyMentionQuery] = useState<string | null>(null);
   const [discussionFilter, setDiscussionFilter] = useState<"ALL" | "UNRESOLVED" | "RESOLVED">("ALL");
 
-  // Confirmation Modals (Sprint 7.1)
+  // Remediation state (Sprint 7.7 resolution eligibility)
+  const [remediation, setRemediation] = useState<RemediationDetail | null>(null);
+  const [isLoadingRemediation, setIsLoadingRemediation] = useState(false);
+
+  // Confirmation Modals (Sprint 7.1 & 7.7)
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolutionNoteInput, setResolutionNoteInput] = useState("");
   const [isResolving, setIsResolving] = useState(false);
@@ -222,6 +258,22 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectionReasonInput, setRejectionReasonInput] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
+
+  // Reassessment Modals & States (Sprint 7.9)
+  const [isReassessmentReviewModalOpen, setIsReassessmentReviewModalOpen] = useState(false);
+  const [isKeepResolvedModalOpen, setIsKeepResolvedModalOpen] = useState(false);
+  const [isReopenFromReassessmentModalOpen, setIsReopenFromReassessmentModalOpen] = useState(false);
+  const [keepResolvedAdminNoteInput, setKeepResolvedAdminNoteInput] = useState("");
+  const [reopenFromReassessmentReasonInput, setReopenFromReassessmentReasonInput] = useState("");
+  const [isSubmittingReassessmentDecision, setIsSubmittingReassessmentDecision] = useState(false);
+  const [reassessmentDetail, setReassessmentDetail] = useState<any>(null);
+  const [isLoadingReassessment, setIsLoadingReassessment] = useState(false);
+
+  // Resolution Proof state (Sprint 7.10)
+  const [resolutionProof, setResolutionProof] = useState<FindingResolutionProof | null>(null);
+  const [isLoadingResolutionProof, setIsLoadingResolutionProof] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [downloadingProofEvidenceId, setDownloadingProofEvidenceId] = useState<string | null>(null);
 
   // Due date state
   const [dueDateInput, setDueDateInput] = useState<string>("");
@@ -255,6 +307,12 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
           setIsResolveModalOpen(false);
         } else if (isReopenModalOpen) {
           setIsReopenModalOpen(false);
+        } else if (isKeepResolvedModalOpen) {
+          setIsKeepResolvedModalOpen(false);
+        } else if (isReopenFromReassessmentModalOpen) {
+          setIsReopenFromReassessmentModalOpen(false);
+        } else if (isReassessmentReviewModalOpen) {
+          setIsReassessmentReviewModalOpen(false);
         } else if (isSubmitReviewModalOpen) {
           setIsSubmitReviewModalOpen(false);
         } else if (isRejectModalOpen) {
@@ -267,7 +325,17 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isResolveModalOpen, isReopenModalOpen, isSubmitReviewModalOpen, isRejectModalOpen, onClose]);
+  }, [
+    isOpen,
+    isResolveModalOpen,
+    isReopenModalOpen,
+    isKeepResolvedModalOpen,
+    isReopenFromReassessmentModalOpen,
+    isReassessmentReviewModalOpen,
+    isSubmitReviewModalOpen,
+    isRejectModalOpen,
+    onClose,
+  ]);
 
   useEffect(() => {
     setCurrentFinding(finding);
@@ -301,24 +369,67 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
     }
   };
 
+  const handleDownloadProofEvidence = async (evidenceId: string, filename: string) => {
+    if (!currentFinding?.id) return;
+    setDownloadingProofEvidenceId(evidenceId);
+    try {
+      const blob = await remediationsService.downloadEvidence(currentFinding.id, evidenceId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${filename}`);
+    } catch (err: any) {
+      console.error("Failed to download proof evidence:", err);
+      toast.error(err?.response?.data?.detail || "Failed to download evidence file.");
+    } finally {
+      setDownloadingProofEvidenceId(null);
+    }
+  };
+
   const fetchAuxiliaryData = useCallback(async () => {
     if (!currentFinding?.id) return;
 
     setIsLoadingComments(true);
-    setIsLoadingActivities(true);
-
+    setIsLoadingRemediation(true);
     try {
-      const [commentsData, activitiesData] = await Promise.all([
+      const isResolved = currentFinding.lifecycle_status === "RESOLVED";
+      const promises: [Promise<any>, Promise<any>, Promise<any>?] = [
         findingsService.getComments(currentFinding.id),
-        findingsService.getActivity(currentFinding.id),
-      ]);
-      setComments(commentsData || []);
-      setActivities(activitiesData || []);
+        remediationsService.getRemediation(currentFinding.id),
+      ];
+      if (isResolved) {
+        promises.push(findingsService.getResolutionProof(currentFinding.id));
+      }
+
+      const results = await Promise.allSettled(promises);
+      const commentsData = results[0];
+      const remData = results[1];
+      const proofData = isResolved ? results[2] : null;
+
+      if (commentsData.status === "fulfilled") {
+        setComments(commentsData.value || []);
+      }
+      if (remData.status === "fulfilled") {
+        setRemediation(remData.value || null);
+      } else {
+        setRemediation(null);
+      }
+      if (proofData && proofData.status === "fulfilled") {
+        setResolutionProof(proofData.value || null);
+      } else if (!isResolved) {
+        setResolutionProof(null);
+      }
+      setActivityRefreshTrigger((prev) => prev + 1);
     } catch (err) {
-      console.error("Error loading finding comments/activities:", err);
+      console.error("Error loading finding auxiliary data:", err);
     } finally {
       setIsLoadingComments(false);
-      setIsLoadingActivities(false);
+      setIsLoadingRemediation(false);
     }
 
     const targetOrgId =
@@ -364,6 +475,64 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
     }
     return comments;
   }, [comments, discussionFilter]);
+
+  // Resolution Eligibility (Sprint 7.7)
+  const resolutionEligibility = useMemo(() => {
+    if (!permissions.canResolveFindings) {
+      return {
+        isEligible: false,
+        reason: "Only Organization Administrators can resolve compliance findings.",
+      };
+    }
+
+    const lifecycleStatus = (currentFinding?.lifecycle_status || "OPEN").toUpperCase();
+    if (lifecycleStatus === "RESOLVED") {
+      return { isEligible: false, reason: "This finding is already resolved." };
+    }
+
+    if (remediation) {
+      const remStatus = (remediation.status || "NOT_STARTED").toUpperCase();
+      if (remStatus !== "APPROVED") {
+        if (remStatus === "IN_PROGRESS" || remStatus === "NOT_STARTED") {
+          return {
+            isEligible: false,
+            reason: "Remediation is currently in progress. Complete and approve remediation before resolving this finding.",
+          };
+        }
+        if (remStatus === "READY_FOR_REVIEW") {
+          return {
+            isEligible: false,
+            reason: "Remediation is under review. Complete reviewer verification and admin approval before resolving.",
+          };
+        }
+        if (remStatus === "VERIFIED") {
+          return {
+            isEligible: false,
+            reason: "Remediation has been verified by reviewer, but requires Admin approval before resolving this finding.",
+          };
+        }
+        if (remStatus === "REJECTED") {
+          return {
+            isEligible: false,
+            reason: "Remediation was rejected. Further remediation work is required before resolving this finding.",
+          };
+        }
+        return {
+          isEligible: false,
+          reason: `Remediation must be approved before resolution (Current: ${remediation.status}).`,
+        };
+      }
+    } else {
+      if (lifecycleStatus === "REMEDIATION" || lifecycleStatus === "REMEDIATION_REQUIRED") {
+        return {
+          isEligible: false,
+          reason: "Remediation is required and must be completed and approved before resolving this finding.",
+        };
+      }
+    }
+
+    return { isEligible: true, reason: undefined };
+  }, [permissions.canResolveFindings, currentFinding?.lifecycle_status, remediation]);
 
   if (!isOpen || !currentFinding || !mounted) return null;
 
@@ -500,8 +669,9 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
     }
   };
 
-  // Resolve Confirmation Handler (Sprint 7.1)
+  // Resolve Confirmation Handler (Sprint 7.1 & 7.7 & 7.8)
   const handleConfirmResolve = async () => {
+    if (!currentFinding) return;
     setIsResolving(true);
     try {
       const updated = await findingsService.resolveFinding(currentFinding.id, resolutionNoteInput);
@@ -509,6 +679,10 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
         ...currentFinding,
         lifecycle_status: "RESOLVED",
         resolution_note: updated.resolution_note,
+        resolved_by: updated.resolved_by,
+        resolved_by_name: updated.resolved_by_name,
+        resolved_at: updated.resolved_at,
+        resolution_history: updated.resolution_history,
         updated_at: updated.updated_at,
       };
       setCurrentFinding(merged);
@@ -525,20 +699,30 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
     }
   };
 
-  // Reopen Confirmation Handler (Sprint 7.1)
+  // Reopen Confirmation Handler (Sprint 7.8)
   const handleConfirmReopen = async () => {
+    if (!currentFinding) return;
+    const reasonTrimmed = reopenReasonInput.trim();
+    if (!reasonTrimmed) {
+      toast.error("Please provide a reason for reopening this finding.");
+      return;
+    }
     setIsReopening(true);
     try {
-      const updated = await findingsService.reopenFinding(currentFinding.id, reopenReasonInput);
+      const updated = await findingsService.reopenFinding(currentFinding.id, reasonTrimmed);
       const merged: FindingItem = {
         ...currentFinding,
-        lifecycle_status: "IN_REVIEW",
+        lifecycle_status: "REOPENED",
         reopen_reason: updated.reopen_reason,
+        reopened_by: updated.reopened_by,
+        reopened_by_name: updated.reopened_by_name,
+        reopened_at: updated.reopened_at,
+        resolution_history: updated.resolution_history,
         updated_at: updated.updated_at,
       };
       setCurrentFinding(merged);
       if (onFindingUpdated) onFindingUpdated(merged);
-      toast.success("Finding REOPENED.");
+      toast.success("Finding marked as REOPENED.");
       setIsReopenModalOpen(false);
       setReopenReasonInput("");
       fetchAuxiliaryData();
@@ -547,6 +731,93 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
       toast.error(msg);
     } finally {
       setIsReopening(false);
+    }
+  };
+
+  // Reassessment Review & Decisions (Sprint 7.9)
+  const handleOpenReassessmentModal = async () => {
+    if (!currentFinding?.id) return;
+    setIsReassessmentReviewModalOpen(true);
+    setIsLoadingReassessment(true);
+    try {
+      const res = await findingsService.getReassessment(currentFinding.id);
+      setReassessmentDetail(res);
+    } catch (err: any) {
+      console.error("Failed to load reassessment details:", err);
+    } finally {
+      setIsLoadingReassessment(false);
+    }
+  };
+
+  const handleConfirmKeepResolved = async () => {
+    if (!currentFinding?.id) return;
+    setIsSubmittingReassessmentDecision(true);
+    try {
+      const updated = await findingsService.keepResolved(currentFinding.id, keepResolvedAdminNoteInput || undefined);
+      const merged: FindingItem = {
+        ...currentFinding,
+        lifecycle_status: "RESOLVED",
+        reassessment_trigger: null,
+        reassessment_reason: null,
+        reassessment_document_id: null,
+        reassessment_document_name: null,
+        reassessment_report_id: null,
+        reassessment_detected_at: null,
+        updated_at: updated.updated_at,
+      };
+      setCurrentFinding(merged);
+      if (onFindingUpdated) onFindingUpdated(merged);
+      toast.success("Reassessment reviewed: Finding remains RESOLVED.");
+      setIsKeepResolvedModalOpen(false);
+      setIsReassessmentReviewModalOpen(false);
+      setKeepResolvedAdminNoteInput("");
+      fetchAuxiliaryData();
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "Failed to complete reassessment decision.";
+      toast.error(msg);
+    } finally {
+      setIsSubmittingReassessmentDecision(false);
+    }
+  };
+
+  const handleConfirmReopenFromReassessment = async () => {
+    if (!currentFinding?.id) return;
+    const reasonTrimmed = reopenFromReassessmentReasonInput.trim();
+    if (!reasonTrimmed) {
+      toast.error("Please provide a reason for reopening this finding.");
+      return;
+    }
+    setIsSubmittingReassessmentDecision(true);
+    try {
+      const updated = await findingsService.reopenFromReassessment(currentFinding.id, reasonTrimmed);
+      const merged: FindingItem = {
+        ...currentFinding,
+        lifecycle_status: "REOPENED",
+        reopen_reason: updated.reopen_reason,
+        reopened_by: updated.reopened_by,
+        reopened_by_name: updated.reopened_by_name,
+        reopened_at: updated.reopened_at,
+        reassessment_trigger: null,
+        reassessment_reason: null,
+        reassessment_document_id: null,
+        reassessment_document_name: null,
+        reassessment_report_id: null,
+        reassessment_detected_at: null,
+        resolution_history: updated.resolution_history,
+        updated_at: updated.updated_at,
+      };
+      setCurrentFinding(merged);
+      if (onFindingUpdated) onFindingUpdated(merged);
+      toast.success("Finding reopened from reassessment.");
+      setIsReopenFromReassessmentModalOpen(false);
+      setIsReassessmentReviewModalOpen(false);
+      setReopenFromReassessmentReasonInput("");
+      fetchAuxiliaryData();
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "Failed to reopen finding.";
+      toast.error(msg);
+    } finally {
+      setIsSubmittingReassessmentDecision(false);
     }
   };
 
@@ -658,6 +929,14 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
   const handleCopyText = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard.`);
+  };
+
+  const handleNavigateToDrawerSection = (section: "discussions" | "remediation") => {
+    if (section === "discussions") {
+      discussionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (section === "remediation") {
+      remediationRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   };
 
   const getMemberRole = (userId: string, defaultRole?: string | null) => {
@@ -803,19 +1082,35 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                       </>
                     )}
 
-                    {/* REMEDIATION -> Submit for Admin Review, Return to Review, (Admin: Resolve Finding) */}
+                    {/* REMEDIATION -> Submit for Admin Review, Return to Review, (Admin: Resolve Finding if Eligible) */}
                     {(currentFinding.lifecycle_status === "REMEDIATION" || currentFinding.lifecycle_status === "REMEDIATION_REQUIRED") && (
                       <>
                         {permissions.canResolveFindings && (
-                          <Button
-                            size="xs"
-                            onClick={() => handleStatusChange("RESOLVED")}
-                            disabled={isUpdatingStatus}
-                            className="h-8 text-xs font-semibold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                          >
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            <span>Resolve Finding</span>
-                          </Button>
+                          <div className="relative group">
+                            <Button
+                              size="xs"
+                              onClick={() => {
+                                if (resolutionEligibility.isEligible) {
+                                  setIsResolveModalOpen(true);
+                                }
+                              }}
+                              disabled={isUpdatingStatus || !resolutionEligibility.isEligible}
+                              className={cn(
+                                "h-8 text-xs font-semibold gap-1 text-white cursor-pointer transition-all",
+                                resolutionEligibility.isEligible
+                                  ? "bg-emerald-600 hover:bg-emerald-700 shadow-xs"
+                                  : "bg-muted text-muted-foreground opacity-60 cursor-not-allowed hover:bg-muted"
+                              )}
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              <span>Resolve Finding</span>
+                            </Button>
+                            {!resolutionEligibility.isEligible && resolutionEligibility.reason && (
+                              <div className="hidden group-hover:block absolute left-0 bottom-full mb-1.5 w-64 p-2 bg-popover border border-border rounded-lg text-[11px] text-popover-foreground shadow-lg z-30">
+                                {resolutionEligibility.reason}
+                              </div>
+                            )}
+                          </div>
                         )}
 
                         <Button
@@ -879,20 +1174,36 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                       </>
                     )}
 
-                    {/* ADMIN_REVIEW -> Admin can Approve & Resolve, Reject, Return. Reviewer sees pending status. */}
+                    {/* ADMIN_REVIEW -> Admin can Approve & Resolve if Eligible, Reject, Return. Reviewer sees pending status. */}
                     {currentFinding.lifecycle_status === "ADMIN_REVIEW" && (
                       <>
                         {permissions.canResolveFindings ? (
                           <>
-                            <Button
-                              size="xs"
-                              onClick={() => handleStatusChange("RESOLVED")}
-                              disabled={isUpdatingStatus}
-                              className="h-8 text-xs font-semibold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                            >
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              <span>Resolve Finding</span>
-                            </Button>
+                            <div className="relative group">
+                              <Button
+                                size="xs"
+                                onClick={() => {
+                                  if (resolutionEligibility.isEligible) {
+                                    setIsResolveModalOpen(true);
+                                  }
+                                }}
+                                disabled={isUpdatingStatus || !resolutionEligibility.isEligible}
+                                className={cn(
+                                  "h-8 text-xs font-semibold gap-1 text-white cursor-pointer transition-all",
+                                  resolutionEligibility.isEligible
+                                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-xs"
+                                    : "bg-muted text-muted-foreground opacity-60 cursor-not-allowed hover:bg-muted"
+                                )}
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                <span>Resolve Finding</span>
+                              </Button>
+                              {!resolutionEligibility.isEligible && resolutionEligibility.reason && (
+                                <div className="hidden group-hover:block absolute left-0 bottom-full mb-1.5 w-64 p-2 bg-popover border border-border rounded-lg text-[11px] text-popover-foreground shadow-lg z-30">
+                                  {resolutionEligibility.reason}
+                                </div>
+                              )}
+                            </div>
 
                             <Button
                               size="xs"
@@ -925,7 +1236,43 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                       </>
                     )}
 
-                    {/* RESOLVED -> Admin can Reopen. Reviewer sees read-only resolved. */}
+                    {/* REASSESSMENT_REQUIRED -> Admin can Keep Resolved or Reopen; Reviewer sees read-only notification */}
+                    {currentFinding.lifecycle_status === "REASSESSMENT_REQUIRED" && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          size="xs"
+                          onClick={() => handleOpenReassessmentModal()}
+                          className="h-8 text-xs font-semibold gap-1 bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          <span>Review Reassessment</span>
+                        </Button>
+                        {permissions.canReopenFindings && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => setIsKeepResolvedModalOpen(true)}
+                              className="h-8 text-xs font-semibold gap-1 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Keep Resolved</span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => setIsReopenFromReassessmentModalOpen(true)}
+                              className="h-8 text-xs font-semibold gap-1 border-rose-500/40 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              <span>Reopen Finding</span>
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* RESOLVED -> Admin can Reopen if allowed. Reviewer sees read-only resolved. */}
                     {currentFinding.lifecycle_status === "RESOLVED" && (
                       permissions.canReopenFindings ? (
                         <Button
@@ -1085,22 +1432,261 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
               )}
             </div>
 
-            {/* Resolution Note / Reopen Reason Callout if applicable */}
-            {currentFinding.resolution_note && (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-1">
-                <span className="font-bold text-emerald-600 dark:text-emerald-400 block uppercase text-[10px]">
-                  Resolution Note / Rationale
-                </span>
-                <p className="text-foreground">{currentFinding.resolution_note}</p>
+            {/* SPRINT 7.10: Complete Finding Resolution Proof Dossier */}
+            {currentFinding.lifecycle_status === "RESOLVED" && (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300 uppercase text-[11px] tracking-wider block">
+                        ✓ Resolution Proof & Audit Record
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        Auditable resolution snapshot with verification evidence
+                      </span>
+                    </div>
+                  </div>
+                  {currentFinding.resolved_at && (
+                    <Badge variant="outline" className="text-[10px] font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
+                      {format(new Date(currentFinding.resolved_at), "dd MMM yyyy, HH:mm")}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Proof Metadata Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 rounded-lg bg-background/60 border border-emerald-500/20 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Resolved By</span>
+                    <span className="font-semibold text-foreground">{resolutionProof?.resolved_by_name || currentFinding.resolved_by_name || "Administrator"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Approved Cycle</span>
+                    <span className="font-semibold text-foreground">
+                      Cycle {resolutionProof?.approved_cycle_number || 1} (Approved)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Verified By</span>
+                    <span className="font-semibold text-foreground">
+                      {resolutionProof?.verification?.verified_by_name || "Reviewer"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Verifier Note */}
+                {resolutionProof?.verification?.verification_note && (
+                  <div className="p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
+                    <span className="font-bold text-sky-700 dark:text-sky-300 uppercase text-[10px] block mb-0.5">
+                      Reviewer Verification Note ({resolutionProof.verification.verified_by_name || "Reviewer"})
+                    </span>
+                    <p className="text-foreground/90 leading-relaxed italic">
+                      "{resolutionProof.verification.verification_note}"
+                    </p>
+                  </div>
+                )}
+
+                {/* Resolution Note */}
+                {(resolutionProof?.resolution_note || currentFinding.resolution_note) && (
+                  <div className="space-y-1">
+                    <span className="font-bold text-emerald-800 dark:text-emerald-200 uppercase text-[10px] tracking-wider block">
+                      Admin Resolution Note
+                    </span>
+                    <p className="text-foreground/90 bg-background/80 p-2.5 rounded-lg border border-emerald-500/20 leading-relaxed whitespace-pre-wrap">
+                      {resolutionProof?.resolution_note || currentFinding.resolution_note}
+                    </p>
+                  </div>
+                )}
+
+                {/* Supporting Resolution Evidence */}
+                <div className="space-y-1.5 pt-1 border-t border-emerald-500/20">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
+                      <Paperclip className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Supporting Evidence (Cycle {resolutionProof?.approved_cycle_number || 1})
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {resolutionProof?.supporting_evidence?.length || 0} file(s)
+                    </span>
+                  </div>
+
+                  {resolutionProof?.supporting_evidence && resolutionProof.supporting_evidence.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {resolutionProof.supporting_evidence.map((ev) => (
+                        <div
+                          key={ev.id}
+                          className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background/80 border border-emerald-500/20 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-semibold text-foreground truncate">{ev.original_filename}</p>
+                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                <span>{(ev.file_size / 1024).toFixed(1)} KB</span>
+                                <span>·</span>
+                                <span>Uploaded by {ev.uploader?.full_name || "User"}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => handleDownloadProofEvidence(ev.id, ev.original_filename)}
+                            disabled={downloadingProofEvidenceId === ev.id}
+                            className="h-6 text-[10px] font-medium gap-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                          >
+                            <Download className="h-3 w-3" />
+                            <span>Download</span>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-[11px] flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      <span>Supporting evidence unavailable for this resolution.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Historical Resolutions Accordion (if multiple) */}
+                {resolutionProof?.historical_resolutions && resolutionProof.historical_resolutions.length > 1 && (
+                  <div className="pt-2 border-t border-emerald-500/20">
+                    <button
+                      type="button"
+                      onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                      className="w-full flex items-center justify-between text-[11px] font-bold text-emerald-800 dark:text-emerald-200 hover:underline cursor-pointer py-1"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <History className="h-3.5 w-3.5" />
+                        Previous Resolution Periods ({resolutionProof.historical_resolutions.length - 1} prior)
+                      </span>
+                      {isHistoryExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </button>
+
+                    {isHistoryExpanded && (
+                      <div className="space-y-2 mt-2 pt-2 border-t border-border/40">
+                        {resolutionProof.historical_resolutions.slice(1).map((h) => (
+                          <div key={h.id} className="p-2.5 rounded-lg bg-background/50 border border-border/40 text-[11px] space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-foreground">Resolution #{h.resolution_number}</span>
+                              <span className="text-[10px] font-mono text-muted-foreground">
+                                {h.resolved_at ? format(new Date(h.resolved_at), "dd MMM yyyy, HH:mm") : "Previous"}
+                              </span>
+                            </div>
+                            <p className="text-muted-foreground">Resolved by: <strong className="text-foreground">{h.resolved_by_name || "Admin"}</strong></p>
+                            {h.resolution_note && (
+                              <p className="text-foreground/80 italic bg-muted/20 p-1.5 rounded">"{h.resolution_note}"</p>
+                            )}
+                            {h.reopened_at && (
+                              <p className="text-amber-600 dark:text-amber-400 text-[10px]">
+                                Reopened on {format(new Date(h.reopened_at), "dd MMM yyyy")}: {h.reopen_reason}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {currentFinding.reopen_reason && (
-              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs space-y-1">
-                <span className="font-bold text-rose-600 dark:text-rose-400 block uppercase text-[10px]">
-                  Reopen Reason
-                </span>
-                <p className="text-foreground">{currentFinding.reopen_reason}</p>
+            {/* SPRINT 7.8: Reopened Finding Summary Card */}
+            {currentFinding.lifecycle_status === "REOPENED" && (
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                      <RotateCcw className="h-4 w-4" />
+                    </div>
+                    <span className="font-bold text-amber-600 dark:text-amber-400 uppercase text-[11px] tracking-wider">
+                      Finding Reopened — Active Remediation Required
+                    </span>
+                  </div>
+                  {currentFinding.reopened_at && (
+                    <span className="text-[11px] font-mono text-muted-foreground">
+                      {format(new Date(currentFinding.reopened_at), "dd MMM yyyy, HH:mm")}
+                    </span>
+                  )}
+                </div>
+                {currentFinding.reopened_by_name && (
+                  <p className="text-xs text-foreground/90 font-medium">
+                    Reopened by: <span className="font-semibold text-foreground">{currentFinding.reopened_by_name}</span>
+                  </p>
+                )}
+                {currentFinding.reopen_reason && (
+                  <div className="pt-1">
+                    <span className="font-bold text-amber-700 dark:text-amber-300 block uppercase text-[10px] tracking-wider mb-1">
+                      Reopen Reason
+                    </span>
+                    <p className="text-foreground/90 bg-background/60 p-2.5 rounded-lg border border-amber-500/20 leading-relaxed whitespace-pre-wrap">
+                      {currentFinding.reopen_reason}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SPRINT 7.9: Reassessment Required Finding Summary Card */}
+            {currentFinding.lifecycle_status === "REASSESSMENT_REQUIRED" && (
+              <div className="p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 text-xs space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-md bg-amber-500/25 text-amber-700 dark:text-amber-300">
+                      <AlertTriangle className="h-4 w-4" />
+                    </div>
+                    <span className="font-bold text-amber-800 dark:text-amber-200 uppercase text-[11px] tracking-wider">
+                      ⚠️ Reassessment Required — Compliance Change Detected
+                    </span>
+                  </div>
+                  {currentFinding.reassessment_detected_at && (
+                    <span className="text-[11px] font-mono text-muted-foreground">
+                      {format(new Date(currentFinding.reassessment_detected_at), "dd MMM yyyy, HH:mm")}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground font-semibold">Trigger:</span>
+                    <Badge variant="outline" className="text-[10px] font-bold bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-500/40">
+                      {currentFinding.reassessment_trigger || "NEW_ANALYSIS"}
+                    </Badge>
+                  </div>
+                  {currentFinding.reassessment_document_name && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      <span>Associated Document: <strong className="text-foreground">{currentFinding.reassessment_document_name}</strong></span>
+                    </div>
+                  )}
+                  {currentFinding.reassessment_reason && (
+                    <div className="pt-1">
+                      <span className="font-bold text-amber-800 dark:text-amber-200 block uppercase text-[10px] tracking-wider mb-1">
+                        Reassessment Trigger Reason
+                      </span>
+                      <p className="text-foreground/90 bg-background/80 p-2.5 rounded-lg border border-amber-500/30 leading-relaxed whitespace-pre-wrap">
+                        {currentFinding.reassessment_reason}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-amber-500/30">
+                  <span className="text-[11px] text-amber-800 dark:text-amber-300">
+                    Decision required: Choose whether to maintain previous resolution or reopen for active remediation.
+                  </span>
+                  <Button
+                    size="xs"
+                    onClick={() => handleOpenReassessmentModal()}
+                    className="h-7 text-xs font-semibold gap-1 bg-amber-600 hover:bg-amber-700 text-white cursor-pointer shrink-0"
+                  >
+                    <BookOpen className="h-3 w-3" />
+                    <span>Review Decision</span>
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -1142,16 +1728,18 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
           </Card>
 
           {/* SPRINT 7.4: Remediation Management & Evidence Tracking */}
-          <RemediationSection
-            findingId={currentFinding.id}
-            recommendation={currentFinding.recommendation}
-            reasoning={currentFinding.reasoning}
-            severity={currentFinding.severity}
-            organizationId={organizationId || currentFinding.organization_id}
-            onRemediationChanged={() => {
-              fetchAuxiliaryData();
-            }}
-          />
+          <div ref={remediationRef}>
+            <RemediationSection
+              findingId={currentFinding.id}
+              recommendation={currentFinding.recommendation}
+              reasoning={currentFinding.reasoning}
+              severity={currentFinding.severity}
+              organizationId={organizationId || currentFinding.organization_id}
+              onRemediationChanged={() => {
+                fetchAuxiliaryData();
+              }}
+            />
+          </div>
 
           {/* Matched Policy Evidence vs Regulation Statutory Text */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1216,8 +1804,127 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
             </Card>
           </div>
 
+          {/* SPRINT 7.8: Multi-Period Resolution History Card */}
+          {((currentFinding.resolution_history && currentFinding.resolution_history.length > 0) || currentFinding.resolved_at) && (
+            <Card className="border border-border/60 bg-card p-4 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-indigo-500" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+                    Resolution History
+                  </span>
+                </div>
+                <Badge variant="outline" className="text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20">
+                  {currentFinding.resolution_history?.length || 1} { (currentFinding.resolution_history?.length || 1) === 1 ? "Period" : "Periods" }
+                </Badge>
+              </div>
+
+              <div className="space-y-3 pt-1">
+                {(currentFinding.resolution_history && currentFinding.resolution_history.length > 0
+                  ? currentFinding.resolution_history
+                  : [
+                      {
+                        id: "res-fallback",
+                        finding_id: currentFinding.id,
+                        resolution_number: 1,
+                        resolved_at: currentFinding.resolved_at || currentFinding.created_at || "",
+                        resolved_by_name: currentFinding.resolved_by_name,
+                        resolution_note: currentFinding.resolution_note,
+                        reopened_at: currentFinding.reopened_at,
+                        reopened_by_name: currentFinding.reopened_by_name,
+                        reopen_reason: currentFinding.reopen_reason,
+                        status: currentFinding.lifecycle_status === "REOPENED" ? "REOPENED" : "RESOLVED",
+                      },
+                    ]
+                ).map((res, idx) => {
+                  const isCurrent = idx === (currentFinding.resolution_history?.length || 1) - 1 && currentFinding.lifecycle_status === "RESOLVED";
+                  const isReopened = Boolean(res.reopened_at || res.status === "REOPENED");
+
+                  return (
+                    <div
+                      key={res.id || idx}
+                      className={cn(
+                        "p-3.5 rounded-xl border text-xs space-y-2.5 transition-all",
+                        isCurrent
+                          ? "bg-emerald-500/5 border-emerald-500/30"
+                          : isReopened
+                          ? "bg-muted/20 border-border/60"
+                          : "bg-muted/10 border-border/40"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">
+                            Resolution #{res.resolution_number || idx + 1}
+                          </span>
+                          {isCurrent ? (
+                            <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-bold">
+                              ✓ Current Resolution
+                            </Badge>
+                          ) : isReopened ? (
+                            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold">
+                              Historical (Reopened)
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30 font-bold">
+                              Historical
+                            </Badge>
+                          )}
+                        </div>
+                        {res.resolved_at && (
+                          <span className="text-[11px] font-mono text-muted-foreground">
+                            Resolved: {format(new Date(res.resolved_at), "dd MMM yyyy, HH:mm")}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Resolved Metadata */}
+                      <div className="space-y-1 text-muted-foreground text-[11px]">
+                        {res.resolved_by_name && (
+                          <p>
+                            Resolved by: <span className="font-semibold text-foreground">{res.resolved_by_name}</span>
+                          </p>
+                        )}
+                        {res.resolution_note && (
+                          <div className="bg-background/60 p-2 rounded-lg border border-border/30 text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                            <span className="font-semibold text-[10px] uppercase tracking-wider block text-muted-foreground mb-0.5">Note:</span>
+                            {res.resolution_note}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Reopen Metadata if reopened */}
+                      {isReopened && (
+                        <div className="mt-2 pt-2 border-t border-border/40 space-y-1 text-[11px]">
+                          <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-semibold gap-2">
+                            <span className="flex items-center gap-1">
+                              <RotateCcw className="h-3 w-3" />
+                              <span>Reopened{res.reopened_by_name ? ` by ${res.reopened_by_name}` : ""}</span>
+                            </span>
+                            {res.reopened_at && (
+                              <span className="font-mono text-[10px] text-muted-foreground font-normal">
+                                {format(new Date(res.reopened_at), "dd MMM yyyy, HH:mm")}
+                              </span>
+                            )}
+                          </div>
+                          {res.reopen_reason && (
+                            <p className="text-foreground/90 bg-amber-500/5 p-2 rounded-lg border border-amber-500/20 leading-relaxed">
+                              <span className="font-semibold text-[10px] uppercase tracking-wider block text-amber-700 dark:text-amber-300 mb-0.5">Reason:</span>
+                              {res.reopen_reason}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
           {/* SPRINT 7.2: Upgraded Compliance Discussion, Threaded Comments & @Mentions */}
-          <Card className="border border-border/60 bg-card p-4 space-y-4 shadow-2xs">
+          <div ref={discussionsRef}>
+            <Card className="border border-border/60 bg-card p-4 space-y-4 shadow-2xs">
             {/* Discussion Header with Dynamic Counts & Filter Tabs */}
             <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-3 flex-wrap">
               <div className="space-y-0.5">
@@ -1546,36 +2253,16 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                 ))}
               </div>
             )}
-          </Card>
+            </Card>
+          </div>
 
-          {/* Activity Timeline Section */}
-          <Card className="border border-border/60 bg-card p-4 space-y-3 shadow-2xs">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-              <History className="h-3.5 w-3.5 text-indigo-500" /> Activity Timeline
-            </span>
-
-            {isLoadingActivities ? (
-              <p className="text-xs text-muted-foreground italic">Loading activity timeline...</p>
-            ) : activities.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic py-2 text-center">No activity has been recorded.</p>
-            ) : (
-              <div className="space-y-2">
-                {activities.map((act) => (
-                  <div key={act.id} className="flex items-start gap-2 text-xs border-l-2 border-indigo-500/30 pl-3 py-1">
-                    <Clock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium text-foreground">
-                        <span className="font-semibold">{act.user_name}</span>: {act.description}
-                      </p>
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        {format(new Date(act.created_at), "dd MMM yyyy, HH:mm")}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+          {/* SPRINT 7.6: Unified Activity & Audit Timeline */}
+          <FindingActivityTimeline
+            findingId={currentFinding.id}
+            organizationId={organizationId || currentFinding.organization_id}
+            refreshTrigger={activityRefreshTrigger}
+            onNavigateToSection={handleNavigateToDrawerSection}
+          />
         </div>
 
         {/* Fixed Footer Actions */}
@@ -1665,38 +2352,116 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
         </div>
       )}
 
-      {/* ── Resolve Confirmation Modal (Admins only, Sprint 7.1) ── */}
+      {/* ── Resolve Confirmation Modal (Sprint 7.7) ── */}
       {isResolveModalOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-background/80 animate-drawer-backdrop">
-          <Card className="w-full max-w-md bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+          <Card className="w-full max-w-lg bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
-                <CheckCircle className="h-5 w-5" />
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                <CheckCircle className="h-6 w-6" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-foreground">Resolve Finding?</h3>
                 <p className="text-xs text-muted-foreground">
-                  Confirm that the remediation for this finding has been completed.
+                  Confirm that the remediation and review for this compliance finding have been completed.
                 </p>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Resolution Note</label>
+            {/* Finding & Verification Summary Snapshot (Sprint 7.10) */}
+            <div className="p-3.5 rounded-xl bg-muted/20 border border-border/50 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Finding ID:</span>
+                <span className="font-mono font-bold text-foreground">#{currentFinding.id.slice(0, 8)}</span>
+              </div>
+              {currentFinding.regulation_clause_id && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-semibold">Regulation Clause:</span>
+                  <span className="font-mono font-semibold text-foreground">{currentFinding.regulation_clause_id}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Severity:</span>
+                <Badge variant="outline" className={cn("text-[10px] font-bold px-2 py-0.5", severityInfo.badgeClass)}>
+                  {severityInfo.label}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Remediation Status:</span>
+                <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                  {remediation?.status || "APPROVED"}
+                </Badge>
+              </div>
+
+              {/* Verifier Details */}
+              {(remediation?.verifier?.full_name || remediation?.verified_by) && (
+                <div className="pt-1.5 border-t border-border/40 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-muted-foreground font-semibold">Verified By:</span>
+                    <span className="font-semibold text-foreground">
+                      {remediation?.verifier?.full_name || remediation?.verified_by}
+                    </span>
+                  </div>
+                  {remediation?.verification_note && (
+                    <p className="text-[11px] text-muted-foreground italic bg-background/50 p-2 rounded border border-border/30">
+                      "{remediation.verification_note}"
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Evidence Summary */}
+              <div className="pt-1.5 border-t border-border/40 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted-foreground font-semibold flex items-center gap-1">
+                    <Paperclip className="h-3 w-3 text-indigo-500" /> Attached Evidence:
+                  </span>
+                  <span className="font-bold text-foreground">
+                    {remediation?.evidence?.length || 0} file(s)
+                  </span>
+                </div>
+                {remediation?.evidence && remediation.evidence.length > 0 ? (
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {remediation.evidence.map((ev) => (
+                      <div key={ev.id} className="flex items-center justify-between text-[10px] bg-background/60 px-2 py-1 rounded border border-border/30">
+                        <span className="truncate font-medium text-foreground max-w-[200px]">{ev.original_filename}</span>
+                        <span className="text-muted-foreground">{(ev.file_size / 1024).toFixed(1)} KB</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-[10px] flex items-center gap-1.5">
+                    <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                    <span>Warning: No supporting evidence attached to this remediation.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              This will mark the compliance finding as <strong className="text-foreground">RESOLVED</strong> in the report and audit trail. This action is recorded permanently in the Activity timeline.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>Resolution Note (Optional)</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Stored in audit history</span>
+              </label>
               <textarea
                 value={resolutionNoteInput}
                 onChange={(e) => setResolutionNoteInput(e.target.value)}
-                placeholder="Describe how the finding was remediated or addressed..."
+                placeholder="e.g., Updated policy verified and deployed. Centralized log retention active."
                 rows={3}
                 className="w-full p-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsResolveModalOpen(false)}
+                disabled={isResolving}
                 className="text-xs cursor-pointer"
               >
                 Cancel
@@ -1705,9 +2470,19 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                 size="sm"
                 onClick={handleConfirmResolve}
                 disabled={isResolving}
-                className="text-xs font-semibold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="text-xs font-semibold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
               >
-                {isResolving ? "Resolving..." : "Resolve Finding"}
+                {isResolving ? (
+                  <>
+                    <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Resolving Finding...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Resolve Finding</span>
+                  </>
+                )}
               </Button>
             </div>
           </Card>
@@ -1763,38 +2538,68 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
         </div>
       )}
 
-      {/* ── Reopen Confirmation Modal (Admins only, Sprint 7.1) ── */}
-      {isReopenModalOpen && (
+      {/* ── Reopen Confirmation Modal (Admins only, Sprint 7.8) ── */}
+      {isReopenModalOpen && currentFinding && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-background/80 animate-drawer-backdrop">
-          <Card className="w-full max-w-md bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+          <Card className="w-full max-w-lg bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20 shrink-0">
-                <RotateCcw className="h-5 w-5" />
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0">
+                <RotateCcw className="h-6 w-6" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-foreground">Reopen Finding?</h3>
                 <p className="text-xs text-muted-foreground">
-                  This will return the finding to active remediation.
+                  Return this resolved finding to the compliance remediation workflow.
                 </p>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Reopen Reason</label>
+            {/* Finding Summary Snapshot */}
+            <div className="p-3.5 rounded-xl bg-muted/20 border border-border/50 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Finding:</span>
+                <span className="font-mono font-bold text-foreground">#{currentFinding.id.slice(0, 8)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-semibold">Current Status:</span>
+                <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                  ✓ RESOLVED
+                </Badge>
+              </div>
+              {currentFinding.resolved_at && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-semibold">Previously Resolved:</span>
+                  <span className="font-mono text-muted-foreground">
+                    {format(new Date(currentFinding.resolved_at), "dd MMM yyyy, HH:mm")}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Reopening this finding will return it to active remediation and may require additional corrective actions. Historical resolution periods, remediation cycles, and evidence are preserved.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>Reason for Reopening <span className="text-rose-500">*</span></span>
+                <span className="text-[10px] text-muted-foreground font-normal">Required for audit trail</span>
+              </label>
               <textarea
                 value={reopenReasonInput}
                 onChange={(e) => setReopenReasonInput(e.target.value)}
-                placeholder="State the reason why this finding is being reopened..."
+                placeholder="e.g., New policy revision invalidated escalation clause, or compliance gap re-evaluated."
                 rows={3}
                 className="w-full p-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsReopenModalOpen(false)}
+                disabled={isReopening}
                 className="text-xs cursor-pointer"
               >
                 Cancel
@@ -1802,10 +2607,318 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
               <Button
                 size="sm"
                 onClick={handleConfirmReopen}
-                disabled={isReopening}
-                className="text-xs font-semibold cursor-pointer bg-rose-600 hover:bg-rose-700 text-white"
+                disabled={isReopening || !reopenReasonInput.trim()}
+                className="text-xs font-semibold cursor-pointer bg-rose-600 hover:bg-rose-700 text-white gap-1.5"
               >
-                {isReopening ? "Reopening..." : "Reopen Finding"}
+                {isReopening ? (
+                  <>
+                    <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Reopening Finding...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Reopen Finding</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Reassessment Review & Comparison Modal (Sprint 7.9) ── */}
+      {isReassessmentReviewModalOpen && currentFinding && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-background/80 animate-drawer-backdrop">
+          <Card className="w-full max-w-2xl bg-card p-6 border border-border shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Compliance Reassessment Review</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Compare historical resolution against the new compliance analysis evaluation.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setIsReassessmentReviewModalOpen(false)}
+                className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {isLoadingReassessment ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
+                <span className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                <span>Loading reassessment comparison details...</span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Two-Column Side-by-Side Comparison */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left Box: Previous Resolution */}
+                  <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300 uppercase text-[11px] tracking-wider flex items-center gap-1.5">
+                        <CheckCircle className="h-4 w-4" /> Previous Resolution
+                      </span>
+                      <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                        Resolution #{reassessmentDetail?.previous_resolution?.resolution_number || 1}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1 text-muted-foreground">
+                      <div>
+                        <span className="font-medium text-foreground">Resolved by: </span>
+                        <span>{reassessmentDetail?.previous_resolution?.resolver_name || currentFinding.resolved_by_name || "Administrator"}</span>
+                      </div>
+                      {(reassessmentDetail?.previous_resolution?.resolved_at || currentFinding.resolved_at) && (
+                        <div>
+                          <span className="font-medium text-foreground">Resolved on: </span>
+                          <span className="font-mono">{format(new Date(reassessmentDetail?.previous_resolution?.resolved_at || currentFinding.resolved_at!), "dd MMM yyyy, HH:mm")}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-1.5 border-t border-emerald-500/20">
+                      <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block mb-1">
+                        Resolution Note
+                      </span>
+                      <p className="p-2.5 rounded-lg bg-background/80 border border-emerald-500/20 text-foreground leading-relaxed whitespace-pre-wrap">
+                        {reassessmentDetail?.previous_resolution?.resolution_note || currentFinding.resolution_note || "No resolution note provided."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right Box: New Trigger & Candidate Analysis */}
+                  <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-700 dark:text-amber-300 uppercase text-[11px] tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="h-4 w-4" /> Triggering Analysis
+                      </span>
+                      <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40">
+                        {currentFinding.reassessment_trigger || "NEW_ANALYSIS"}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1 text-muted-foreground">
+                      {currentFinding.reassessment_document_name && (
+                        <div>
+                          <span className="font-medium text-foreground">Updated Policy: </span>
+                          <span className="font-semibold text-foreground">{currentFinding.reassessment_document_name}</span>
+                        </div>
+                      )}
+                      {currentFinding.reassessment_detected_at && (
+                        <div>
+                          <span className="font-medium text-foreground">Detected at: </span>
+                          <span className="font-mono">{format(new Date(currentFinding.reassessment_detected_at), "dd MMM yyyy, HH:mm")}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-1.5 border-t border-amber-500/20">
+                      <span className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300 block mb-1">
+                        Trigger Reason
+                      </span>
+                      <p className="p-2.5 rounded-lg bg-background/80 border border-amber-500/20 text-foreground leading-relaxed whitespace-pre-wrap">
+                        {currentFinding.reassessment_reason || "New evaluation indicates a potential compliance gap in the updated policy document."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Regulation Requirement Reference */}
+                <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-primary" />
+                      <span>Clause: <strong className="font-mono text-primary">{currentFinding.regulation_clause_id || "N/A"}</strong></span>
+                    </span>
+                    <Badge variant="outline" className={cn("text-[10px] font-bold", severityInfo.badgeClass)}>
+                      {severityInfo.label}
+                    </Badge>
+                  </div>
+                  {currentFinding.recommendation && (
+                    <p className="text-muted-foreground leading-relaxed pt-1">
+                      <strong className="text-foreground">Recommendation: </strong>
+                      {currentFinding.recommendation}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Action Bar */}
+            <div className="flex items-center justify-between pt-3 border-t border-border/40 flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsReassessmentReviewModalOpen(false)}
+                className="text-xs cursor-pointer"
+              >
+                Close
+              </Button>
+
+              {permissions.canReopenFindings && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsKeepResolvedModalOpen(true);
+                    }}
+                    className="text-xs font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1.5"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Keep Resolved</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setIsReopenFromReassessmentModalOpen(true);
+                    }}
+                    className="text-xs font-semibold cursor-pointer bg-rose-600 hover:bg-rose-700 text-white gap-1.5"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Reopen Finding</span>
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Keep Resolved Confirmation Modal (Sprint 7.9) ── */}
+      {isKeepResolvedModalOpen && currentFinding && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-background/80 animate-drawer-backdrop">
+          <Card className="w-full max-w-md bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Keep Finding Resolved?</h3>
+                <p className="text-xs text-muted-foreground">
+                  Confirm that the detected change does not invalidate the previous resolution.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>Administrator Note (Optional)</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Recorded in audit log</span>
+              </label>
+              <textarea
+                value={keepResolvedAdminNoteInput}
+                onChange={(e) => setKeepResolvedAdminNoteInput(e.target.value)}
+                placeholder="e.g., Reviewed updated wording; does not affect exemption clause. Retaining RESOLVED status."
+                rows={3}
+                className="w-full p-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsKeepResolvedModalOpen(false)}
+                disabled={isSubmittingReassessmentDecision}
+                className="text-xs cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmKeepResolved}
+                disabled={isSubmittingReassessmentDecision}
+                className="text-xs font-semibold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+              >
+                {isSubmittingReassessmentDecision ? (
+                  <>
+                    <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Confirming...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Confirm Keep Resolved</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Reopen from Reassessment Confirmation Modal (Sprint 7.9) ── */}
+      {isReopenFromReassessmentModalOpen && currentFinding && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-background/80 animate-drawer-backdrop">
+          <Card className="w-full max-w-lg bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0">
+                <RotateCcw className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Reopen Finding from Reassessment?</h3>
+                <p className="text-xs text-muted-foreground">
+                  Acknowledge that the new analysis/document update creates a gap and start active remediation.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              This will transition the finding from <strong className="text-amber-600">REASSESSMENT REQUIRED</strong> to <strong className="text-rose-600">REOPENED</strong>. The remediation cycle will resume, preserving all previous cycles and evidence.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>Reopening Reason <span className="text-rose-500">*</span></span>
+                <span className="text-[10px] text-muted-foreground font-normal">Required for audit trail</span>
+              </label>
+              <textarea
+                value={reopenFromReassessmentReasonInput}
+                onChange={(e) => setReopenFromReassessmentReasonInput(e.target.value)}
+                placeholder="e.g., New policy revision lacks mandatory external committee representative. Remediation required."
+                rows={3}
+                className="w-full p-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsReopenFromReassessmentModalOpen(false)}
+                disabled={isSubmittingReassessmentDecision}
+                className="text-xs cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmReopenFromReassessment}
+                disabled={isSubmittingReassessmentDecision || !reopenFromReassessmentReasonInput.trim()}
+                className="text-xs font-semibold cursor-pointer bg-rose-600 hover:bg-rose-700 text-white gap-1.5"
+              >
+                {isSubmittingReassessmentDecision ? (
+                  <>
+                    <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Reopening...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Confirm Reopen Finding</span>
+                  </>
+                )}
               </Button>
             </div>
           </Card>
