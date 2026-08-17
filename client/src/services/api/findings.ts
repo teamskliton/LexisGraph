@@ -196,6 +196,14 @@ export interface FindingsFilterParams {
   regulation_id?: string;
   report_id?: string;
   overdue_only?: boolean;
+  from_date?: string;
+  to_date?: string;
+}
+
+export interface FindingExportResult {
+  blob: Blob;
+  filename: string;
+  count: number;
 }
 
 export const findingsService = {
@@ -207,6 +215,32 @@ export const findingsService = {
       params: { ...(organizationId ? { organization_id: organizationId } : {}), ...params },
     });
     return response.data;
+  },
+
+  exportFindings: async (
+    organizationId?: string,
+    params?: FindingsFilterParams
+  ): Promise<FindingExportResult> => {
+    const response = await api.get("/findings/export", {
+      params: { ...(organizationId ? { organization_id: organizationId } : {}), ...params, format: "csv" },
+      responseType: "blob",
+    });
+
+    const disposition = response.headers["content-disposition"] || "";
+    let filename = "lexisgraph-findings.csv";
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+
+    const countHeader = response.headers["x-exported-count"];
+    const count = countHeader ? parseInt(countHeader, 10) : 0;
+
+    return {
+      blob: response.data,
+      filename,
+      count,
+    };
   },
 
   getMyWork: async (
@@ -355,13 +389,37 @@ export const findingsService = {
     return response.data;
   },
 
+  updateFinding: async (
+    findingId: string,
+    data: {
+      severity?: string;
+      reasoning?: string;
+      recommendation?: string;
+      citation?: string;
+      confidence?: number;
+    }
+  ): Promise<FindingDetail> => {
+    const response = await api.patch<FindingDetail>(`/findings/${findingId}`, data);
+    return response.data;
+  },
+
   deleteComment: async (findingId: string, commentId: string): Promise<void> => {
     await api.delete(`/findings/${findingId}/comments/${commentId}`);
   },
 
   getActivity: async (
     findingId: string,
-    params?: { category?: string; page?: number; limit?: number }
+    params?: {
+      category?: string;
+      event_type?: string;
+      user_id?: string;
+      role?: string;
+      date_from?: string;
+      date_to?: string;
+      search?: string;
+      page?: number;
+      limit?: number;
+    }
   ): Promise<FindingActivityPaginatedResponse> => {
     const response = await api.get<FindingActivityPaginatedResponse>(`/findings/${findingId}/activity`, {
       params,
@@ -377,6 +435,26 @@ export const findingsService = {
   getAnalytics: async (params: FindingAnalyticsParams): Promise<FindingAnalyticsResponse> => {
     const response = await api.get<FindingAnalyticsResponse>("/findings/analytics", {
       params,
+    });
+    return response.data;
+  },
+
+  getComplianceReportSummary: async (
+    params: ComplianceManagementReportParams
+  ): Promise<ComplianceManagementReportResponse> => {
+    const response = await api.get<ComplianceManagementReportResponse>(
+      "/findings/reports/compliance/summary",
+      { params }
+    );
+    return response.data;
+  },
+
+  downloadComplianceReportPdf: async (
+    params: ComplianceManagementReportParams
+  ): Promise<Blob> => {
+    const response = await api.get("/findings/reports/compliance/pdf", {
+      params,
+      responseType: "blob",
     });
     return response.data;
   },
@@ -486,4 +564,145 @@ export interface FindingAnalyticsParams {
   regulation_id?: string;
   severity?: string;
   status?: string;
+}
+
+export interface HighRiskReportFindingItem {
+  id: string;
+  title: string;
+  severity: string;
+  lifecycle_status: string;
+  compliance_status: string;
+  policy_name: string;
+  policy_clause_id?: string | null;
+  regulation_name: string;
+  regulation_clause_id?: string | null;
+  citation?: string | null;
+  age_days: number;
+  remediation_cycle: number;
+  assigned_to_name: string;
+  created_at?: string | null;
+}
+
+export interface PolicyGapItem {
+  policy_document_id: string;
+  policy_name: string;
+  total_findings: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  unresolved_count: number;
+  resolved_count: number;
+}
+
+export interface RegulationGapItem {
+  regulation_id: string;
+  regulation_title: string;
+  total_findings: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  unresolved_count: number;
+  resolved_count: number;
+}
+
+export interface RemediationOperationsSummary {
+  pending_remediation_count: number;
+  submitted_for_review_count: number;
+  verified_count: number;
+  approved_count: number;
+  rejected_count: number;
+  multiple_cycles_count: number;
+  total_cycles_completed: number;
+}
+
+export interface ReassessmentOperationsSummary {
+  reassessment_required_count: number;
+  recently_reassessed_count: number;
+  reopened_after_reassessment_count: number;
+  kept_resolved_after_reassessment_count: number;
+}
+
+export interface ResolutionOperationsSummary {
+  resolved_during_period: number;
+  reopened_during_period: number;
+  currently_resolved: number;
+  currently_unresolved: number;
+}
+
+export interface AuditActivitySummaryItem {
+  event_type: string;
+  label: string;
+  count: number;
+}
+
+export interface ComplianceReportExecutiveMetrics {
+  total_findings: number;
+  open_findings: number;
+  critical_findings: number;
+  high_findings: number;
+  medium_findings: number;
+  low_findings: number;
+  under_remediation: number;
+  needs_reassessment: number;
+  resolved_findings: number;
+  reopened_findings: number;
+  resolution_rate_percentage: number;
+}
+
+export interface ReportStatusDistributionItem {
+  status: string;
+  label: string;
+  count: number;
+  percentage: number;
+}
+
+export interface ReportSeverityDistributionItem {
+  severity: string;
+  label: string;
+  count: number;
+  percentage: number;
+}
+
+export interface ReportTrendPoint {
+  date: string;
+  created_count: number;
+  resolved_count: number;
+}
+
+export interface ComplianceManagementReportResponse {
+  report_title: string;
+  organization_id: string;
+  organization_name: string;
+  reporting_period: string;
+  generated_at: string;
+  generated_by_id: string;
+  generated_by_name: string;
+  generated_by_role?: string | null;
+  applied_filters: Record<string, any>;
+  executive_metrics: ComplianceReportExecutiveMetrics;
+  status_distribution: ReportStatusDistributionItem[];
+  severity_distribution: ReportSeverityDistributionItem[];
+  high_risk_findings: HighRiskReportFindingItem[];
+  policy_gaps: PolicyGapItem[];
+  regulation_gaps: RegulationGapItem[];
+  remediation_summary: RemediationOperationsSummary;
+  reassessment_summary: ReassessmentOperationsSummary;
+  resolution_summary: ResolutionOperationsSummary;
+  trend_summary: ReportTrendPoint[];
+  has_sufficient_history: boolean;
+  history_message?: string | null;
+  audit_summary: AuditActivitySummaryItem[];
+}
+
+export interface ComplianceManagementReportParams {
+  organization_id?: string;
+  date_range?: string;
+  from_date?: string;
+  to_date?: string;
+  severity?: string;
+  lifecycle_status?: string;
+  policy_document_id?: string;
+  regulation_id?: string;
 }

@@ -14,6 +14,14 @@ class FindingStatusUpdateRequest(BaseModel):
     status: Optional[str] = Field(None, description="Alias for lifecycle_status")
 
 
+class FindingUpdateRequest(BaseModel):
+    severity: Optional[str] = Field(None, description="Updated severity: CRITICAL, HIGH, MEDIUM, LOW")
+    reasoning: Optional[str] = Field(None, description="Updated finding reasoning / analysis")
+    recommendation: Optional[str] = Field(None, description="Updated finding recommendation")
+    citation: Optional[str] = Field(None, description="Updated citation or reference clause")
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Updated confidence score (0.0 - 1.0)")
+
+
 class FindingAssignRequest(BaseModel):
     assignee_id: Optional[uuid.UUID] = Field(None, description="UUID of user in organization to assign (None to unassign)")
 

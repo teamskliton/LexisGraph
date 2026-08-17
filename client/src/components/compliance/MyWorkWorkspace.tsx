@@ -24,6 +24,7 @@ import {
   LayoutList,
   User,
   Users,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -161,6 +162,19 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [assigneeFilter, setAssigneeFilter] = useState("ALL");
   const [overdueOnly, setOverdueOnly] = useState(false);
+
+  // Export State (Sprint 7.12)
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // Determine export permissions (Admin, Analyst, Reviewer can export; Viewer cannot)
+  const canExport = useMemo(() => {
+    if (user?.is_superuser) return true;
+    const role = (activeMembership?.role || "").toUpperCase();
+    if (["ADMIN", "ORGANIZATION_ADMIN", "SUPER_ADMIN", "COMPLIANCE_ANALYST", "LEGAL_ANALYST", "MANAGER", "REVIEWER"].includes(role)) {
+      return true;
+    }
+    return role !== "VIEWER" && role !== "EMPLOYEE";
+  }, [user, activeMembership]);
 
   // Finding Detail Drawer State
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
@@ -317,6 +331,63 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
     }
   };
 
+  const handleExportFindings = async () => {
+    if (isExporting) return;
+
+    const currentCount = viewMode === "MY_WORK" ? filteredMyWorkFindings.length : totalOrgFindings;
+    if (currentCount === 0) {
+      toast.info("No Findings match the selected filters.");
+      return;
+    }
+
+    setIsExporting(true);
+    const toastId = toast.loading("Exporting findings to CSV...");
+
+    try {
+      const exportParams = {
+        search: searchQuery.trim() || undefined,
+        lifecycle_status: statusFilter !== "ALL" ? statusFilter : undefined,
+        severity: severityFilter !== "ALL" ? severityFilter : undefined,
+        assigned_to: viewMode === "MY_WORK" ? "me" : (assigneeFilter === "ME" ? "me" : assigneeFilter === "UNASSIGNED" ? "unassigned" : undefined),
+        overdue_only: overdueOnly || undefined,
+      };
+
+      const result = await findingsService.exportFindings(activeOrgId, exportParams);
+
+      if (result.count === 0) {
+        toast.dismiss(toastId);
+        toast.info("No Findings match the selected filters.");
+        return;
+      }
+
+      // Trigger browser download without full page reload
+      const url = window.URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", result.filename || "lexisgraph-findings.csv");
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.dismiss(toastId);
+      toast.success(`Exported ${result.count} findings successfully.`);
+    } catch (err: any) {
+      console.error("Failed to export findings:", err);
+      toast.dismiss(toastId);
+      const rawDetail = err?.response?.data?.detail || "Unable to export Findings.";
+      const detailStr = typeof rawDetail === "string" ? rawDetail : "Unable to export Findings.";
+      toast.error(detailStr, {
+        action: {
+          label: "Retry",
+          onClick: () => handleExportFindings(),
+        },
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleOrgChanged = (org: Organization) => {
     setActiveOrgId(org.id);
     setCurrentPage(1);
@@ -422,6 +493,28 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
               <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
               <span>Refresh</span>
             </Button>
+
+            {canExport && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportFindings}
+                disabled={isExporting}
+                className="gap-1.5 text-xs cursor-pointer shrink-0 border-indigo-500/30 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium"
+              >
+                {isExporting ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-3.5 w-3.5 text-indigo-500" />
+                    <span>Export Findings</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>

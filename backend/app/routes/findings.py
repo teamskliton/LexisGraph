@@ -3,6 +3,8 @@ Findings API routes for Lifecycle, Collaboration & Compliance Operations.
 """
 from __future__ import annotations
 
+import csv
+import io
 import logging
 import re
 import uuid
@@ -10,12 +12,18 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, or_, func, case
 from sqlalchemy.orm import Session
 
 from app.compliance.models import ComplianceReport, ReportFinding, FindingComment, FindingResolutionHistory
+from app.db.models.document import Document
+from app.db.models.regulation import Regulation
 from app.db.models.remediation import FindingRemediation, RemediationEvidence, RemediationCycle
+from app.schemas.compliance_management_report import ComplianceManagementReportResponse
+from app.services.compliance_management_report_service import build_compliance_management_report
+from app.services.pdf_management_report_service import generate_management_report_pdf
 from app.core.dependencies import get_current_user
 from app.core.rbac_dependencies import is_org_admin, is_org_analyst_or_admin, get_user_org_role, ROLE_RANK
 from app.db.models import User, Organization
@@ -39,6 +47,7 @@ from app.schemas.finding import (
     FindingResolutionHistoryItem,
     FindingResolveRequest,
     FindingStatusUpdateRequest,
+    FindingUpdateRequest,
     FindingSubmitReviewRequest,
     FindingRemediationUpdateRequest,
     FindingReassessmentDetailResponse,
@@ -723,6 +732,721 @@ def get_my_work_findings(
     return [_format_finding_response(db, f) for f in findings]
 
 
+# ── Sprint 7.12: Finding Export & Compliance Audit Reports ──────────────────
+
+FINDING_EXPORT_CSV_COLUMNS = [
+    "Finding ID",
+    "Title",
+    "Description",
+    "Severity",
+    "Compliance Status",
+    "Lifecycle Status",
+    "Organization",
+    "Policy Document",
+    "Policy ID",
+    "Policy Clause",
+    "Regulation",
+    "Regulation ID",
+    "Regulation Clause",
+    "Citation",
+    "Assignee",
+    "Current Remediation Cycle",
+    "Remediation Status",
+    "Remediation Priority",
+    "Remediation Due Date",
+    "Remediation Cycle Summary",
+    "Verification Status",
+    "Verified By",
+    "Verified At",
+    "Verification Note",
+    "Evidence",
+    "Resolved",
+    "Resolved By",
+    "Resolved At",
+    "Resolution Note",
+    "Reopened",
+    "Reopened By",
+    "Reopened At",
+    "Reopen Reason",
+    "Reassessment Required",
+    "Reassessment Trigger",
+    "Reassessment Reason",
+    "Reassessment Detected At",
+    "Activity Summary",
+    "Created At",
+    "Updated At",
+]
+
+
+def _sanitize_csv_cell(val: Any) -> str:
+    """Sanitize CSV cell content against formula injection vulnerabilities (Sprint 7.12)."""
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    if isinstance(val, (int, float)):
+        return str(val)
+    if isinstance(val, datetime):
+        return val.isoformat()
+    s = str(val).strip()
+    if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + s
+    return s
+
+
+def generate_findings_csv_rows(db: Session, findings: list[ReportFinding], target_org: Optional[Organization] = None):
+    """Generator streaming CSV rows for findings with formula injection protection."""
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+
+    # Header row
+    writer.writerow(FINDING_EXPORT_CSV_COLUMNS)
+    yield output.getvalue()
+    output.seek(0)
+    output.truncate(0)
+
+    for finding in findings:
+        report = db.get(ComplianceReport, finding.report_id)
+        org = target_org or (db.get(Organization, report.organization_id) if report else None)
+
+        # Policy document details
+        policy_doc_name = ""
+        policy_doc_id = ""
+        if report and report.policy_document:
+            policy_doc_name = report.policy_document.original_filename or report.policy_document.title or ""
+            policy_doc_id = str(report.policy_document_id) if report.policy_document_id else ""
+        elif report and report.policy_document_id:
+            policy_doc_id = str(report.policy_document_id)
+            doc = db.get(Document, report.policy_document_id)
+            if doc:
+                policy_doc_name = doc.original_filename or doc.title or ""
+
+        # Regulation details
+        reg_name = ""
+        reg_id = ""
+        if report and report.regulation:
+            reg_name = getattr(report.regulation, "title", None) or getattr(report.regulation, "act_name", None) or getattr(report.regulation, "name", None) or ""
+            reg_id = str(report.regulation_id) if report.regulation_id else ""
+        elif report and report.regulation_id:
+            reg_id = str(report.regulation_id)
+            reg = db.get(Regulation, report.regulation_id)
+            if reg:
+                reg_name = getattr(reg, "title", None) or getattr(reg, "act_name", None) or getattr(reg, "name", None) or ""
+
+        # Assignee
+        assignee_name = ""
+        if finding.assigned_to:
+            assignee_user = getattr(finding, "assignee", None) or db.get(User, finding.assigned_to)
+            if assignee_user:
+                assignee_name = assignee_user.full_name or assignee_user.username or assignee_user.email or ""
+
+        # Remediation
+        remediation = (
+            db.query(FindingRemediation)
+            .filter(FindingRemediation.finding_id == finding.id)
+            .first()
+        )
+        current_cycle = ""
+        remediation_status = ""
+        remediation_priority = ""
+        remediation_due = ""
+        cycle_summary = ""
+        verification_status = ""
+        verified_by_name = ""
+        verified_at_str = ""
+        verification_note = ""
+        evidence_str = ""
+
+        if remediation:
+            remediation_status = remediation.status or ""
+            remediation_priority = remediation.priority or ""
+            if remediation.due_date:
+                remediation_due = remediation.due_date.isoformat()
+            elif finding.remediation_due_date:
+                remediation_due = finding.remediation_due_date.isoformat()
+
+            # Query remediation cycles
+            cycles = (
+                db.query(RemediationCycle)
+                .filter(RemediationCycle.remediation_id == remediation.id)
+                .order_by(RemediationCycle.cycle_number.asc())
+                .all()
+            )
+            if cycles:
+                current_cycle = str(cycles[-1].cycle_number)
+                cycle_summary = "; ".join([f"Cycle {c.cycle_number}: {c.status}" for c in cycles])
+
+            # Verification info
+            if remediation.status in ("VERIFIED", "APPROVED") or remediation.verified_at:
+                verification_status = "VERIFIED"
+            elif remediation.status == "REJECTED":
+                verification_status = "REJECTED"
+            elif remediation.status == "SUBMITTED":
+                verification_status = "SUBMITTED"
+            elif remediation.status:
+                verification_status = remediation.status
+
+            if remediation.verified_by:
+                v_user = getattr(remediation, "verifier", None) or db.get(User, remediation.verified_by)
+                if v_user:
+                    verified_by_name = v_user.full_name or v_user.username or ""
+            if remediation.verified_at:
+                verified_at_str = remediation.verified_at.isoformat()
+            if remediation.verification_note:
+                verification_note = remediation.verification_note
+
+            # Evidence items
+            evidence_items = (
+                db.query(RemediationEvidence)
+                .filter(RemediationEvidence.remediation_id == remediation.id)
+                .all()
+            )
+            if evidence_items:
+                evidence_str = "; ".join([e.original_filename for e in evidence_items if e.original_filename])
+
+        elif finding.remediation_due_date:
+            remediation_due = finding.remediation_due_date.isoformat()
+
+        # Resolution info
+        resolved_flag = "false"
+        resolved_by_name = ""
+        resolved_at_str = ""
+        resolution_note = ""
+
+        if finding.resolved_at or (finding.lifecycle_status or "").upper() == "RESOLVED":
+            resolved_flag = "true"
+            if finding.resolved_by:
+                res_user = getattr(finding, "resolver", None) or db.get(User, finding.resolved_by)
+                if res_user:
+                    resolved_by_name = res_user.full_name or res_user.username or ""
+            if finding.resolved_at:
+                resolved_at_str = finding.resolved_at.isoformat()
+            if finding.resolution_note:
+                resolution_note = finding.resolution_note
+
+        # Reopening info
+        reopened_flag = "false"
+        reopened_by_name = ""
+        reopened_at_str = ""
+        reopen_reason = ""
+
+        if finding.reopened_at or finding.reopened_by or (finding.lifecycle_status or "").upper() == "REOPENED":
+            reopened_flag = "true"
+            if finding.reopened_by:
+                reop_user = getattr(finding, "reopener", None) or db.get(User, finding.reopened_by)
+                if reop_user:
+                    reopened_by_name = reop_user.full_name or reop_user.username or ""
+            if finding.reopened_at:
+                reopened_at_str = finding.reopened_at.isoformat()
+            if finding.reopen_reason:
+                reopen_reason = finding.reopen_reason
+
+        # Reassessment info
+        reassessment_req = "false"
+        reassessment_trigger = ""
+        reassessment_reason = ""
+        reassessment_detected_at = ""
+
+        if finding.reassessment_trigger or (finding.lifecycle_status or "").upper() == "REASSESSMENT_REQUIRED":
+            reassessment_req = "true"
+            reassessment_trigger = finding.reassessment_trigger or ""
+            reassessment_reason = finding.reassessment_reason or ""
+            if finding.reassessment_detected_at:
+                reassessment_detected_at = finding.reassessment_detected_at.isoformat()
+
+        # Activity summary
+        events = ["Created"]
+        if finding.assigned_to:
+            events.append("Assigned")
+        if remediation and remediation.status:
+            events.append(f"Remediation ({remediation.status})")
+        if verification_status and verification_status != "NOT_STARTED":
+            events.append(f"Verification ({verification_status})")
+        if resolved_flag == "true":
+            events.append("Resolved")
+        if reopened_flag == "true":
+            events.append("Reopened")
+        if reassessment_req == "true":
+            events.append("Reassessment Required")
+        activity_summary = " → ".join(events)
+
+        title = f"Finding #{str(finding.id)[:8]} - Clause {finding.regulation_clause_id or finding.policy_clause_id or 'General'}"
+
+        row = [
+            _sanitize_csv_cell(str(finding.id)),
+            _sanitize_csv_cell(title),
+            _sanitize_csv_cell(finding.reasoning or ""),
+            _sanitize_csv_cell(finding.severity or "MEDIUM"),
+            _sanitize_csv_cell(finding.status or "NON_COMPLIANT"),
+            _sanitize_csv_cell(finding.lifecycle_status or "OPEN"),
+            _sanitize_csv_cell(org.name if org else ""),
+            _sanitize_csv_cell(policy_doc_name),
+            _sanitize_csv_cell(policy_doc_id),
+            _sanitize_csv_cell(finding.policy_clause_id or ""),
+            _sanitize_csv_cell(reg_name),
+            _sanitize_csv_cell(reg_id),
+            _sanitize_csv_cell(finding.regulation_clause_id or ""),
+            _sanitize_csv_cell(finding.citation or ""),
+            _sanitize_csv_cell(assignee_name),
+            _sanitize_csv_cell(current_cycle),
+            _sanitize_csv_cell(remediation_status),
+            _sanitize_csv_cell(remediation_priority),
+            _sanitize_csv_cell(remediation_due),
+            _sanitize_csv_cell(cycle_summary),
+            _sanitize_csv_cell(verification_status),
+            _sanitize_csv_cell(verified_by_name),
+            _sanitize_csv_cell(verified_at_str),
+            _sanitize_csv_cell(verification_note),
+            _sanitize_csv_cell(evidence_str),
+            _sanitize_csv_cell(resolved_flag),
+            _sanitize_csv_cell(resolved_by_name),
+            _sanitize_csv_cell(resolved_at_str),
+            _sanitize_csv_cell(resolution_note),
+            _sanitize_csv_cell(reopened_flag),
+            _sanitize_csv_cell(reopened_by_name),
+            _sanitize_csv_cell(reopened_at_str),
+            _sanitize_csv_cell(reopen_reason),
+            _sanitize_csv_cell(reassessment_req),
+            _sanitize_csv_cell(reassessment_trigger),
+            _sanitize_csv_cell(reassessment_reason),
+            _sanitize_csv_cell(reassessment_detected_at),
+            _sanitize_csv_cell(activity_summary),
+            _sanitize_csv_cell(finding.created_at.isoformat() if finding.created_at else ""),
+            _sanitize_csv_cell((finding.updated_at or finding.created_at).isoformat() if (finding.updated_at or finding.created_at) else ""),
+        ]
+        writer.writerow(row)
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+
+@router.get(
+    "/export",
+    summary="Export organization findings to CSV (Sprint 7.12)",
+    response_class=StreamingResponse,
+)
+def export_findings(
+    organization_id: Optional[uuid.UUID] = Query(None, description="Organization UUID (optional; defaults to user accessible organizations)"),
+    search: Optional[str] = Query(None, description="Search term across reasoning, recommendation, citation, clause IDs"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by compliance status: COMPLIANT, NON_COMPLIANT, PARTIALLY_COMPLIANT"),
+    lifecycle_status: Optional[str] = Query(None, description="Filter by lifecycle status: OPEN, IN_REVIEW, REMEDIATION, POTENTIAL_FALSE_POSITIVE, ADMIN_REVIEW, RESOLVED, REASSESSMENT_REQUIRED, REOPENED, REJECTED"),
+    severity: Optional[str] = Query(None, description="Filter by severity: CRITICAL, HIGH, MEDIUM, LOW"),
+    assigned_to: Optional[str] = Query(None, description="Filter by assignee: 'me', 'unassigned', or user UUID"),
+    policy_document_id: Optional[uuid.UUID] = Query(None, description="Filter by policy document UUID"),
+    regulation_id: Optional[uuid.UUID] = Query(None, description="Filter by regulation UUID"),
+    report_id: Optional[uuid.UUID] = Query(None, description="Filter by report UUID"),
+    overdue_only: bool = Query(False, description="Filter overdue findings only"),
+    from_date: Optional[datetime] = Query(None, description="Filter findings created on or after this timestamp"),
+    to_date: Optional[datetime] = Query(None, description="Filter findings created on or before this timestamp"),
+    format: str = Query("csv", description="Export format (csv)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Export organization findings to a structured, formula-sanitized CSV file (Sprint 7.12).
+    Enforces strict role permissions (Reviewer or higher) and organization isolation.
+    """
+    if format.lower() != "csv":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported export format. Supported formats: csv",
+        )
+
+    target_org = None
+    if organization_id:
+        target_org = db.get(Organization, organization_id)
+        if not target_org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization with ID '{organization_id}' not found.",
+            )
+
+        # Verify access authorization
+        is_creator = target_org.created_by == current_user.id
+        is_active_member = db.scalar(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        ) > 0
+
+        if not is_creator and not is_active_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's findings.",
+            )
+
+        # Role-based access control: Viewer / Employee cannot export
+        user_role = get_user_org_role(db, current_user.id, organization_id)
+        if ROLE_RANK.get(user_role, 0) < ROLE_RANK[UserRole.REVIEWER]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to export findings. Requires Reviewer role or higher.",
+            )
+        target_org_ids = [organization_id]
+    else:
+        # Default to user's accessible active organizations where user has export role
+        member_orgs = db.execute(
+            select(OrganizationMember.organization_id, OrganizationMember.role).where(
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        ).all()
+        created_org_ids = db.scalars(
+            select(Organization.id).where(Organization.created_by == current_user.id)
+        ).all()
+
+        allowed_org_ids = set(created_org_ids)
+        for org_id, role in member_orgs:
+            if ROLE_RANK.get(role, 0) >= ROLE_RANK[UserRole.REVIEWER]:
+                allowed_org_ids.add(org_id)
+
+        if not allowed_org_ids:
+            has_any_org = bool(member_orgs) or bool(created_org_ids)
+            if has_any_org:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You do not have permission to export findings. Requires Reviewer role or higher.",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to any organizations.",
+            )
+        target_org_ids = list(allowed_org_ids)
+        if len(target_org_ids) == 1:
+            target_org = db.get(Organization, target_org_ids[0])
+
+    # Build query joined on ComplianceReport for multi-tenant scoping
+    query = (
+        select(ReportFinding)
+        .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+        .where(
+            ComplianceReport.organization_id.in_(target_org_ids),
+            or_(ComplianceReport.is_deleted == False, ComplianceReport.is_deleted.is_(None)),
+        )
+    )
+
+    if policy_document_id:
+        query = query.where(ComplianceReport.policy_document_id == policy_document_id)
+    if regulation_id:
+        query = query.where(ComplianceReport.regulation_id == regulation_id)
+    if report_id:
+        query = query.where(ComplianceReport.id == report_id)
+
+    # Assignee filtering
+    if assigned_to:
+        val = assigned_to.strip().lower()
+        if val == "me":
+            query = query.where(ReportFinding.assigned_to == current_user.id)
+        elif val == "unassigned":
+            query = query.where(ReportFinding.assigned_to.is_(None))
+        else:
+            try:
+                assignee_uuid = uuid.UUID(assigned_to.strip())
+                query = query.where(ReportFinding.assigned_to == assignee_uuid)
+            except ValueError:
+                pass
+
+    if status_filter and status_filter.upper() != "ALL":
+        query = query.where(ReportFinding.status == status_filter.upper())
+
+    if lifecycle_status and lifecycle_status.upper() != "ALL":
+        target_status = lifecycle_status.upper()
+        if target_status in ("REMEDIATION", "REMEDIATION_REQUIRED"):
+            query = query.where(ReportFinding.lifecycle_status.in_(["REMEDIATION", "REMEDIATION_REQUIRED"]))
+        else:
+            query = query.where(ReportFinding.lifecycle_status == target_status)
+
+    if severity and severity.upper() != "ALL":
+        query = query.where(ReportFinding.severity == severity.upper())
+
+    if overdue_only:
+        now_utc = datetime.now(timezone.utc)
+        query = query.where(
+            ReportFinding.remediation_due_date.is_not(None),
+            ReportFinding.remediation_due_date < now_utc,
+            ReportFinding.lifecycle_status != "RESOLVED",
+        )
+
+    if from_date:
+        query = query.where(ReportFinding.created_at >= from_date)
+    if to_date:
+        query = query.where(ReportFinding.created_at <= to_date)
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                ReportFinding.reasoning.ilike(term),
+                ReportFinding.recommendation.ilike(term),
+                ReportFinding.citation.ilike(term),
+                ReportFinding.policy_clause_id.ilike(term),
+                ReportFinding.regulation_clause_id.ilike(term),
+            )
+        )
+
+    severity_order = case(
+        (ReportFinding.severity == "CRITICAL", 1),
+        (ReportFinding.severity == "HIGH", 2),
+        (ReportFinding.severity == "MEDIUM", 3),
+        (ReportFinding.severity == "LOW", 4),
+        else_=5,
+    )
+    query = query.order_by(severity_order.asc(), ReportFinding.created_at.desc())
+    findings = db.scalars(query).all()
+    count = len(findings)
+
+    # Format filename
+    parts = ["lexisgraph-findings"]
+    if severity and severity.upper() != "ALL":
+        parts.append(severity.lower())
+    if lifecycle_status and lifecycle_status.upper() != "ALL":
+        parts.append(lifecycle_status.lower().replace("_", "-"))
+    elif status_filter and status_filter.upper() != "ALL":
+        parts.append(status_filter.lower().replace("_", "-"))
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    parts.append(date_str)
+    filename = f'{"-".join(parts)}.csv'
+
+    active_filters = {
+        k: v for k, v in {
+            "status": status_filter if status_filter and status_filter.upper() != "ALL" else None,
+            "lifecycle_status": lifecycle_status if lifecycle_status and lifecycle_status.upper() != "ALL" else None,
+            "severity": severity if severity and severity.upper() != "ALL" else None,
+            "assigned_to": assigned_to if assigned_to and assigned_to.upper() != "ALL" else None,
+            "policy_document_id": str(policy_document_id) if policy_document_id else None,
+            "regulation_id": str(regulation_id) if regulation_id else None,
+            "report_id": str(report_id) if report_id else None,
+            "overdue_only": overdue_only if overdue_only else None,
+            "search": search if search and search.strip() else None,
+            "from_date": from_date.isoformat() if from_date else None,
+            "to_date": to_date.isoformat() if to_date else None,
+        }.items() if v is not None
+    }
+
+    log_org_id = target_org.id if target_org else (target_org_ids[0] if target_org_ids else None)
+    log_org_name = target_org.name if target_org else "Authorized Organizations"
+
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="FINDINGS_EXPORTED",
+        title="Findings Exported",
+        description=f"Exported {count} findings for {log_org_name}.",
+        icon_type="download",
+        extra_data={
+            "organization_id": str(log_org_id) if log_org_id else None,
+            "count": count,
+            "filters": active_filters,
+            "filename": filename,
+        },
+    )
+
+    if log_org_id:
+        audit_service.log_audit_event(
+            db,
+            user_id=current_user.id,
+            action="FINDINGS_EXPORTED",
+            organization_id=log_org_id,
+            entity="ReportFinding",
+            entity_id=None,
+        )
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Type": "text/csv; charset=utf-8",
+        "X-Exported-Count": str(count),
+        "Access-Control-Expose-Headers": "Content-Disposition, X-Exported-Count",
+    }
+
+    return StreamingResponse(
+        generate_findings_csv_rows(db, findings, target_org),
+        media_type="text/csv",
+        headers=headers,
+    )
+
+
+# ── Sprint 7.14: Compliance Reports & Management Summary ──────────────────
+
+def _resolve_and_authorize_report_org(
+    db: Session,
+    current_user: User,
+    organization_id: Optional[uuid.UUID],
+) -> tuple[Organization, str]:
+    """Resolves target organization and enforces multi-tenant RBAC permissions."""
+    if organization_id:
+        target_org = db.get(Organization, organization_id)
+        if not target_org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization with ID '{organization_id}' not found.",
+            )
+        is_creator = target_org.created_by == current_user.id
+        is_active_member = db.scalar(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        ) > 0
+
+        if not is_creator and not is_active_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's compliance reports.",
+            )
+    else:
+        target_org = db.scalar(
+            select(Organization)
+            .join(OrganizationMember, OrganizationMember.organization_id == Organization.id)
+            .where(
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        )
+        if not target_org:
+            target_org = db.scalar(
+                select(Organization).where(Organization.created_by == current_user.id)
+            )
+        if not target_org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No accessible active organization found.",
+            )
+
+    user_role = get_user_org_role(db, current_user.id, target_org.id)
+    if ROLE_RANK.get(user_role, 0) < ROLE_RANK[UserRole.REVIEWER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to generate compliance reports. Requires Reviewer role or higher.",
+        )
+
+    role_label = user_role.value if hasattr(user_role, "value") else str(user_role)
+    return target_org, role_label
+
+
+@router.get(
+    "/reports/compliance/summary",
+    response_model=ComplianceManagementReportResponse,
+    summary="Get management-level Compliance Report JSON summary (Sprint 7.14)",
+)
+def get_compliance_management_report_summary(
+    organization_id: Optional[uuid.UUID] = Query(None, description="Organization UUID (optional; defaults to active org)"),
+    date_range: Optional[str] = Query("all", description="Date range: '7d', '30d', '90d', 'this_year', 'all', 'custom'"),
+    from_date: Optional[datetime] = Query(None, description="Custom start date timestamp"),
+    to_date: Optional[datetime] = Query(None, description="Custom end date timestamp"),
+    severity: Optional[str] = Query(None, description="Filter by severity: CRITICAL, HIGH, MEDIUM, LOW"),
+    lifecycle_status: Optional[str] = Query(None, description="Filter by lifecycle status"),
+    policy_document_id: Optional[uuid.UUID] = Query(None, description="Filter by policy document UUID"),
+    regulation_id: Optional[uuid.UUID] = Query(None, description="Filter by regulation UUID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ComplianceManagementReportResponse:
+    """
+    Returns structured JSON data for the executive Management Compliance Report (Sprint 7.14).
+    Enforces server-side organization isolation and RBAC role gating.
+    """
+    target_org, role_label = _resolve_and_authorize_report_org(db, current_user, organization_id)
+
+    report_response = build_compliance_management_report(
+        db=db,
+        organization=target_org,
+        current_user=current_user,
+        user_role_label=role_label,
+        date_range=date_range,
+        from_date=from_date,
+        to_date=to_date,
+        severity=severity,
+        lifecycle_status=lifecycle_status,
+        policy_document_id=policy_document_id,
+        regulation_id=regulation_id,
+    )
+    return report_response
+
+
+@router.get(
+    "/reports/compliance/pdf",
+    summary="Generate and download management-level Compliance Report PDF (Sprint 7.14)",
+)
+def get_compliance_management_report_pdf(
+    organization_id: Optional[uuid.UUID] = Query(None, description="Organization UUID (optional; defaults to active org)"),
+    date_range: Optional[str] = Query("all", description="Date range: '7d', '30d', '90d', 'this_year', 'all', 'custom'"),
+    from_date: Optional[datetime] = Query(None, description="Custom start date timestamp"),
+    to_date: Optional[datetime] = Query(None, description="Custom end date timestamp"),
+    severity: Optional[str] = Query(None, description="Filter by severity: CRITICAL, HIGH, MEDIUM, LOW"),
+    lifecycle_status: Optional[str] = Query(None, description="Filter by lifecycle status"),
+    policy_document_id: Optional[uuid.UUID] = Query(None, description="Filter by policy document UUID"),
+    regulation_id: Optional[uuid.UUID] = Query(None, description="Filter by regulation UUID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """
+    Generates and streams a professional, multi-page A4 PDF compliance report (Sprint 7.14).
+    Logs COMPLIANCE_REPORT_GENERATED in the immutable activity and audit trail.
+    """
+    target_org, role_label = _resolve_and_authorize_report_org(db, current_user, organization_id)
+
+    report_response = build_compliance_management_report(
+        db=db,
+        organization=target_org,
+        current_user=current_user,
+        user_role_label=role_label,
+        date_range=date_range,
+        from_date=from_date,
+        to_date=to_date,
+        severity=severity,
+        lifecycle_status=lifecycle_status,
+        policy_document_id=policy_document_id,
+        regulation_id=regulation_id,
+    )
+
+    pdf_bytes = generate_management_report_pdf(report_response)
+
+    # Log report generation audit event
+    log_activity(
+        db,
+        user_id=current_user.id,
+        event_type="COMPLIANCE_REPORT_GENERATED",
+        title="Compliance Report Generated",
+        description=f"Generated compliance report for {target_org.name} ({report_response.reporting_period}).",
+        icon_type="report",
+        extra_data={
+            "organization_id": str(target_org.id),
+            "reporting_period": report_response.reporting_period,
+            "total_findings": report_response.executive_metrics.total_findings,
+            "applied_filters": report_response.applied_filters,
+            "format": "pdf",
+        },
+    )
+
+    audit_service.log_audit_event(
+        db,
+        user_id=current_user.id,
+        action="COMPLIANCE_REPORT_GENERATED",
+        organization_id=target_org.id,
+        entity="ComplianceReport",
+        entity_id=None,
+    )
+
+    org_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", target_org.name.lower())
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"compliance_report_{org_slug}_{timestamp}.pdf"
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Type": "application/pdf",
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers=headers,
+    )
+
+
+
 def get_finding_and_verify_access(
     db: Session,
     finding_id: uuid.UUID,
@@ -979,6 +1703,94 @@ def get_finding(
 ) -> FindingItemResponse:
     """Retrieve detailed finding by ID with authorization check."""
     finding, _, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
+    return _format_finding_response(db, finding)
+
+
+@router.patch(
+    "/{finding_id}",
+    response_model=FindingItemResponse,
+    summary="Update finding details (severity, reasoning, recommendation, citation, confidence)",
+)
+def update_finding(
+    finding_id: uuid.UUID,
+    data: FindingUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingItemResponse:
+    """Update finding details with field-level delta audit logging. Requires Analyst or Admin role."""
+    finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=True)
+
+    if not is_org_analyst_or_admin(db, current_user.id, report.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Compliance Analysts and Administrators are permitted to edit finding details.",
+        )
+
+    changes: Dict[str, Dict[str, Any]] = {}
+    now_utc = datetime.now(timezone.utc)
+
+    if data.severity is not None:
+        sev = data.severity.strip().upper()
+        if sev not in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid severity '{data.severity}'. Allowed: CRITICAL, HIGH, MEDIUM, LOW",
+            )
+        if (finding.severity or "").upper() != sev:
+            changes["severity"] = {"old": finding.severity, "new": sev}
+            finding.severity = sev
+
+    if data.reasoning is not None and data.reasoning != finding.reasoning:
+        changes["reasoning"] = {"old": finding.reasoning, "new": data.reasoning}
+        finding.reasoning = data.reasoning
+
+    if data.recommendation is not None and data.recommendation != finding.recommendation:
+        changes["recommendation"] = {"old": finding.recommendation, "new": data.recommendation}
+        finding.recommendation = data.recommendation
+
+    if data.citation is not None and data.citation != finding.citation:
+        changes["citation"] = {"old": finding.citation, "new": data.citation}
+        finding.citation = data.citation
+
+    if data.confidence is not None and data.confidence != finding.confidence:
+        changes["confidence"] = {"old": finding.confidence, "new": data.confidence}
+        finding.confidence = data.confidence
+
+    if changes:
+        finding.updated_at = now_utc
+        db.commit()
+        db.refresh(finding)
+
+        change_summaries = []
+        for field, delta in changes.items():
+            change_summaries.append(f"{field.capitalize()}: {delta['old']} → {delta['new']}")
+        desc = "; ".join(change_summaries)
+
+        log_activity(
+            db,
+            user_id=current_user.id,
+            event_type="FINDING_UPDATED",
+            title=f"Updated Finding #{str(finding.id)[:8]}",
+            description=desc,
+            icon_type="file",
+            extra_data={
+                "finding_id": str(finding.id),
+                "report_id": str(report.id),
+                "organization_id": str(report.organization_id),
+                "changes": changes,
+            },
+        )
+
+        audit_service.log_audit_event(
+            db,
+            user_id=current_user.id,
+            action="FINDING_UPDATED",
+            organization_id=report.organization_id,
+            entity="ReportFinding",
+            entity_id=str(finding.id),
+        )
+        db.commit()
+
     return _format_finding_response(db, finding)
 
 
@@ -1469,6 +2281,13 @@ def assign_finding(
                 detail="Reviewers cannot reassign findings that are already assigned to other users.",
             )
 
+    old_assignee_id = finding.assigned_to
+    old_assignee_name = "Unassigned"
+    if old_assignee_id:
+        old_u = db.get(User, old_assignee_id)
+        if old_u:
+            old_assignee_name = old_u.full_name
+
     if data.assignee_id:
         # Validate assignee belongs to SAME organization
         member_org_ids = db.scalars(
@@ -1504,16 +2323,27 @@ def assign_finding(
     db.commit()
     db.refresh(finding)
 
+    desc_assignment = (
+        f"Assigned to {assignee_name}"
+        if old_assignee_name == "Unassigned" and assignee_name != "Unassigned"
+        else f"Assignment changed: {old_assignee_name} → {assignee_name}"
+    )
+
     log_activity(
         db,
         user_id=current_user.id,
         event_type="FINDING_ASSIGNED",
         title=f"Assigned Finding #{str(finding.id)[:8]}",
-        description=f"Assigned to {assignee_name}",
+        description=desc_assignment,
         icon_type="user",
         extra_data={
             "finding_id": str(finding.id),
             "report_id": str(report.id),
+            "organization_id": str(report.organization_id),
+            "old_assignee_id": str(old_assignee_id) if old_assignee_id else None,
+            "old_assignee_name": old_assignee_name,
+            "new_assignee_id": str(data.assignee_id) if data.assignee_id else None,
+            "new_assignee_name": assignee_name,
             "assignee_id": str(data.assignee_id) if data.assignee_id else None,
             "assignee_name": assignee_name,
         },
@@ -1715,6 +2545,8 @@ def resolve_finding(
             "finding_id": str(locked_finding.id),
             "report_id": str(report.id),
             "organization_id": str(report.organization_id),
+            "old_status": "REMEDIATION",
+            "new_status": "RESOLVED",
             "resolution_number": next_res_num,
             "resolution_note": note_text,
             "resolved_by": str(current_user.id),
@@ -2003,6 +2835,8 @@ def reopen_finding(
             "finding_id": str(locked_finding.id),
             "report_id": str(report.id),
             "organization_id": str(report.organization_id),
+            "old_status": "RESOLVED",
+            "new_status": "REOPENED",
             "reopen_reason": reason,
             "reopened_by": str(current_user.id),
             "reopened_at": now_utc.isoformat(),
@@ -2620,7 +3454,7 @@ def _categorize_event(event_type: str) -> str:
         "FINDING_MENTIONED",
     ):
         return "DISCUSSION"
-    if et.startswith("REMEDIATION_") or "CYCLE" in et:
+    if et.startswith("REMEDIATION_") or "CYCLE" in et or "EVIDENCE" in et:
         return "REMEDIATION"
     if et in (
         "FINDING_STATUS_CHANGED",
@@ -2629,6 +3463,9 @@ def _categorize_event(event_type: str) -> str:
         "FINDING_REOPENED",
         "FINDING_REJECTED",
         "FINDING_FALSE_POSITIVE_FLAGGED",
+        "FINDING_REASSESSMENT_REQUIRED",
+        "FINDING_REASSESSMENT_COMPLETED",
+        "FINDING_REASSESSMENT_KEPT_RESOLVED",
     ):
         return "STATUS"
     return "FINDING"
@@ -2637,38 +3474,52 @@ def _categorize_event(event_type: str) -> str:
 @router.get(
     "/{finding_id}/activity",
     response_model=FindingActivityPaginatedResponse,
-    summary="Get finding lifecycle activity and audit timeline (Sprint 7.6)",
+    summary="Get finding lifecycle activity and audit timeline (Sprint 7.13)",
 )
 def get_finding_activity(
     finding_id: uuid.UUID,
     category: Optional[str] = Query(None, description="Category filter: ALL, FINDING, DISCUSSION, REMEDIATION, STATUS"),
+    event_type: Optional[str] = Query(None, description="Filter by specific audit event type (e.g. FINDING_RESOLVED, REMEDIATION_CYCLE_SUBMITTED)"),
+    user_id: Optional[uuid.UUID] = Query(None, description="Filter by specific actor user UUID"),
+    role: Optional[str] = Query(None, description="Filter by actor organization role (e.g. ADMIN, REVIEWER)"),
+    date_from: Optional[datetime] = Query(None, description="Filter activities occurred on or after this UTC timestamp"),
+    date_to: Optional[datetime] = Query(None, description="Filter activities occurred on or before this UTC timestamp"),
+    search: Optional[str] = Query(None, description="Case-insensitive text search matching title, description, or notes"),
     page: int = Query(1, ge=1, description="Page number starting from 1"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),
 ) -> FindingActivityPaginatedResponse:
-    """Retrieve chronological, unified Activity & Audit Trail events for a finding."""
+    """Retrieve chronological, unified Activity & Audit Trail events for a finding with rich filtering and before/after states."""
     finding, report, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)
 
     finding_str = str(finding.id)
     org_id_str = str(report.organization_id)
 
-    # Query all activities matching finding_id
-    all_activities = db.query(Activity).order_by(Activity.created_at.desc()).all()
+    # Query all activities that have extra_data matching finding_id
+    all_activities = db.query(Activity).filter(Activity.extra_data.isnot(None)).order_by(Activity.created_at.desc()).all()
     matched_activities = [
         act for act in all_activities
         if act.extra_data and str(act.extra_data.get("finding_id", "")) == finding_str
     ]
 
-    # Resolve actor organization roles
-    user_ids = {act.user_id for act in matched_activities if act.user_id}
+    # Resolve actor organization roles in a single batch query (No N+1 queries)
+    user_ids: set[uuid.UUID] = set()
+    for act in matched_activities:
+        if act.user_id:
+            user_ids.add(act.user_id)
     if report.created_by:
         user_ids.add(report.created_by)
     if finding.assigned_to:
         user_ids.add(uuid.UUID(str(finding.assigned_to)) if isinstance(finding.assigned_to, str) else finding.assigned_to)
 
     role_map: dict[str, str] = {}
+    user_map: dict[uuid.UUID, User] = {}
     if user_ids:
+        users = db.query(User).filter(User.id.in_(list(user_ids))).all()
+        for u in users:
+            user_map[u.id] = u
+
         members = db.query(OrganizationMember).filter(
             OrganizationMember.organization_id == report.organization_id,
             OrganizationMember.user_id.in_(list(user_ids)),
@@ -2684,14 +3535,25 @@ def get_finding_activity(
         if act.event_type == "FINDING_CREATED":
             has_created_event = True
 
-        actor_user = act.user
+        actor_user = user_map.get(act.user_id) if act.user_id else None
         actor_role = role_map.get(str(act.user_id)) if act.user_id else None
-        actor = FindingActivityActor(
-            id=str(actor_user.id) if actor_user else "system",
-            full_name=actor_user.full_name if actor_user else "System",
-            email=actor_user.email if actor_user else "system@lexisgraph.internal",
-            role=actor_role,
-        )
+
+        if act.user_id and actor_user:
+            actor = FindingActivityActor(
+                id=str(actor_user.id),
+                full_name=actor_user.full_name or actor_user.username or "User",
+                email=actor_user.email or "",
+                role=actor_role,
+            )
+            display_user_name = actor_user.full_name or actor_user.username or "User"
+        else:
+            actor = FindingActivityActor(
+                id="system",
+                full_name="System",
+                email="system@lexisgraph.internal",
+                role=None,
+            )
+            display_user_name = "System"
 
         cat = _categorize_event(act.event_type)
         items.append(
@@ -2704,7 +3566,7 @@ def get_finding_activity(
                 title=act.title,
                 description=act.description,
                 icon_type=act.icon_type or "file",
-                user_name=actor_user.full_name if actor_user else "System",
+                user_name=display_user_name,
                 actor=actor,
                 created_at=act.created_at,
                 metadata=act.extra_data,
@@ -2713,7 +3575,7 @@ def get_finding_activity(
 
     # If no explicit FINDING_CREATED was logged, synthesize the initial creation event at finding.created_at
     if not has_created_event:
-        creator_user = db.get(User, report.created_by) if report.created_by else None
+        creator_user = user_map.get(report.created_by) if report.created_by else None
         creator_role = role_map.get(str(report.created_by)) if report.created_by else None
         creator_actor = FindingActivityActor(
             id=str(creator_user.id) if creator_user else "system",
@@ -2747,7 +3609,7 @@ def get_finding_activity(
     # Sort all items newest first
     items.sort(key=lambda x: x.created_at, reverse=True)
 
-    # Apply category filter
+    # 1. Apply category filter
     if category and category.strip().upper() != "ALL":
         cat_filter = category.strip().upper()
         if cat_filter == "STATUS":
@@ -2766,6 +3628,9 @@ def get_finding_activity(
                 "REMEDIATION_RETURNED",
                 "REMEDIATION_CYCLE_SUBMITTED",
                 "REMEDIATION_SUBMITTED",
+                "FINDING_REASSESSMENT_REQUIRED",
+                "FINDING_REASSESSMENT_COMPLETED",
+                "FINDING_REASSESSMENT_KEPT_RESOLVED",
             }
             items = [it for it in items if it.category == "STATUS" or it.event_type in status_events]
         elif cat_filter == "FINDING":
@@ -2774,6 +3639,54 @@ def get_finding_activity(
             items = [it for it in items if it.category == "DISCUSSION"]
         elif cat_filter == "REMEDIATION":
             items = [it for it in items if it.category == "REMEDIATION"]
+
+    # 2. Apply specific event_type filter
+    if event_type and event_type.strip():
+        et_filter = event_type.strip().upper()
+        items = [it for it in items if (it.event_type or "").upper() == et_filter]
+
+    # 3. Apply user_id / actor_id filter
+    if user_id:
+        u_str = str(user_id)
+        items = [it for it in items if it.actor and it.actor.id == u_str]
+
+    # 4. Apply role filter
+    if role and role.strip():
+        r_filter = role.strip().upper()
+        items = [it for it in items if it.actor and it.actor.role and it.actor.role.upper() == r_filter]
+
+    # 5. Apply date range filters
+    if date_from:
+        d_from = date_from if date_from.tzinfo else date_from.replace(tzinfo=timezone.utc)
+        items = [it for it in items if (it.created_at if it.created_at.tzinfo else it.created_at.replace(tzinfo=timezone.utc)) >= d_from]
+
+    if date_to:
+        d_to = date_to if date_to.tzinfo else date_to.replace(tzinfo=timezone.utc)
+        items = [it for it in items if (it.created_at if it.created_at.tzinfo else it.created_at.replace(tzinfo=timezone.utc)) <= d_to]
+
+    # 6. Apply search filter
+    if search and search.strip():
+        s_term = search.strip().lower()
+        filtered: List[FindingActivityItem] = []
+        for it in items:
+            title_match = s_term in (it.title or "").lower()
+            desc_match = s_term in (it.description or "").lower()
+            actor_match = s_term in (it.user_name or "").lower() or (it.actor and s_term in (it.actor.full_name or "").lower())
+            role_match = bool(it.actor and it.actor.role and s_term in it.actor.role.lower())
+            meta_match = False
+            if it.metadata:
+                for k, v in it.metadata.items():
+                    if isinstance(v, str) and s_term in v.lower():
+                        meta_match = True
+                        break
+                    elif isinstance(v, dict):
+                        for sub_k, sub_v in v.items():
+                            if isinstance(sub_v, str) and s_term in sub_v.lower():
+                                meta_match = True
+                                break
+            if title_match or desc_match or actor_match or role_match or meta_match:
+                filtered.append(it)
+        items = filtered
 
     total = len(items)
     total_pages = max(1, (total + limit - 1) // limit)
