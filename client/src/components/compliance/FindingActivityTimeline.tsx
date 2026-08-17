@@ -25,6 +25,10 @@ import {
   RefreshCw,
   ArrowRight,
   ExternalLink,
+  Search,
+  X,
+  FileSpreadsheet,
+  Edit3,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,6 +66,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
   const [activities, setActivities] = useState<FindingActivity[]>([]);
   const [totalActivities, setTotalActivities] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<ActivityCategory>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -70,7 +75,12 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const fetchActivities = useCallback(
-    async (targetPage: number, category: ActivityCategory, append: boolean = false) => {
+    async (
+      targetPage: number,
+      category: ActivityCategory,
+      search: string,
+      append: boolean = false
+    ) => {
       if (!findingId) return;
 
       if (append) {
@@ -84,6 +94,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         const catParam = category === "ALL" ? undefined : category;
         const res: FindingActivityPaginatedResponse = await findingsService.getActivity(findingId, {
           category: catParam,
+          search: search.trim() || undefined,
           page: targetPage,
           limit: 15,
         });
@@ -111,10 +122,10 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
     [findingId]
   );
 
-  // Initial and refreshTrigger fetch
+  // Initial and category/refresh fetch
   useEffect(() => {
-    fetchActivities(1, selectedCategory, false);
-  }, [fetchActivities, selectedCategory, refreshTrigger]);
+    fetchActivities(1, selectedCategory, searchQuery, false);
+  }, [fetchActivities, selectedCategory, searchQuery, refreshTrigger]);
 
   const handleCategoryChange = (cat: ActivityCategory) => {
     if (cat === selectedCategory) return;
@@ -122,9 +133,19 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
     setPage(1);
   };
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setPage(1);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    setPage(1);
+  };
+
   const handleLoadMore = () => {
     if (!hasMore || isLoadingMore) return;
-    fetchActivities(page + 1, selectedCategory, true);
+    fetchActivities(page + 1, selectedCategory, searchQuery, true);
   };
 
   const toggleExpand = (id: string) => {
@@ -181,12 +202,20 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         dotClass: "bg-indigo-500",
       };
     }
-    if (et === "FINDING_ASSIGNED") {
+    if (et === "FINDING_UPDATED") {
       return {
-        icon: <UserCheck className="h-3.5 w-3.5" />,
+        icon: <Edit3 className="h-3.5 w-3.5" />,
         badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
         borderClass: "border-blue-500/30",
         dotClass: "bg-blue-500",
+      };
+    }
+    if (et === "FINDING_ASSIGNED") {
+      return {
+        icon: <UserCheck className="h-3.5 w-3.5" />,
+        badgeClass: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30",
+        borderClass: "border-cyan-500/30",
+        dotClass: "bg-cyan-500",
       };
     }
     if (et === "FINDING_STATUS_CHANGED") {
@@ -197,7 +226,11 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         dotClass: "bg-amber-500",
       };
     }
-    if (et === "FINDING_SUBMITTED_FOR_REVIEW" || et === "REMEDIATION_CYCLE_SUBMITTED" || et === "REMEDIATION_SUBMITTED") {
+    if (
+      et === "FINDING_SUBMITTED_FOR_REVIEW" ||
+      et === "REMEDIATION_CYCLE_SUBMITTED" ||
+      et === "REMEDIATION_SUBMITTED"
+    ) {
       return {
         icon: <SendHorizontal className="h-3.5 w-3.5" />,
         badgeClass: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
@@ -221,7 +254,11 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         dotClass: "bg-emerald-500",
       };
     }
-    if (et === "FINDING_REOPENED" || et === "REMEDIATION_RETURNED") {
+    if (
+      et === "FINDING_REOPENED" ||
+      et === "REMEDIATION_RETURNED" ||
+      et === "FINDING_REASSESSMENT_REQUIRED"
+    ) {
       return {
         icon: <RotateCcw className="h-3.5 w-3.5" />,
         badgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
@@ -229,7 +266,11 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         dotClass: "bg-rose-500",
       };
     }
-    if (et === "FINDING_REJECTED" || et === "REMEDIATION_CYCLE_REJECTED" || et === "REMEDIATION_REJECTED") {
+    if (
+      et === "FINDING_REJECTED" ||
+      et === "REMEDIATION_CYCLE_REJECTED" ||
+      et === "REMEDIATION_REJECTED"
+    ) {
       return {
         icon: <XCircle className="h-3.5 w-3.5" />,
         badgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
@@ -253,7 +294,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         dotClass: "bg-purple-500",
       };
     }
-    if (et === "REMEDIATION_EVIDENCE_UPLOADED") {
+    if (et === "REMEDIATION_EVIDENCE_UPLOADED" || et === "REMEDIATION_EVIDENCE_ATTACHED") {
       return {
         icon: <FileText className="h-3.5 w-3.5" />,
         badgeClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30",
@@ -267,6 +308,14 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         badgeClass: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30",
         borderClass: "border-slate-500/30",
         dotClass: "bg-slate-500",
+      };
+    }
+    if (et === "FINDINGS_EXPORTED") {
+      return {
+        icon: <FileSpreadsheet className="h-3.5 w-3.5" />,
+        badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+        borderClass: "border-emerald-500/30",
+        dotClass: "bg-emerald-500",
       };
     }
 
@@ -304,7 +353,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         <Button
           variant="ghost"
           size="icon-xs"
-          onClick={() => fetchActivities(1, selectedCategory, false)}
+          onClick={() => fetchActivities(1, selectedCategory, searchQuery, false)}
           disabled={isLoading}
           className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
           title="Refresh activity timeline"
@@ -313,23 +362,47 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
         </Button>
       </div>
 
-      {/* Lightweight Category Filter Pills */}
-      <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-lg border border-border/40 overflow-x-auto">
-        {(["ALL", "FINDING", "DISCUSSION", "REMEDIATION", "STATUS"] as ActivityCategory[]).map((cat) => (
-          <button
-            key={cat}
-            type="button"
-            onClick={() => handleCategoryChange(cat)}
-            className={cn(
-              "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap capitalize",
-              selectedCategory === cat
-                ? "bg-background text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {cat === "ALL" ? "All Activity" : cat.charAt(0) + cat.slice(1).toLowerCase()}
-          </button>
-        ))}
+      {/* Filter Toolbar: Category Pills & Search Input */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {/* Lightweight Category Filter Pills */}
+        <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-lg border border-border/40 overflow-x-auto">
+          {(["ALL", "FINDING", "DISCUSSION", "REMEDIATION", "STATUS"] as ActivityCategory[]).map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => handleCategoryChange(cat)}
+              className={cn(
+                "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap capitalize",
+                selectedCategory === cat
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {cat === "ALL" ? "All Activity" : cat.charAt(0) + cat.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* Quick Search Input */}
+        <div className="relative flex-1 min-w-[180px] max-w-[280px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            placeholder="Search audit trail..."
+            className="w-full pl-8 pr-7 py-1 text-[11px] bg-muted/30 border border-border/50 rounded-lg focus:outline-hidden focus:border-indigo-500 text-foreground placeholder:text-muted-foreground/60 transition-colors"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content Area */}
@@ -347,54 +420,59 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
           <Button
             size="xs"
             variant="outline"
-            onClick={() => fetchActivities(1, selectedCategory, false)}
-            className="text-xs cursor-pointer"
+            onClick={() => fetchActivities(1, selectedCategory, searchQuery, false)}
+            className="cursor-pointer text-xs"
           >
             Retry
           </Button>
         </div>
       ) : activities.length === 0 ? (
-        <div className="p-6 text-center rounded-xl bg-muted/10 border border-dashed border-border/60 space-y-1.5">
-          <Clock className="h-6 w-6 text-muted-foreground mx-auto" />
-          <p className="text-xs font-semibold text-foreground">No activity recorded.</p>
-          <p className="text-[11px] text-muted-foreground">
-            {selectedCategory !== "ALL"
-              ? `No ${selectedCategory.toLowerCase()} events recorded for this finding yet.`
-              : "All finding actions and audit events will appear here in chronological order."}
+        <div className="text-center py-8 px-4 rounded-xl border border-dashed border-border/60 bg-muted/10 space-y-2">
+          <History className="h-6 w-6 mx-auto text-muted-foreground/50" />
+          <p className="text-xs font-semibold text-foreground">No activity recorded</p>
+          <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
+            {searchQuery
+              ? `No activity matched "${searchQuery}". Try adjusting your search query.`
+              : selectedCategory !== "ALL"
+              ? `No activity in category "${selectedCategory}". Switch to All Activity to view full history.`
+              : "Finding creation and future actions will be logged here in chronological order."}
           </p>
         </div>
       ) : (
-        <div className="space-y-6 pt-1">
+        <div className="space-y-6">
           {groupedActivities.map((group) => (
             <div key={group.dateLabel} className="space-y-3">
-              {/* Date Group Heading Badge */}
+              {/* Date Section Header */}
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold font-mono tracking-wider px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground border border-border/40">
+                <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
                   {group.dateLabel}
                 </span>
-                <div className="h-px bg-border/40 flex-1" />
+                <div className="flex-1 h-px bg-border/40" />
               </div>
 
-              {/* Activity Items in Group */}
-              <div className="space-y-3 pl-3 border-l-2 border-indigo-500/20">
+              {/* Activity Items Under Date */}
+              <div className="relative pl-4 space-y-3 border-l-2 border-border/40 ml-1.5">
                 {group.items.map((act) => {
                   const visuals = getEventVisuals(act.event_type);
                   const isExpanded = expandedIds.has(act.id);
-                  const meta = act.metadata || {};
-                  const hasExpandableContent =
-                    meta.old_status ||
-                    meta.new_status ||
-                    meta.submission_note ||
-                    meta.verification_note ||
-                    meta.rejection_reason ||
-                    meta.reason ||
-                    meta.admin_note ||
-                    meta.resolution_note ||
-                    meta.cycle_number ||
-                    meta.filename;
-
                   const actorName = act.actor?.full_name || act.user_name || "System";
                   const actorRole = act.actor?.role;
+                  const meta = act.metadata || {};
+
+                  // Determine if there is detailed metadata to expand
+                  const hasExpandableContent =
+                    Boolean(meta.old_status && meta.new_status) ||
+                    Boolean(meta.old_assignee_name && meta.new_assignee_name) ||
+                    Boolean(meta.changes) ||
+                    Boolean(meta.cycle_number) ||
+                    Boolean(meta.submission_note) ||
+                    Boolean(meta.rejection_reason || meta.reason) ||
+                    Boolean(meta.verification_note) ||
+                    Boolean(meta.admin_note || meta.resolution_note) ||
+                    Boolean(meta.reopen_reason) ||
+                    Boolean(meta.reassessment_trigger || meta.reassessment_reason) ||
+                    Boolean(meta.filename) ||
+                    Boolean(onNavigateToSection);
 
                   return (
                     <div
@@ -456,7 +534,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
 
                           {isExpanded && (
                             <div className="mt-2 space-y-2 pt-1">
-                              {/* Status Transition Pill */}
+                              {/* Status Transition Comparison */}
                               {meta.old_status && meta.new_status && (
                                 <div className="flex items-center gap-2 text-[11px] bg-muted/40 p-2 rounded-lg border border-border/40">
                                   <span className="text-muted-foreground font-medium">Status Change:</span>
@@ -467,6 +545,33 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
                                   <Badge variant="outline" className="text-[10px] font-mono font-bold text-foreground">
                                     {meta.new_status}
                                   </Badge>
+                                </div>
+                              )}
+
+                              {/* Assignment Change Comparison */}
+                              {meta.old_assignee_name && meta.new_assignee_name && (
+                                <div className="flex items-center gap-2 text-[11px] bg-muted/40 p-2 rounded-lg border border-border/40">
+                                  <span className="text-muted-foreground font-medium">Assignment:</span>
+                                  <span className="font-semibold text-foreground/80">{meta.old_assignee_name}</span>
+                                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                                  <span className="font-bold text-foreground">{meta.new_assignee_name}</span>
+                                </div>
+                              )}
+
+                              {/* Field Changes (e.g. Severity, Reasoning, Recommendation) */}
+                              {meta.changes && typeof meta.changes === "object" && (
+                                <div className="space-y-1 bg-muted/30 p-2 rounded-lg border border-border/30 text-[11px]">
+                                  <span className="font-bold text-foreground/90 block text-[10px] uppercase tracking-wider">
+                                    Field Deltas
+                                  </span>
+                                  {Object.entries(meta.changes).map(([field, delta]: [string, any]) => (
+                                    <div key={field} className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-muted-foreground capitalize font-medium">{field}:</span>
+                                      <span className="line-through text-muted-foreground/70">{String(delta?.old ?? "None")}</span>
+                                      <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
+                                      <span className="font-bold text-foreground">{String(delta?.new ?? "None")}</span>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
 
@@ -497,6 +602,43 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
                                     <AlertTriangle className="h-3 w-3" /> Rejection Rationale
                                   </span>
                                   <p className="text-foreground leading-relaxed">{meta.rejection_reason || meta.reason}</p>
+                                </div>
+                              )}
+
+                              {/* Reopen Reason */}
+                              {meta.reopen_reason && (
+                                <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] space-y-0.5">
+                                  <span className="font-bold text-rose-600 dark:text-rose-400 block text-[9px] uppercase tracking-wider flex items-center gap-1">
+                                    <RotateCcw className="h-3 w-3" /> Reopening Reason
+                                  </span>
+                                  <p className="text-foreground leading-relaxed">{meta.reopen_reason}</p>
+                                </div>
+                              )}
+
+                              {/* Reassessment Trigger & Decision */}
+                              {(meta.reassessment_trigger || meta.reassessment_reason || meta.decision) && (
+                                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] space-y-1">
+                                  <span className="font-bold text-amber-600 dark:text-amber-400 block text-[9px] uppercase tracking-wider">
+                                    Reassessment Audit Information
+                                  </span>
+                                  {meta.reassessment_trigger && (
+                                    <p className="text-foreground">
+                                      <span className="text-muted-foreground">Trigger:</span> {meta.reassessment_trigger}
+                                    </p>
+                                  )}
+                                  {meta.reassessment_reason && (
+                                    <p className="text-foreground">
+                                      <span className="text-muted-foreground">Reason:</span> {meta.reassessment_reason}
+                                    </p>
+                                  )}
+                                  {meta.decision && (
+                                    <p className="text-foreground">
+                                      <span className="text-muted-foreground">Admin Decision:</span>{" "}
+                                      <Badge variant="outline" className="font-bold">
+                                        {meta.decision}
+                                      </Badge>
+                                    </p>
+                                  )}
                                 </div>
                               )}
 

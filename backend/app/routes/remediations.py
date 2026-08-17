@@ -1446,6 +1446,9 @@ def delete_remediation_evidence(
     except Exception as exc:
         logger.warning("Failed removing file from disk: %s", exc)
 
+    ev_filename = evidence.original_filename
+    ev_cycle = evidence.cycle_number
+
     db.delete(evidence)
     db.commit()
 
@@ -1454,9 +1457,24 @@ def delete_remediation_evidence(
         user_id=current_user.id,
         event_type="REMEDIATION_EVIDENCE_DELETED",
         title=f"Deleted Evidence for Finding #{str(finding.id)[:8]}",
-        description=f"Deleted evidence file: {evidence.original_filename}",
+        description=f"Deleted evidence file: {ev_filename}",
         icon_type="trash",
-        extra_data={"finding_id": str(finding.id), "evidence_id": str(evidence_id)},
+        extra_data={
+            "finding_id": str(finding.id),
+            "organization_id": str(report.organization_id),
+            "evidence_id": str(evidence_id),
+            "filename": ev_filename,
+            "cycle_number": ev_cycle,
+        },
+    )
+
+    audit_service.log_audit_event(
+        db,
+        user_id=current_user.id,
+        action="REMEDIATION_EVIDENCE_DELETED",
+        organization_id=report.organization_id,
+        entity="RemediationEvidence",
+        entity_id=str(evidence_id),
     )
 
     return {"message": "Evidence file deleted successfully."}

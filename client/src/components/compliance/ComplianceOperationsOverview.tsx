@@ -31,6 +31,7 @@ import {
   AlertCircle,
   Calendar,
   TrendingUp,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,6 +43,7 @@ import {
 } from "@/services/api/compliance";
 import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
 import { FindingAnalyticsDashboard } from "./FindingAnalyticsDashboard";
+import { ComplianceReportModal } from "./ComplianceReportModal";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
 import { Organization } from "@/services/api/organizations";
 import { formatRoleLabel } from "@/utils/role-utils";
@@ -129,6 +131,9 @@ export function ComplianceOperationsOverview() {
   // Finding Detail Drawer State
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Compliance Report Modal State (Sprint 7.14)
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const lastFetchedOrgIdRef = React.useRef<string | undefined>(undefined);
 
@@ -268,6 +273,16 @@ export function ComplianceOperationsOverview() {
             >
               <Layers className="h-3.5 w-3.5" />
               <span>All Findings ({summary?.total_findings || 0})</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsReportModalOpen(true)}
+              className="gap-1.5 text-xs font-semibold cursor-pointer border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span>Generate Report</span>
             </Button>
 
             <Button
@@ -957,6 +972,14 @@ export function ComplianceOperationsOverview() {
         onFindingUpdated={handleFindingUpdated}
         reportName={selectedFinding ? `Report #${selectedFinding.report_id.slice(0, 8)}` : undefined}
         organizationId={activeOrgId}
+      />
+
+      {/* ── Compliance Report Generation Modal (Sprint 7.14) ── */}
+      <ComplianceReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        organizationId={activeOrgId}
+        organizationName={overviewData?.organization_name}
       />
     </div>
   );

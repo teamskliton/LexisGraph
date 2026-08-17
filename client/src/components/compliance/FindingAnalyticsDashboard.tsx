@@ -25,6 +25,7 @@ import {
   Activity,
   AlertCircle,
   Sparkles,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +36,7 @@ import {
   AgingFindingItem,
 } from "@/services/api/findings";
 import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
+import { ComplianceReportModal } from "./ComplianceReportModal";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +69,9 @@ export function FindingAnalyticsDashboard({
   // Drawer state for inspecting high-risk / aging findings directly
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Compliance Report Modal State (Sprint 7.14)
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Fetch analytics data
   const fetchAnalytics = useCallback(async () => {
@@ -186,6 +191,16 @@ export function FindingAnalyticsDashboard({
               </button>
             ))}
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsReportModalOpen(true)}
+            className="gap-1.5 text-xs font-semibold cursor-pointer border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>Generate Report</span>
+          </Button>
 
           <Button
             variant="outline"
@@ -827,6 +842,15 @@ export function FindingAnalyticsDashboard({
           }}
         />
       )}
+
+      {/* ── Compliance Report Generation Modal (Sprint 7.14) ── */}
+      <ComplianceReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        organizationId={organizationId}
+        organizationName={organizationName}
+        initialDateRange={dateRange}
+      />
     </div>
   );
 }

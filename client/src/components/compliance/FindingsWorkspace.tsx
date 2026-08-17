@@ -22,11 +22,13 @@ import {
   Clock,
   RotateCcw,
   CheckCircle,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/context/auth-context";
 import { reportService } from "@/services/reportService";
+import { findingsService } from "@/services/api/findings";
 import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +121,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
 
 export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, activeMembership } = useAuth();
 
   // Data State
   const [findings, setFindings] = useState<FindingItem[]>([]);
@@ -132,6 +134,19 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortOrder, setSortOrder] = useState<"severity_desc" | "severity_asc" | "score_asc" | "score_desc" | "updated_desc">("severity_desc");
+
+  // Export State (Sprint 7.12)
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Export Permission
+  const canExport = useMemo(() => {
+    if (user?.is_superuser) return true;
+    const role = (activeMembership?.role || "").toUpperCase();
+    if (["ADMIN", "ORGANIZATION_ADMIN", "SUPER_ADMIN", "COMPLIANCE_ANALYST", "LEGAL_ANALYST", "MANAGER", "REVIEWER"].includes(role)) {
+      return true;
+    }
+    return role !== "VIEWER" && role !== "EMPLOYEE";
+  }, [user, activeMembership]);
 
   // Drawer State
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
@@ -268,6 +283,57 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
     setSortOrder("severity_desc");
   };
 
+  const handleExportFindings = async () => {
+    if (isExporting) return;
+    if (filteredFindings.length === 0) {
+      toast.info("No Findings match the selected filters.");
+      return;
+    }
+
+    setIsExporting(true);
+    const toastId = toast.loading("Exporting findings to CSV...");
+
+    try {
+      const result = await findingsService.exportFindings(organizationId, {
+        report_id: reportId,
+        search: searchQuery.trim() || undefined,
+        status: statusFilter !== "ALL" ? statusFilter : undefined,
+        severity: severityFilter !== "ALL" ? severityFilter : undefined,
+      });
+
+      if (result.count === 0) {
+        toast.dismiss(toastId);
+        toast.info("No Findings match the selected filters.");
+        return;
+      }
+
+      const url = window.URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", result.filename || `lexisgraph-report-${reportId.slice(0, 8)}-findings.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.dismiss(toastId);
+      toast.success(`Exported ${result.count} findings successfully.`);
+    } catch (err: any) {
+      console.error("Failed to export findings:", err);
+      toast.dismiss(toastId);
+      const rawDetail = err?.response?.data?.detail || "Unable to export Findings.";
+      const detailStr = typeof rawDetail === "string" ? rawDetail : "Unable to export Findings.";
+      toast.error(detailStr, {
+        action: {
+          label: "Retry",
+          onClick: () => handleExportFindings(),
+        },
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* ── 1. Header ── */}
@@ -298,7 +364,29 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {canExport && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportFindings}
+              disabled={isExporting}
+              className="gap-1.5 text-xs cursor-pointer border-indigo-500/30 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium"
+            >
+              {isExporting ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Exporting...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Export Findings</span>
+                </>
+              )}
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"
