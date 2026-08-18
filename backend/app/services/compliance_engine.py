@@ -260,9 +260,54 @@ def _search_policy_clauses_in_qdrant(
     return results
 
 
+def _deduplicate_policy_matches(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Sprint 8.2: Deduplicate near-identical policy chunks to avoid showing redundant
+    paragraphs in the GraphRAG context or evidence presentation.
+    """
+    if not matches:
+        return []
+
+    unique_matches: list[dict[str, Any]] = []
+    seen_token_sets: list[set[str]] = []
+    seen_raw_norms: list[str] = []
+
+    for m in matches:
+        text = str(m.get("text") or "").strip()
+        if not text:
+            continue
+        cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+        norm = re.sub(r"\s+", " ", cleaned).strip()
+        tokens = set(norm.split())
+
+        if not tokens:
+            continue
+
+        # Check for exact normalized match, substring match, or high token overlap (>= 75%)
+        is_dup = False
+        for seen_tokens, seen_norm in zip(seen_token_sets, seen_raw_norms):
+            if norm == seen_norm or (len(norm) > 30 and len(seen_norm) > 30 and (norm in seen_norm or seen_norm in norm)):
+                is_dup = True
+                break
+            intersection = len(tokens & seen_tokens)
+            union = len(tokens | seen_tokens)
+            if union > 0 and (intersection / union) >= 0.75:
+                is_dup = True
+                break
+
+        if not is_dup:
+            seen_token_sets.append(tokens)
+            seen_raw_norms.append(norm)
+            unique_matches.append(m)
+
+    return unique_matches
+
+
+
 def _get_graph_similarity_score(reg_clause: str, pol_clause: str) -> float:
     """Return graph similarity score between two clauses."""
     return 0.0
+
 
 
 # ---------------------------------------------------------------------------
@@ -400,12 +445,8 @@ def _format_single_clause_block(
 def _build_batch_prompt(batch_items: list[dict[str, Any]]) -> str:
     """
     Build a single LLM prompt that evaluates multiple regulation clauses at once.
-
-    Each item in batch_items must have:
-        index, regulation_clause, matched_policy_clauses, structural_context
-
-    The LLM must return a JSON array of exactly len(batch_items) objects,
-    one per clause, in the same order.
+    Enforces strict evidence grounding, 4 distinct outcomes, missing aspects enumeration,
+    and conflicting evidence detection.
     """
     clause_blocks = []
     for item in batch_items:
@@ -423,31 +464,45 @@ def _build_batch_prompt(batch_items: list[dict[str, Any]]) -> str:
 
     return (
         "You are LexisGraph AI Senior Legal & Regulatory Compliance Auditor.\n"
-        f"Evaluate the following {n} regulation requirement(s) against their matched policy clauses.\n"
-        "For each clause, consider ALL matched policy clauses together, plus the graph context.\n\n"
+        f"Evaluate the following {n} regulation requirement(s) against their matched policy clauses with strict evidence grounding.\n\n"
+        "STRICT EVALUATION RULES:\n"
+        "1. COMPLIANT / COVERED: The policy provides clear, affirmative evidence satisfying ALL mandatory aspects of the regulatory obligation. "
+        "High keyword overlap or similarity alone is NOT sufficient (e.g. 'complaints email' does NOT satisfy 'Internal Complaints Committee'). "
+        "Conversely, if different words convey the exact same requirement (e.g. 'yearly conduct education' vs 'annual awareness training'), recognize semantic equivalence and mark COMPLIANT.\n"
+        "2. PARTIALLY_COMPLIANT: The policy addresses some aspects of the requirement, but one or more critical obligations are missing, ambiguous, or incomplete. "
+        "You MUST explicitly list each missing aspect in 'missing_aspects'.\n"
+        "3. NON_COMPLIANT / GAP: The policy does not adequately address the requirement. Do NOT create a gap merely due to synonym usage if meaning is satisfied.\n"
+        "4. UNABLE_TO_DETERMINE: Policy evidence contains contradictory/conflicting statements (e.g. different sections specify different numbers/rules) or evidence is unparseable. Set 'conflicting_evidence': true if contradictory.\n"
+        "5. STRICT EVIDENCE RULE: Base your reasoning ONLY on the quoted policy matches. Do NOT assume, invent, or extrapolate unstated policy terms.\n"
+        "6. CONFIDENCE: Set 'confidence' to 'HIGH' (clear evidence or clear gap), 'MEDIUM' (inferred meaning / minor ambiguity), or 'LOW' (sparse / uncertain evidence).\n\n"
         f"{clauses_section}\n\n"
-        "Instructions:\n"
-        "1. For EACH clause, determine status: exactly one of ['COMPLIANT', 'PARTIALLY_COMPLIANT', 'NON_COMPLIANT']\n"
-        "2. Provide a 2-3 sentence legal justification in 'reasoning'.\n"
-        "3. Provide a concrete remediation in 'recommendation' for PARTIALLY_COMPLIANT or NON_COMPLIANT, null for COMPLIANT.\n"
-        f"4. Return ONLY a valid JSON array of exactly {n} objects, in the same order as the clauses above.\n\n"
-        "Required output schema (JSON array, no extra text, no markdown):\n"
+        f"Return ONLY a valid JSON array of exactly {n} objects, in the same order as the clauses above.\n"
+        "Required output schema (JSON array, no markdown fences):\n"
         "[\n"
-        "  {\"clause_index\": 1, \"status\": \"COMPLIANT|PARTIALLY_COMPLIANT|NON_COMPLIANT\", "
-        "\"reasoning\": \"string\", \"recommendation\": \"string or null\"},\n"
+        "  {\n"
+        "    \"clause_index\": 1,\n"
+        "    \"status\": \"COMPLIANT|PARTIALLY_COMPLIANT|NON_COMPLIANT|UNABLE_TO_DETERMINE\",\n"
+        "    \"confidence\": \"HIGH|MEDIUM|LOW\",\n"
+        "    \"missing_aspects\": [\"string\"],\n"
+        "    \"conflicting_evidence\": false,\n"
+        "    \"reasoning\": \"string grounded strictly in evidence\",\n"
+        "    \"recommendation\": \"string or null\"\n"
+        "  },\n"
         f"  ... ({n} total items)\n"
         "]"
     )
 
 
 def _normalise_status(raw: str) -> str | None:
-    """Normalise a raw status string to one of the three canonical values."""
+    """Normalise a raw status string to one of the canonical engine values."""
     s = raw.upper()
+    if "UNABLE" in s or "CONFLICT" in s:
+        return "UNABLE_TO_DETERMINE"
     if "PARTIAL" in s:
         return "PARTIALLY_COMPLIANT"
     if "NON" in s or "GAP" in s:
         return "NON_COMPLIANT"
-    if "COMPLIANT" in s:
+    if "COMPLIANT" in s or "COVERED" in s:
         return "COMPLIANT"
     return None
 
@@ -457,6 +512,9 @@ def _heuristic_fallback(regulation_clause: str, matched_policy_clauses: list[dic
     if not matched_policy_clauses:
         return {
             "status": "NON_COMPLIANT",
+            "confidence": "HIGH",
+            "missing_aspects": [f"No policy section addresses: '{regulation_clause[:100]}'"],
+            "conflicting_evidence": False,
             "reasoning": "No corresponding policy clause was found addressing this regulation requirement.",
             "recommendation": f"Add a new policy clause specifically addressing: '{regulation_clause[:120]}...'",
         }
@@ -464,18 +522,27 @@ def _heuristic_fallback(regulation_clause: str, matched_policy_clauses: list[dic
     if best_score >= _COMPLIANT_THRESHOLD:
         return {
             "status": "COMPLIANT",
-            "reasoning": f"Policy clause aligns strongly with the regulation requirement (Similarity: {best_score:.2f}). [Heuristic fallback — LLM unavailable]",
+            "confidence": "MEDIUM",
+            "missing_aspects": [],
+            "conflicting_evidence": False,
+            "reasoning": f"Policy clause aligns strongly with the regulation requirement (Vector Similarity: {best_score:.2f}). [Heuristic fallback — LLM unavailable]",
             "recommendation": None,
         }
     if best_score >= _PARTIAL_THRESHOLD:
         return {
             "status": "PARTIALLY_COMPLIANT",
-            "reasoning": f"Policy clause shows partial coverage (Similarity: {best_score:.2f}). [Heuristic fallback — LLM unavailable]",
+            "confidence": "LOW",
+            "missing_aspects": [f"Potential missing details for: '{regulation_clause[:100]}'"],
+            "conflicting_evidence": False,
+            "reasoning": f"Policy clause shows partial coverage (Vector Similarity: {best_score:.2f}). [Heuristic fallback — LLM unavailable]",
             "recommendation": f"Update policy wording to explicitly mandate: '{regulation_clause[:100]}...'",
         }
     return {
         "status": "NON_COMPLIANT",
-        "reasoning": f"Policy clause has insufficient alignment (Similarity: {best_score:.2f}). [Heuristic fallback — LLM unavailable]",
+        "confidence": "MEDIUM",
+        "missing_aspects": [f"Policy evidence has insufficient alignment for: '{regulation_clause[:100]}'"],
+        "conflicting_evidence": False,
+        "reasoning": f"Policy clause has insufficient alignment (Vector Similarity: {best_score:.2f}). [Heuristic fallback — LLM unavailable]",
         "recommendation": f"Draft an explicit policy section covering: '{regulation_clause[:100]}...'",
     }
 
@@ -486,11 +553,7 @@ def _parse_batch_llm_response(
 ) -> list[dict[str, Any]] | None:
     """
     Parse the LLM batch response — a JSON array of evaluation results.
-
-    Returns a list of parsed results aligned to batch_items order,
-    or None if the top-level JSON is unparseable.
-
-    Per-item errors fall back to heuristic rather than failing the whole batch.
+    Extracts status, confidence, missing_aspects, conflicting_evidence, reasoning, and recommendation.
     """
     try:
         cleaned = re.sub(r"^```(?:json)?\s*", "", llm_response.strip(), flags=re.IGNORECASE)
@@ -506,23 +569,34 @@ def _parse_batch_llm_response(
     results: list[dict[str, Any]] = []
 
     for item_idx, item in enumerate(batch_items):
-        # Attempt to find the matching entry in the response by clause_index or position
         raw_entry: dict | None = None
         expected_idx = item["index"]
-        # Prefer matching by clause_index field
         for candidate in raw_list:
             if isinstance(candidate, dict) and candidate.get("clause_index") == expected_idx:
                 raw_entry = candidate
                 break
-        # Fall back to positional matching
         if raw_entry is None and item_idx < len(raw_list):
             raw_entry = raw_list[item_idx] if isinstance(raw_list[item_idx], dict) else None
 
         if raw_entry:
             status = _normalise_status(str(raw_entry.get("status") or ""))
             if status:
+                confidence = str(raw_entry.get("confidence") or "HIGH").upper()
+                if confidence not in {"HIGH", "MEDIUM", "LOW"}:
+                    confidence = "MEDIUM"
+
+                raw_missing = raw_entry.get("missing_aspects") or []
+                missing_aspects = [str(a) for a in raw_missing if a] if isinstance(raw_missing, list) else []
+
+                conflicting_evidence = bool(raw_entry.get("conflicting_evidence", False))
+                if conflicting_evidence and status != "UNABLE_TO_DETERMINE":
+                    status = "UNABLE_TO_DETERMINE"
+
                 results.append({
                     "status": status,
+                    "confidence": confidence,
+                    "missing_aspects": missing_aspects,
+                    "conflicting_evidence": conflicting_evidence,
                     "reasoning": str(raw_entry.get("reasoning") or "").strip() or "No reasoning provided.",
                     "recommendation": raw_entry.get("recommendation") or None,
                 })
@@ -538,6 +612,7 @@ def _parse_batch_llm_response(
         )
 
     return results
+
 
 
 def evaluate_batch_compliance_with_llm(
@@ -771,12 +846,13 @@ def analyze_compliance_engine(
         # Qdrant: semantic search for matching policy clauses
         matched_policy_clauses: list[dict[str, Any]] = []
         if reg_emb and isinstance(reg_emb, list):
-            matched_policy_clauses = _search_policy_clauses_in_qdrant(
+            raw_matches = _search_policy_clauses_in_qdrant(
                 regulation_embedding=reg_emb,
                 policy_document_id=policy_doc_id_str,
                 top_k=_QDRANT_TOP_K,
                 all_policy_clauses=all_policy_clauses,
             )
+            matched_policy_clauses = _deduplicate_policy_matches(raw_matches)
 
         # Neo4j: structural context for the best policy match
         structural_context: dict[str, Any] = {
@@ -830,6 +906,9 @@ def analyze_compliance_engine(
         status_val = eval_result["status"]
         reasoning = eval_result["reasoning"]
         rec = eval_result.get("recommendation")
+        confidence = eval_result.get("confidence", "HIGH")
+        missing_aspects = eval_result.get("missing_aspects", [])
+        conflicting_evidence = eval_result.get("conflicting_evidence", False)
 
         best_policy_text = matched_policy_clauses[0]["text"] if matched_policy_clauses else None
         best_policy_id = matched_policy_clauses[0]["clause_id"] if matched_policy_clauses else None
@@ -848,10 +927,14 @@ def analyze_compliance_engine(
                 or structural_context.get("entities")
             ),
             "status": status_val,
+            "confidence": confidence,
+            "missing_aspects": missing_aspects,
+            "conflicting_evidence": conflicting_evidence,
             "reasoning": reasoning,
             "recommendation": rec,
         }
         evaluated_clauses.append(clause_eval)
+
 
         if status_val == "COMPLIANT":
             compliant_count += 1
@@ -971,10 +1054,24 @@ def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dic
                 failed_report.summary = str(exc)
                 failed_report.updated_at = datetime.now(timezone.utc)
                 db.commit()
+                # Sprint 8.1: Audit event for analysis failure
+                try:
+                    from app.services.audit_service import log_audit_event
+                    log_audit_event(
+                        db,
+                        user_id=failed_report.created_by,
+                        action="COMPLIANCE_ANALYSIS_FAILED",
+                        organization_id=failed_report.organization_id,
+                        entity="ComplianceReport",
+                        entity_id=str(report_id),
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning("Failed to write audit event COMPLIANCE_ANALYSIS_FAILED report_id=%s", report_id)
         except Exception as rollback_exc:
             db.rollback()
             logger.error("Failed setting FAILED status for report_id=%s: %s", report_id, rollback_exc)
         raise
+
 
 
 def store_compliance_report(
@@ -1153,5 +1250,20 @@ def store_compliance_report(
         extra_data={"report_id": str(report.id), "overall_score": report.overall_score},
     )
 
+    # Sprint 8.1: Audit event for analysis completion
+    try:
+        from app.services.audit_service import log_audit_event
+        log_audit_event(
+            db,
+            user_id=report.created_by,
+            action="COMPLIANCE_ANALYSIS_COMPLETED",
+            organization_id=report.organization_id,
+            entity="ComplianceReport",
+            entity_id=str(report.id),
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to write audit event COMPLIANCE_ANALYSIS_COMPLETED report_id=%s", report.id)
+
     return result
+
 

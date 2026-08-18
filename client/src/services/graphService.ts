@@ -17,20 +17,37 @@ export interface GraphNode {
   report_id?: string;
   policy_id?: string;
   regulation_id?: string;
+  finding_id?: string;
+  remediation_id?: string;
   overall_score?: number | null;
+  similarity_score?: number | null;
   findings_count?: number;
   last_analyzed_at?: string | null;
   risk_level?: string;
   status?: string;
+  lifecycle_status?: string;
+  severity?: string;
+  coverage_status?: "COVERED" | "PARTIALLY_COVERED" | "GAP" | "UNABLE_TO_DETERMINE" | string;
+  confidence?: string | number;
+  missing_aspects?: string[];
+  conflicting_evidence?: boolean;
   created_at?: string | null;
   reasoning?: string;
   recommendation?: string;
+  citation?: string;
   policy_clause_id?: string;
   policy_clause_text?: string;
   regulation_clause_id?: string;
   regulation_clause_text?: string;
-  confidence?: number;
+  act_name?: string;
+  act_year?: number;
+  jurisdiction?: string;
+  version?: string;
+  description?: string;
+  target_date?: string | null;
+  is_focused?: boolean;
 }
+
 
 export interface GraphEdge {
   id: string;
@@ -40,6 +57,7 @@ export interface GraphEdge {
   score?: number;
   confidence?: number;
   rank?: number;
+  coverage_status?: string;
 }
 
 export interface GraphViewResponse {
@@ -47,10 +65,13 @@ export interface GraphViewResponse {
   nodes: GraphNode[];
   edges: GraphEdge[];
   meta?: {
-    documents: number;
-    clauses: number;
-    has_clause_edges: number;
-    similarity_edges: number;
+    total_nodes?: number;
+    total_edges?: number;
+    focus_node?: string | null;
+    documents?: number;
+    clauses?: number;
+    has_clause_edges?: number;
+    similarity_edges?: number;
   };
   metadata?: {
     build_id?: string | null;
@@ -107,10 +128,17 @@ export const graphService = {
     knowledge_graph_only?: boolean;
     build_id?: string;
     organization_id?: string;
+    focus_node?: string;
+    depth?: number;
+    search?: string;
+    finding_id?: string;
+    document_id?: string;
+    regulation_id?: string;
   }): Promise<GraphViewResponse> => {
     const response = await api.get<GraphViewResponse>("/graph-view", { params });
     return response.data;
   },
+
 
   /**
    * Fetch clause neighborhood and matching regulations from GET /graph/clause/{clause_id}

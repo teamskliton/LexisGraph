@@ -170,6 +170,20 @@ def analyze_compliance_report(
         extra_data={"job_id": str(job.id), "organization_id": str(data.organization_id)},
     )
 
+    # Sprint 8.1: Audit trail for compliance analysis initiation
+    try:
+        from app.services.audit_service import log_audit_event
+        log_audit_event(
+            db,
+            user_id=user_id,
+            action="COMPLIANCE_ANALYSIS_STARTED",
+            organization_id=data.organization_id,
+            entity="ComplianceJob",
+            entity_id=str(job.id),
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to write audit event for COMPLIANCE_ANALYSIS_STARTED job_id=%s", job.id)
+
     return {
         "job_id": job.id,
         "status": "QUEUED",
@@ -380,3 +394,228 @@ def cancel_compliance_job_by_id(
         )
     logger.info("Job cancelled: job_id=%s by user=%s", job_id, user_id)
     return job
+
+
+# ---------------------------------------------------------------------------
+# Sprint 8.1: Gap Analysis Service Function
+# ---------------------------------------------------------------------------
+
+def get_gap_analysis_for_report(
+    db: Session,
+    report_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> dict[str, Any]:
+    """
+    Build and return a structured gap analysis for a completed compliance report.
+
+    Loads the existing ComplianceReport, its stored report_json (evaluated_clauses),
+    and the associated ReportFinding records. Maps each clause to the Sprint 8.1
+    coverage vocabulary and attaches finding traceability.
+
+    Coverage status mapping:
+      COMPLIANT            -> COVERED
+      PARTIALLY_COMPLIANT  -> PARTIALLY_COVERED
+      NON_COMPLIANT        -> GAP  (or UNABLE_TO_DETERMINE if heuristic fallback)
+      FAILED               -> UNABLE_TO_DETERMINE
+
+    Staleness is detected by comparing the stored policy_hash / regulation_hash
+    against the current document checksums.
+    """
+    import json as _json
+    from app.compliance.models import ComplianceReport as _ComplianceReport, ReportFinding as _ReportFinding
+    from app.db.models import Document as _Document
+    from app.db.models.regulation import Regulation as _Regulation
+
+    _HEURISTIC_MARKER = "[Heuristic fallback"
+
+    report = crud.get_compliance_report(db, report_id)
+    if not report or report.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Compliance report not found.",
+        )
+
+    # Authorization: reuse existing ownership check pattern
+    if report.organization.created_by != user_id and report.created_by != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this compliance report.",
+        )
+
+    # -----------------------------------------------------------------------
+    # Load evaluated clauses from stored report_json
+    # -----------------------------------------------------------------------
+    evaluated_clauses: list[dict[str, Any]] = []
+    if report.report_json and isinstance(report.report_json, dict):
+        evaluated_clauses = report.report_json.get("evaluated_clauses", [])
+    elif report.summary:
+        try:
+            parsed = _json.loads(report.summary)
+            if isinstance(parsed, dict):
+                evaluated_clauses = parsed.get("evaluated_clauses", [])
+        except Exception:  # noqa: BLE001
+            pass
+
+    # -----------------------------------------------------------------------
+    # Load findings for this report, indexed by regulation_clause_id
+    # -----------------------------------------------------------------------
+    findings_by_clause: dict[str, _ReportFinding] = {}
+    findings = db.query(_ReportFinding).filter(_ReportFinding.report_id == report.id).all()
+    for f in findings:
+        if f.regulation_clause_id:
+            findings_by_clause[str(f.regulation_clause_id)] = f
+
+    # -----------------------------------------------------------------------
+    # Load Regulation and Policy metadata
+    # -----------------------------------------------------------------------
+    reg_info = None
+    reg_obj = db.get(_Regulation, report.regulation_id)
+    if reg_obj:
+        reg_info = {
+            "id": reg_obj.id,
+            "title": reg_obj.title,
+            "act_name": reg_obj.act_name,
+            "version": reg_obj.version,
+            "act_year": reg_obj.act_year,
+            "jurisdiction": reg_obj.jurisdiction,
+            "original_filename": reg_obj.original_filename,
+        }
+
+    policy_info = None
+    policy_obj = db.get(_Document, report.policy_document_id) if report.policy_document_id else None
+    if policy_obj:
+        policy_info = {
+            "id": policy_obj.id,
+            "original_filename": policy_obj.original_filename,
+            "document_type": policy_obj.document_type.value if hasattr(policy_obj.document_type, "value") else str(policy_obj.document_type),
+            "organization_id": policy_obj.organization_id,
+        }
+
+    # -----------------------------------------------------------------------
+    # Stale detection: compare stored hashes vs current document checksums
+    # -----------------------------------------------------------------------
+    is_stale = False
+    stale_reason = None
+    if policy_obj and report.policy_hash:
+        current_policy_checksum = getattr(policy_obj, "checksum", None)
+        if current_policy_checksum and current_policy_checksum != report.policy_hash:
+            is_stale = True
+            stale_reason = "Policy document has been updated since this analysis was run."
+    if not is_stale and reg_obj and report.regulation_hash:
+        current_reg_hash = getattr(reg_obj, "document_hash", None)
+        if current_reg_hash and current_reg_hash != report.regulation_hash:
+            is_stale = True
+            stale_reason = "Regulation document has been updated since this analysis was run."
+
+    # -----------------------------------------------------------------------
+    # Build per-clause results with coverage status mapping
+    # -----------------------------------------------------------------------
+    clause_results: list[dict[str, Any]] = []
+    covered = 0
+    partially_covered = 0
+    gap = 0
+    unable_to_determine = 0
+
+    for idx, clause in enumerate(evaluated_clauses):
+        raw_status = (clause.get("status") or "NON_COMPLIANT").upper()
+        reasoning = clause.get("reasoning") or ""
+        is_heuristic = _HEURISTIC_MARKER in reasoning
+        conflicting_evidence = bool(clause.get("conflicting_evidence", False))
+        confidence = str(clause.get("confidence") or "HIGH").upper()
+        if confidence not in {"HIGH", "MEDIUM", "LOW"}:
+            confidence = "MEDIUM"
+        raw_missing = clause.get("missing_aspects") or []
+        missing_aspects = [str(m) for m in raw_missing if m] if isinstance(raw_missing, list) else []
+
+        # Map engine status -> coverage_status
+        if conflicting_evidence or raw_status == "UNABLE_TO_DETERMINE":
+            coverage_status = "UNABLE_TO_DETERMINE"
+            unable_to_determine += 1
+        elif raw_status in {"COMPLIANT", "COVERED"}:
+            coverage_status = "COVERED"
+            covered += 1
+        elif raw_status in {"PARTIALLY_COMPLIANT", "PARTIALLY_COVERED"}:
+            if is_heuristic:
+                coverage_status = "UNABLE_TO_DETERMINE"
+                unable_to_determine += 1
+            else:
+                coverage_status = "PARTIALLY_COVERED"
+                partially_covered += 1
+        elif raw_status == "FAILED":
+            coverage_status = "UNABLE_TO_DETERMINE"
+            unable_to_determine += 1
+        else:  # NON_COMPLIANT / GAP
+            if is_heuristic:
+                coverage_status = "UNABLE_TO_DETERMINE"
+                unable_to_determine += 1
+            else:
+                coverage_status = "GAP"
+                gap += 1
+
+        # Attach finding info for non-covered clauses
+        reg_clause_id = str(clause.get("regulation_clause_id") or "")
+        finding_info = None
+        matched_finding = findings_by_clause.get(reg_clause_id)
+        if matched_finding and coverage_status != "COVERED":
+            finding_info = {
+                "finding_id": matched_finding.id,
+                "lifecycle_status": matched_finding.lifecycle_status or "OPEN",
+                "severity": matched_finding.severity or "HIGH",
+                "recommendation": matched_finding.recommendation,
+            }
+
+        clause_results.append({
+            "clause_index": idx,
+            "regulation_clause_id": reg_clause_id,
+            "regulation_text": clause.get("regulation_text") or "",
+            "coverage_status": coverage_status,
+            "raw_engine_status": raw_status,
+            "similarity_score": float(clause.get("similarity_score") or 0.0),
+            "confidence": confidence,
+            "missing_aspects": missing_aspects,
+            "conflicting_evidence": conflicting_evidence,
+            "reasoning": reasoning,
+            "recommendation": clause.get("recommendation"),
+            "policy_clause_id": clause.get("matched_policy_clause_id"),
+            "policy_evidence": clause.get("matched_policy_text"),
+            "total_policy_matches": clause.get("total_policy_matches", 0),
+            "finding": finding_info,
+        })
+
+
+    # -----------------------------------------------------------------------
+    # Build coverage summary with percentages
+    # -----------------------------------------------------------------------
+    total = len(clause_results)
+
+    def _pct(n: int) -> float:
+        return round((n / total) * 100.0, 1) if total > 0 else 0.0
+
+    coverage_summary = {
+        "total_requirements": total,
+        "covered": covered,
+        "partially_covered": partially_covered,
+        "gap": gap,
+        "unable_to_determine": unable_to_determine,
+        "covered_pct": _pct(covered),
+        "partial_pct": _pct(partially_covered),
+        "gap_pct": _pct(gap),
+        "unable_pct": _pct(unable_to_determine),
+    }
+
+    return {
+        "report_id": report.id,
+        "organization_id": report.organization_id,
+        "report_status": report.status.value if hasattr(report.status, "value") else str(report.status),
+        "overall_score": report.overall_score,
+        "risk_level": report.risk_level,
+        "regulation": reg_info,
+        "policy": policy_info,
+        "coverage_summary": coverage_summary,
+        "clauses": clause_results,
+        "is_stale": is_stale,
+        "stale_reason": stale_reason,
+        "analysis_engine": "HYBRID_GRAPHRAG",
+        "analyzed_at": report.updated_at,
+        "processing_time_seconds": report.processing_time_seconds,
+    }

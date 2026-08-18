@@ -112,7 +112,88 @@ export interface ComplianceJob {
   updated_at: string;
 }
 
+// ---------------------------------------------------------------------------
+// Sprint 8.1: Gap Analysis & Traceability Types
+// ---------------------------------------------------------------------------
+
+export interface GapAnalysisFindingInfo {
+  finding_id: string;
+  lifecycle_status: string; // OPEN | IN_REVIEW | REMEDIATION | RESOLVED | REOPENED | REASSESSMENT_REQUIRED
+  severity: string;         // CRITICAL | HIGH | MEDIUM | LOW
+  recommendation?: string | null;
+}
+
+export interface GapAnalysisClauseResult {
+  clause_index: number;
+  regulation_clause_id: string;
+  regulation_text: string;
+  // Coverage vocabulary (Sprint 8.1 / 8.2)
+  coverage_status: "COVERED" | "PARTIALLY_COVERED" | "GAP" | "UNABLE_TO_DETERMINE";
+  raw_engine_status: string; // original: COMPLIANT | PARTIALLY_COMPLIANT | NON_COMPLIANT | FAILED
+  similarity_score: number;
+  confidence?: "HIGH" | "MEDIUM" | "LOW";
+  missing_aspects?: string[];
+  conflicting_evidence?: boolean;
+  reasoning: string;
+  recommendation?: string | null;
+  // Policy evidence
+  policy_clause_id?: string | null;
+  policy_evidence?: string | null;
+  total_policy_matches: number;
+  // Finding linkage
+  finding?: GapAnalysisFindingInfo | null;
+}
+
+export interface GapAnalysisCoverageSummary {
+  total_requirements: number;
+  covered: number;
+  partially_covered: number;
+  gap: number;
+  unable_to_determine: number;
+  covered_pct: number;
+  partial_pct: number;
+  gap_pct: number;
+  unable_pct: number;
+}
+
+export interface GapAnalysisRegulationInfo {
+  id: string;
+  title: string;
+  act_name?: string | null;
+  version?: string | null;
+  act_year?: number | null;
+  jurisdiction?: string | null;
+  original_filename: string;
+}
+
+export interface GapAnalysisPolicyInfo {
+  id: string;
+  original_filename: string;
+  document_type: string;
+  organization_id: string;
+}
+
+export interface GapAnalysisResponse {
+  report_id: string;
+  organization_id: string;
+  report_status: string;
+  overall_score?: number | null;
+  risk_level?: string | null;
+  regulation?: GapAnalysisRegulationInfo | null;
+  policy?: GapAnalysisPolicyInfo | null;
+  coverage_summary?: GapAnalysisCoverageSummary | null;
+  clauses: GapAnalysisClauseResult[];
+  // Stale indicator
+  is_stale: boolean;
+  stale_reason?: string | null;
+  // Metadata
+  analysis_engine: string;
+  analyzed_at?: string | null;
+  processing_time_seconds?: number | null;
+}
+
 export const complianceService = {
+
   analyzeCompliance: async (data: ComplianceAnalyzeRequest): Promise<ComplianceAnalyzeResponse> => {
     const regId = data.regulation_id || data.regulation_document_id || "";
     const payload = {
@@ -202,7 +283,14 @@ export const complianceService = {
     const response = await api.get("/compliance/calendar", { params });
     return response.data;
   },
+
+  // Sprint 8.1: Gap Analysis & Traceability
+  getGapAnalysis: async (reportId: string): Promise<GapAnalysisResponse> => {
+    const response = await api.get(`/compliance/${reportId}/gap-analysis`);
+    return response.data;
+  },
 };
+
 
 export interface DeadlineSummary {
   overdue_count: number;
