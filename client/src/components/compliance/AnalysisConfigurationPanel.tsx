@@ -386,6 +386,14 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
               </Badge>
             </div>
 
+            {/* Sprint 8.1: 1-regulation-per-run clarification */}
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-indigo-500/5 border border-indigo-500/15">
+              <span className="text-indigo-400 text-[11px] leading-relaxed">
+                <span className="font-bold">Each analysis run evaluates 1 regulation × 1 policy.</span>{" "}
+                Only the first selected regulation will be used. To analyze multiple regulations, run separate analyses.
+              </span>
+            </div>
+
             {regulations.length === 0 ? (
               /* Informative Empty State for Regulations */
               <div className="p-6 rounded-xl border border-dashed border-border/60 bg-muted/10 text-center space-y-2 my-2">

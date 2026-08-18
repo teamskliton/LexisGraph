@@ -11,7 +11,13 @@ import {
   Scale,
   BookOpen,
   ShieldCheck,
+  ShieldAlert,
   FileCheck,
+  Wrench,
+  Layers,
+  FileText,
+  AlertCircle,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,43 +31,67 @@ interface InteractiveGraphCanvasProps {
   onResetView?: () => void;
 }
 
+export type NodeCategory =
+  | "regulation"
+  | "requirement"
+  | "policy"
+  | "policy_section"
+  | "finding"
+  | "remediation"
+  | "clause";
+
 interface PositionedNode extends GraphNode {
   x: number;
   y: number;
   radius: number;
-  category: "policy" | "regulation" | "finding" | "clause";
+  category: NodeCategory;
 }
 
 /**
  * Node visual style configurations by entity type
  */
-function getNodeCategory(node: GraphNode): "policy" | "regulation" | "finding" | "clause" {
+function getNodeCategory(node: GraphNode): NodeCategory {
   const kind = (node.kind || "").toLowerCase();
   const docType = (node.document_type || node.source_type || "").toLowerCase();
+  const id = (node.id || "").toLowerCase();
   const label = (node.label || "").toLowerCase();
 
-  if (kind.includes("finding") || label.includes("finding")) {
+  if (kind.includes("remediation") || id.startsWith("rem:") || label.includes("remediation")) {
+    return "remediation";
+  }
+  if (kind.includes("finding") || id.startsWith("finding:") || label.includes("finding")) {
     return "finding";
   }
-  if (kind === "clause" || kind === "policyclause" || docType === "clause") {
-    return "clause";
+  if (kind.includes("requirement") || id.startsWith("req:")) {
+    return "requirement";
+  }
+  if (kind.includes("policy_section") || id.startsWith("pol_sec:")) {
+    return "policy_section";
   }
   if (
-    kind === "domaindocument" ||
+    kind.includes("regulation") ||
+    id.startsWith("reg:") ||
     docType === "regulation" ||
     docType === "domain_document" ||
     label.includes("act") ||
     label.includes("code of") ||
-    label.includes("fema") ||
-    label.includes("regulation")
+    label.includes("fema")
   ) {
     return "regulation";
   }
-  return "policy";
+  if (
+    kind.includes("policy") ||
+    id.startsWith("pol:") ||
+    docType === "policy" ||
+    docType === "user_document"
+  ) {
+    return "policy";
+  }
+  return "clause";
 }
 
 const NODE_STYLES: Record<
-  "policy" | "regulation" | "finding" | "clause",
+  NodeCategory,
   {
     bg: string;
     border: string;
@@ -73,6 +103,26 @@ const NODE_STYLES: Record<
     badge: string;
   }
 > = {
+  regulation: {
+    bg: "bg-purple-500/15 dark:bg-purple-500/25",
+    border: "stroke-purple-600 dark:stroke-purple-400",
+    text: "fill-purple-950 dark:fill-purple-100",
+    iconColor: "text-purple-600 dark:text-purple-400",
+    dotColor: "bg-purple-500",
+    glow: "rgba(168, 85, 247, 0.5)",
+    label: "Regulation",
+    badge: "REGULATION",
+  },
+  requirement: {
+    bg: "bg-blue-500/15 dark:bg-blue-500/25",
+    border: "stroke-blue-600 dark:stroke-blue-400",
+    text: "fill-blue-950 dark:fill-blue-100",
+    iconColor: "text-blue-600 dark:text-blue-400",
+    dotColor: "bg-blue-500",
+    glow: "rgba(59, 130, 246, 0.5)",
+    label: "Requirement",
+    badge: "REQUIREMENT",
+  },
   policy: {
     bg: "bg-indigo-500/15 dark:bg-indigo-500/25",
     border: "stroke-indigo-600 dark:stroke-indigo-400",
@@ -83,15 +133,15 @@ const NODE_STYLES: Record<
     label: "Policy",
     badge: "POLICY",
   },
-  regulation: {
-    bg: "bg-violet-500/15 dark:bg-violet-500/25",
-    border: "stroke-violet-600 dark:stroke-violet-400",
-    text: "fill-violet-950 dark:fill-violet-100",
-    iconColor: "text-violet-600 dark:text-violet-400",
-    dotColor: "bg-violet-500",
-    glow: "rgba(139, 92, 246, 0.5)",
-    label: "Regulation",
-    badge: "REGULATION",
+  policy_section: {
+    bg: "bg-teal-500/15 dark:bg-teal-500/25",
+    border: "stroke-teal-600 dark:stroke-teal-400",
+    text: "fill-teal-950 dark:fill-teal-100",
+    iconColor: "text-teal-600 dark:text-teal-400",
+    dotColor: "bg-teal-500",
+    glow: "rgba(20, 184, 166, 0.5)",
+    label: "Policy Section",
+    badge: "SECTION",
   },
   finding: {
     bg: "bg-amber-500/15 dark:bg-amber-500/25",
@@ -102,6 +152,16 @@ const NODE_STYLES: Record<
     glow: "rgba(245, 158, 11, 0.5)",
     label: "Finding",
     badge: "FINDING",
+  },
+  remediation: {
+    bg: "bg-cyan-500/15 dark:bg-cyan-500/25",
+    border: "stroke-cyan-600 dark:stroke-cyan-400",
+    text: "fill-cyan-950 dark:fill-cyan-100",
+    iconColor: "text-cyan-600 dark:text-cyan-400",
+    dotColor: "bg-cyan-500",
+    glow: "rgba(6, 182, 212, 0.5)",
+    label: "Remediation",
+    badge: "REMEDIATION",
   },
   clause: {
     bg: "bg-emerald-500/15 dark:bg-emerald-500/25",
@@ -134,106 +194,90 @@ export function InteractiveGraphCanvas({
 
   // Canvas bounds
   const canvasWidth = 1000;
-  const canvasHeight = 620;
+  const canvasHeight = 650;
 
-  // Clean Stacked Layout Computation (REGULATION -> POLICY -> FINDINGS)
+  // Clean Layered Hierarchy Layout
   const positionedNodes = useMemo<PositionedNode[]>(() => {
     if (!nodes.length) return [];
 
-    const regNodes: GraphNode[] = [];
-    const polNodes: GraphNode[] = [];
-    const findNodes: GraphNode[] = [];
-    const clsNodes: GraphNode[] = [];
+    const layerMap: Record<NodeCategory, GraphNode[]> = {
+      regulation: [],
+      requirement: [],
+      policy: [],
+      policy_section: [],
+      finding: [],
+      remediation: [],
+      clause: [],
+    };
 
     nodes.forEach((n) => {
       const cat = getNodeCategory(n);
-      if (cat === "regulation") regNodes.push(n);
-      else if (cat === "policy") polNodes.push(n);
-      else if (cat === "finding") findNodes.push(n);
-      else clsNodes.push(n);
+      layerMap[cat].push(n);
     });
+
+    const activeLayers: { category: NodeCategory; items: GraphNode[]; y: number }[] = [];
+    const layerSequence: { category: NodeCategory; defaultY: number }[] = [
+      { category: "regulation", defaultY: 80 },
+      { category: "requirement", defaultY: 180 },
+      { category: "policy", defaultY: 290 },
+      { category: "policy_section", defaultY: 400 },
+      { category: "finding", defaultY: 510 },
+      { category: "remediation", defaultY: 600 },
+      { category: "clause", defaultY: 400 },
+    ];
+
+    layerSequence.forEach((ls) => {
+      const items = layerMap[ls.category];
+      if (items.length > 0) {
+        activeLayers.push({
+          category: ls.category,
+          items,
+          y: ls.defaultY,
+        });
+      }
+    });
+
+    // Rebalance Y positions dynamically based on number of active layers
+    if (activeLayers.length > 1) {
+      const yStep = (canvasHeight - 140) / Math.max(1, activeLayers.length - 1);
+      activeLayers.forEach((l, idx) => {
+        l.y = 80 + idx * yStep;
+      });
+    } else if (activeLayers.length === 1) {
+      activeLayers[0].y = canvasHeight / 2;
+    }
 
     const result: PositionedNode[] = [];
-    const totalGroups = Math.max(1, polNodes.length);
-    const colStep = canvasWidth / (totalGroups + 1);
 
-    polNodes.forEach((pNode, idx) => {
-      const colX = colStep * (idx + 1);
+    activeLayers.forEach((layer) => {
+      const count = layer.items.length;
+      const xStep = canvasWidth / (count + 1);
 
-      // 1. Middle Row: Policy Node (Radius 28)
-      result.push({
-        ...pNode,
-        x: colX,
-        y: 310,
-        radius: 28,
-        category: "policy",
-      });
+      layer.items.forEach((node, idx) => {
+        const x = xStep * (idx + 1);
+        const radius =
+          layer.category === "regulation" || layer.category === "policy"
+            ? 26
+            : layer.category === "finding" || layer.category === "remediation"
+            ? 24
+            : 20;
 
-      // 2. Top Row: Regulation Node (Radius 28)
-      const connectedRegEdge = edges.find(
-        (e) => e.kind === "APPLIES_TO" && (e.target === pNode.id || e.source === pNode.id)
-      );
-
-      const regNode = regNodes.find(
-        (r) => r.id === (connectedRegEdge?.source === pNode.id ? connectedRegEdge?.target : connectedRegEdge?.source)
-      ) || regNodes[idx % Math.max(1, regNodes.length)];
-
-      if (regNode && !result.some((r) => r.id === regNode.id)) {
         result.push({
-          ...regNode,
-          x: colX,
-          y: 120,
-          radius: 28,
-          category: "regulation",
-        });
-      }
-
-      // 3. Bottom Row: Finding Node (Radius 24)
-      const findingNode = findNodes.find((f) => f.id.includes(pNode.id) || f.text?.includes(pNode.label)) || findNodes[idx];
-
-      if (findingNode && !result.some((f) => f.id === findingNode.id)) {
-        result.push({
-          ...findingNode,
-          x: colX,
-          y: 490,
-          radius: 24,
-          category: "finding",
-        });
-      }
-    });
-
-    // Unattached Regulations
-    regNodes.forEach((rNode, idx) => {
-      if (!result.some((n) => n.id === rNode.id)) {
-        const x = (canvasWidth / (regNodes.length + 1)) * (idx + 1);
-        result.push({
-          ...rNode,
+          ...node,
           x,
-          y: 120,
-          radius: 28,
-          category: "regulation",
+          y: layer.y,
+          radius,
+          category: layer.category,
         });
-      }
-    });
-
-    // Clause nodes (Radius 20)
-    clsNodes.forEach((cNode, idx) => {
-      const x = (canvasWidth / (clsNodes.length + 1)) * (idx + 1);
-      result.push({
-        ...cNode,
-        x,
-        y: 560,
-        radius: 20,
-        category: "clause",
       });
     });
 
     return result;
-  }, [nodes, edges]);
+  }, [nodes]);
 
   // Dynamic Legend Categories (Only show categories present in rendered graph)
   const activeCategories = useMemo(() => {
-    const set = new Set<"policy" | "regulation" | "finding" | "clause">();
+    const set = new Set<NodeCategory>();
     positionedNodes.forEach((n) => set.add(n.category));
     return Array.from(set);
   }, [positionedNodes]);
@@ -245,7 +289,7 @@ export function InteractiveGraphCanvas({
     return map;
   }, [positionedNodes]);
 
-  // Active connected node IDs for selection highlight & 25% opacity dimming
+  // Active connected node IDs for selection highlight & dimming
   const activeConnectedNodeIds = useMemo(() => {
     const targetId = selectedNode?.id || hoveredNode?.id;
     if (!targetId) return new Set<string>();
@@ -268,7 +312,7 @@ export function InteractiveGraphCanvas({
 
   // Fit view to all visible nodes
   const handleFitToView = useCallback(() => {
-    setZoom(0.95);
+    setZoom(0.92);
     setPan({ x: 0, y: 0 });
   }, []);
 
@@ -315,14 +359,14 @@ export function InteractiveGraphCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[480px] sm:h-[560px] rounded-xl border border-border bg-card/60 dark:bg-card/40 overflow-hidden select-none cursor-grab active:cursor-grabbing shadow-inner"
+      className="relative w-full h-[520px] sm:h-[600px] rounded-xl border border-border bg-card/60 dark:bg-card/40 overflow-hidden select-none cursor-grab active:cursor-grabbing shadow-inner"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
     >
-      {/* Background Subtle Grid Pattern */}
+      {/* Background Grid Pattern */}
       <svg className="absolute inset-0 w-full h-full opacity-30 dark:opacity-20 pointer-events-none">
         <defs>
           <pattern id="graph-grid-pattern" width="32" height="32" patternUnits="userSpaceOnUse">
@@ -332,7 +376,7 @@ export function InteractiveGraphCanvas({
         <rect width="100%" height="100%" fill="url(#graph-grid-pattern)" />
       </svg>
 
-      {/* Control Toolbar (Top-Right Overlay) */}
+      {/* Control Toolbar */}
       <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-md p-1.5 rounded-lg border border-border shadow-xs">
         <Button
           variant="ghost"
@@ -378,7 +422,7 @@ export function InteractiveGraphCanvas({
         </Button>
       </div>
 
-      {/* Canvas Status & Zoom Indicator (Top-Left Overlay) */}
+      {/* Canvas Zoom Indicator */}
       <div className="absolute top-3 left-3 z-20 flex items-center gap-2 pointer-events-none">
         <span className="text-[10px] font-mono font-semibold px-2.5 py-1 rounded-md bg-background/90 border border-border text-muted-foreground flex items-center gap-1 shadow-2xs">
           <Move className="h-3 w-3 text-indigo-500" />
@@ -386,9 +430,9 @@ export function InteractiveGraphCanvas({
         </span>
       </div>
 
-      {/* Dynamic Graph Legend (Bottom-Left Overlay - Sprint 5.4) */}
+      {/* Dynamic Graph Legend */}
       {activeCategories.length > 0 && (
-        <div className="absolute bottom-3 left-3 z-20 flex items-center gap-3 bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-border shadow-xs text-xs font-medium text-foreground">
+        <div className="absolute bottom-3 left-3 z-20 flex items-center gap-3 bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-border shadow-xs text-xs font-medium text-foreground flex-wrap max-w-[85%]">
           <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground mr-1">
             Legend:
           </span>
@@ -419,7 +463,18 @@ export function InteractiveGraphCanvas({
             markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-violet-500" />
+            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-purple-500" />
+          </marker>
+          <marker
+            id="arrow-has-req"
+            viewBox="0 0 10 10"
+            refX="22"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-blue-500" />
           </marker>
           <marker
             id="arrow-has-finding"
@@ -431,6 +486,17 @@ export function InteractiveGraphCanvas({
             orient="auto-start-reverse"
           >
             <path d="M 0 0 L 10 5 L 0 10 z" className="fill-amber-500" />
+          </marker>
+          <marker
+            id="arrow-has-rem"
+            viewBox="0 0 10 10"
+            refX="22"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-cyan-500" />
           </marker>
           <marker
             id="arrow-default-rel"
@@ -460,21 +526,29 @@ export function InteractiveGraphCanvas({
               (edge.source === activeTargetId || edge.target === activeTargetId);
 
             const isAppliesTo = edge.kind === "APPLIES_TO";
+            const isHasReq = edge.kind === "HAS_REQUIREMENT";
             const isHasFinding = edge.kind === "HAS_FINDING";
-            const isComparedWith = edge.kind === "COMPARED_WITH";
-            const isEvidenceFor = edge.kind === "EVIDENCE_FOR";
+            const isHasRem = edge.kind === "HAS_REMEDIATION";
+            const isMatchedWith = edge.kind === "MATCHED_WITH";
+            const isContains = edge.kind === "CONTAINS";
 
             let strokeColor = "stroke-slate-300 dark:stroke-slate-700";
             let markerId = "url(#arrow-default-rel)";
 
             if (isAppliesTo) {
-              strokeColor = "stroke-violet-500/70 dark:stroke-violet-400/60";
+              strokeColor = "stroke-purple-500/70 dark:stroke-purple-400/60";
               markerId = "url(#arrow-applies-to)";
+            } else if (isHasReq) {
+              strokeColor = "stroke-blue-500/70 dark:stroke-blue-400/60";
+              markerId = "url(#arrow-has-req)";
             } else if (isHasFinding) {
               strokeColor = "stroke-amber-500/70 dark:stroke-amber-400/60";
               markerId = "url(#arrow-has-finding)";
-            } else if (isComparedWith || isEvidenceFor) {
-              strokeColor = "stroke-emerald-500/70 dark:stroke-emerald-400/60";
+            } else if (isHasRem) {
+              strokeColor = "stroke-cyan-500/70 dark:stroke-cyan-400/60";
+              markerId = "url(#arrow-has-rem)";
+            } else if (isMatchedWith || isContains) {
+              strokeColor = "stroke-teal-500/70 dark:stroke-teal-400/60";
             }
 
             if (isEdgeConnected) {
@@ -484,6 +558,21 @@ export function InteractiveGraphCanvas({
             const midX = (sourceNode.x + targetNode.x) / 2;
             const midY = (sourceNode.y + targetNode.y) / 2;
             const isDimmed = activeConnectedNodeIds.size > 0 && !isEdgeConnected;
+
+            const edgeLabel =
+              edge.kind === "APPLIES_TO"
+                ? "applies to"
+                : edge.kind === "HAS_REQUIREMENT"
+                ? "has req"
+                : edge.kind === "HAS_FINDING"
+                ? "has finding"
+                : edge.kind === "HAS_REMEDIATION"
+                ? "remediation"
+                : edge.kind === "MATCHED_WITH"
+                ? "matched with"
+                : edge.kind === "CONTAINS"
+                ? "contains"
+                : edge.kind.toLowerCase().replace(/_/g, " ");
 
             return (
               <g
@@ -505,9 +594,9 @@ export function InteractiveGraphCanvas({
                 {/* Edge Label Tag */}
                 <g transform={`translate(${midX}, ${midY})`}>
                   <rect
-                    x="-34"
+                    x="-36"
                     y="-9"
-                    width="68"
+                    width="72"
                     height="18"
                     rx="4"
                     className="fill-background/95 stroke-border/60 stroke-[0.5]"
@@ -517,15 +606,7 @@ export function InteractiveGraphCanvas({
                     dy="3.5"
                     className="text-[8px] font-mono font-bold fill-muted-foreground uppercase tracking-wider select-none pointer-events-none"
                   >
-                    {isAppliesTo
-                      ? "applies to"
-                      : isHasFinding
-                      ? "has finding"
-                      : isComparedWith
-                      ? "compared with"
-                      : isEvidenceFor
-                      ? "evidence for"
-                      : edge.kind}
+                    {edgeLabel}
                   </text>
                 </g>
               </g>
@@ -539,14 +620,24 @@ export function InteractiveGraphCanvas({
 
             const isSelected = selectedNode?.id === node.id;
             const isHovered = hoveredNode?.id === node.id;
+            const isFocused = Boolean(node.is_focused);
             const isHighlightGroup = activeConnectedNodeIds.has(node.id);
             const isDimmed = activeConnectedNodeIds.size > 0 && !isHighlightGroup;
             const matchesSearch =
               searchQuery &&
               (node.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (node.text || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
                 node.id.toLowerCase().includes(searchQuery.toLowerCase()));
 
-            const nodeRadius = node.radius || 26;
+            const nodeRadius = node.radius || 24;
+
+            // Coverage badge color
+            const covStatus = (node.coverage_status || "").toUpperCase();
+            let covColor = "";
+            if (covStatus === "COVERED") covColor = "fill-emerald-500";
+            else if (covStatus === "PARTIALLY_COVERED") covColor = "fill-amber-500";
+            else if (covStatus === "GAP") covColor = "fill-rose-500";
+            else if (covStatus === "UNABLE_TO_DETERMINE") covColor = "fill-slate-400";
 
             return (
               <g
@@ -572,23 +663,23 @@ export function InteractiveGraphCanvas({
                   isDimmed && "opacity-25"
                 )}
               >
-                {/* Outer Glow Ring when Selected or Matched */}
-                {(isSelected || matchesSearch) && (
+                {/* Outer Glow Ring when Focused, Selected or Matched */}
+                {(isSelected || isFocused || matchesSearch) && (
                   <circle
-                    r={nodeRadius + 10}
+                    r={nodeRadius + 12}
                     className="animate-pulse opacity-80"
-                    fill={style.glow}
+                    fill={isFocused ? "rgba(99, 102, 241, 0.6)" : style.glow}
                   />
                 )}
 
                 {/* Outer Selection Ring */}
-                {(isSelected || isHovered) && (
+                {(isSelected || isHovered || isFocused) && (
                   <circle
                     r={nodeRadius + 5}
                     fill="none"
-                    stroke={isSelected ? "#6366f1" : "#a5b4fc"}
+                    stroke={isSelected || isFocused ? "#6366f1" : "#a5b4fc"}
                     strokeWidth="2.5"
-                    strokeDasharray={isSelected ? "none" : "3 3"}
+                    strokeDasharray={isSelected || isFocused ? "none" : "3 3"}
                   />
                 )}
 
@@ -599,29 +690,42 @@ export function InteractiveGraphCanvas({
                     "transition-all duration-150 stroke-[2px]",
                     style.bg,
                     style.border,
-                    (isSelected || isHovered) && "stroke-[3px]"
+                    (isSelected || isHovered || isFocused) && "stroke-[3px]"
                   )}
                 />
 
+                {/* Coverage indicator small status dot */}
+                {covColor && (
+                  <circle
+                    cx={nodeRadius - 4}
+                    cy={-nodeRadius + 4}
+                    r={5}
+                    className={cn(covColor, "stroke-background stroke-[1.5]")}
+                  />
+                )}
+
                 {/* Node Center Icon */}
                 <g className="pointer-events-none">
-                  {category === "policy" && <BookOpen className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
                   {category === "regulation" && <Scale className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
-                  {category === "finding" && <ShieldCheck className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
+                  {category === "requirement" && <BookOpen className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
+                  {category === "policy" && <FileText className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
+                  {category === "policy_section" && <Layers className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
+                  {category === "finding" && <ShieldAlert className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
+                  {category === "remediation" && <Wrench className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
                   {category === "clause" && <FileCheck className={cn("h-4 w-4 -ml-2 -mt-2", style.iconColor)} />}
                 </g>
 
                 {/* Node Title & Truncated Label Below */}
                 <g transform={`translate(0, ${nodeRadius + 14})`}>
                   <rect
-                    x="-70"
+                    x="-75"
                     y="-11"
-                    width="140"
+                    width="150"
                     height="20"
                     rx="5"
                     className={cn(
                       "fill-background/95 stroke-border/60 stroke-[0.5] shadow-2xs",
-                      isSelected && "fill-indigo-600 border-indigo-600"
+                      (isSelected || isFocused) && "fill-indigo-600 border-indigo-600"
                     )}
                   />
                   <text
@@ -629,10 +733,10 @@ export function InteractiveGraphCanvas({
                     dy="3"
                     className={cn(
                       "text-[9px] font-semibold tracking-tight select-none pointer-events-none fill-foreground",
-                      isSelected && "fill-white font-bold"
+                      (isSelected || isFocused) && "fill-white font-bold"
                     )}
                   >
-                    {node.label.length > 22 ? `${node.label.substring(0, 20)}...` : node.label}
+                    {node.label.length > 24 ? `${node.label.substring(0, 22)}...` : node.label}
                   </text>
                 </g>
 
@@ -640,9 +744,9 @@ export function InteractiveGraphCanvas({
                 {isHovered && (
                   <g transform={`translate(0, ${-nodeRadius - 28})`} className="pointer-events-none">
                     <rect
-                      x="-90"
+                      x="-100"
                       y="-12"
-                      width="180"
+                      width="200"
                       height="24"
                       rx="6"
                       className="fill-slate-900/95 stroke-slate-700 stroke-[0.5] shadow-md"
@@ -652,7 +756,7 @@ export function InteractiveGraphCanvas({
                       dy="3"
                       className="text-[9.5px] font-semibold fill-white select-none"
                     >
-                      {node.label.length > 28 ? `${node.label.substring(0, 26)}...` : node.label}
+                      {node.label.length > 30 ? `${node.label.substring(0, 28)}...` : node.label}
                     </text>
                   </g>
                 )}
@@ -666,3 +770,4 @@ export function InteractiveGraphCanvas({
 }
 
 export default InteractiveGraphCanvas;
+

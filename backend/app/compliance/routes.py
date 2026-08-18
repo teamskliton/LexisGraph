@@ -15,6 +15,7 @@ from app.compliance.schemas import (
     ComplianceAnalyzeRequest,
     ComplianceAnalyzeResponse,
     ComplianceReportResponse,
+    GapAnalysisResponse,
 )
 from app.core.dependencies import get_current_user
 from app.db.models import User
@@ -85,6 +86,28 @@ def compliance_overview_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> ComplianceOverviewResponse:
     return get_compliance_overview(organization_id=organization_id, db=db, current_user=current_user)
+
+
+@router.get(
+    "/{report_id}/gap-analysis",
+    response_model=GapAnalysisResponse,
+    summary="Get structured Gap Analysis & Traceability for a compliance report (Sprint 8.1)",
+)
+def get_gap_analysis(
+    report_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> GapAnalysisResponse:
+    """
+    Return a structured gap analysis for a completed compliance report.
+
+    - Provides full traceability: Regulation Clause -> Coverage Status -> Policy Evidence -> Finding
+    - Coverage vocabulary: COVERED | PARTIALLY_COVERED | GAP | UNABLE_TO_DETERMINE
+    - Includes staleness indicator when regulation or policy document has changed
+    - Organization isolation enforced: only accessible by report owner
+    """
+    gap_dict = service.get_gap_analysis_for_report(db, report_id, current_user.id)
+    return GapAnalysisResponse.model_validate(gap_dict)
 
 
 @router.get(

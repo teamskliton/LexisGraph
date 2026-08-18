@@ -158,7 +158,9 @@ class ComplianceEngineTest(unittest.TestCase):
 
         with patch("app.services.compliance_engine.retrieve_clauses_for_document", side_effect=_mock_retrieve), \
              patch("app.services.compliance_engine._get_graph_similarity_score", return_value=0.0), \
+             patch("app.services.compliance_engine._get_structural_context", return_value={"parent_document": None, "sibling_clauses": [], "entities": []}), \
              patch("app.services.compliance_engine._resolve_reasoning", return_value=None):
+
 
             result = analyze_compliance_engine(self.org, self.reg_doc, self.policy_doc)
 

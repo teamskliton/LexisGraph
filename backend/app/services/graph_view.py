@@ -1,9 +1,33 @@
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from typing import Any
+
 from sqlalchemy.orm import Session
 from app.db.neo4j import is_neo4j_available, run_query
 
-_DEFAULT_DOCUMENT_LIMIT = 12
-_DEFAULT_CLAUSE_LIMIT = 120
-_DEFAULT_SIMILARITY_EDGE_LIMIT = 180
+logger = logging.getLogger(__name__)
+
+_DEFAULT_DOCUMENT_LIMIT = 20
+_DEFAULT_CLAUSE_LIMIT = 150
+_DEFAULT_SIMILARITY_EDGE_LIMIT = 200
+
+
+def _normalize_coverage_status(raw: str | None) -> str:
+    if not raw:
+        return "UNABLE_TO_DETERMINE"
+    s = str(raw).upper()
+    if "UNABLE" in s or "CONFLICT" in s:
+        return "UNABLE_TO_DETERMINE"
+    if "PARTIAL" in s:
+        return "PARTIALLY_COVERED"
+    if "NON" in s or "GAP" in s:
+        return "GAP"
+    if "COMPLIANT" in s or "COVERED" in s:
+        return "COVERED"
+    return "UNABLE_TO_DETERMINE"
 
 
 def get_graph_snapshot(
@@ -14,20 +38,27 @@ def get_graph_snapshot(
     build_id: str | None = None,
     organization_id: str | None = None,
     db: Session | None = None,
-) -> dict:
-    if not is_neo4j_available():
-        return {
-            "status": "unavailable",
-            "nodes": [],
-            "edges": [],
-            "meta": {
-                "documents": 0,
-                "clauses": 0,
-                "has_clause_edges": 0,
-                "similarity_edges": 0,
-            },
-        }
+    focus_node: str | None = None,
+    depth: int = 2,
+    search: str | None = None,
+    finding_id: str | None = None,
+    document_id: str | None = None,
+    regulation_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    Sprint 8.3: Compliance Knowledge Graph Explorer & Traceability Snapshot.
 
+    Synthesizes the full compliance knowledge graph across:
+      REGULATION -> REQUIREMENT -> POLICY -> POLICY_SECTION -> FINDING -> REMEDIATION
+
+    Features:
+      - Real database backed entities (no fake relations)
+      - Organization isolation & multi-tenancy
+      - Centered neighborhood exploration for Finding, Requirement, Policy, Regulation
+      - Coverage status and confidence indicators
+      - Neo4j structural fusion when Neo4j is online
+    """
+    # 1. Knowledge Graph Build Snapshot (if explicit build_id or active build requested)
     if build_id:
         selected_build = run_query(
             """
@@ -45,23 +76,24 @@ def get_graph_snapshot(
         )
         if selected_build:
             return _get_knowledge_graph_snapshot(selected_build[0])
-    active_build = run_query(
-        """
-        MATCH (b:KnowledgeGraphBuild {active: true})
-        RETURN b.id AS build_id,
-               b.created_at AS created_at,
-               b.user_document_id AS user_document_id,
-               b.user_document_title AS user_document_title,
-               b.domain_document_ids AS domain_document_ids,
-               b.domain_document_titles AS domain_document_titles,
-               coalesce(b.active, false) AS active
-        ORDER BY b.created_at DESC
-        LIMIT 1
-        """
-    )
-    if active_build:
-        return _get_knowledge_graph_snapshot(active_build[0])
+
     if knowledge_graph_only:
+        active_build = run_query(
+            """
+            MATCH (b:KnowledgeGraphBuild {active: true})
+            RETURN b.id AS build_id,
+                   b.created_at AS created_at,
+                   b.user_document_id AS user_document_id,
+                   b.user_document_title AS user_document_title,
+                   b.domain_document_ids AS domain_document_ids,
+                   b.domain_document_titles AS domain_document_titles,
+                   coalesce(b.active, false) AS active
+            ORDER BY b.created_at DESC
+            LIMIT 1
+            """
+        )
+        if active_build:
+            return _get_knowledge_graph_snapshot(active_build[0])
         return {
             "status": "ok",
             "nodes": [],
@@ -69,277 +101,363 @@ def get_graph_snapshot(
             "metadata": {"nodes": 0, "relationships": 0, "build_id": None, "active": False},
         }
 
-    # Fetch linked regulation IDs for organization if DB session available
-    linked_reg_ids: list[str] = []
-    compliance_edges: list[dict] = []
-    finding_nodes: list[dict] = []
-    report_by_policy_id: dict[str, Any] = {}
+    # 2. Relational Compliance Graph from PostgreSQL
+    nodes_by_id: dict[str, dict[str, Any]] = {}
+    edges_by_id: dict[str, dict[str, Any]] = {}
 
     if organization_id and db:
         try:
-            from app.db.models.regulation import OrganizationRegulation
-            from app.compliance.models import ComplianceReport
-            from sqlalchemy import select
+            from app.db.models.regulation import OrganizationRegulation, Regulation
+            from app.db.models.document import Document
+            from app.compliance.models import ComplianceReport, ReportFinding
+            from app.db.models.remediation import FindingRemediation
+            from sqlalchemy import select, or_
 
-            stmt = select(OrganizationRegulation.regulation_id).where(
-                OrganizationRegulation.organization_id == organization_id
+            org_uuid = uuid.UUID(str(organization_id)) if isinstance(organization_id, str) else organization_id
+
+            # A. Regulations
+            stmt_reg_ids = select(OrganizationRegulation.regulation_id).where(
+                OrganizationRegulation.organization_id == org_uuid
             )
-            linked_reg_ids = [str(r) for r in db.scalars(stmt).all()]
+            linked_reg_uuids = list(db.scalars(stmt_reg_ids).all())
 
+            # Also include regulations from compliance reports
+            stmt_report_regs = select(ComplianceReport.regulation_id).where(
+                ComplianceReport.organization_id == org_uuid,
+                ComplianceReport.is_deleted == False,
+            )
+            report_reg_uuids = list(db.scalars(stmt_report_regs).all())
+            all_reg_uuids = list(set(linked_reg_uuids + report_reg_uuids))
+
+            regulations = []
+            if all_reg_uuids:
+                regulations = db.scalars(
+                    select(Regulation).where(Regulation.id.in_(all_reg_uuids))
+                ).all()
+
+            for reg in regulations:
+                reg_id_str = str(reg.id)
+                node_id = f"reg:{reg_id_str}"
+                nodes_by_id[node_id] = {
+                    "id": node_id,
+                    "kind": "regulation",
+                    "label": reg.title or "Regulation",
+                    "source_id": reg_id_str,
+                    "act_name": reg.act_name,
+                    "version": reg.version,
+                    "act_year": reg.act_year,
+                    "jurisdiction": reg.jurisdiction,
+                    "document_type": "REGULATION",
+                }
+
+            # B. Policy Documents
+            policy_docs = db.scalars(
+                select(Document).where(Document.organization_id == org_uuid)
+            ).all()
+
+            for doc in policy_docs:
+                doc_id_str = str(doc.id)
+                node_id = f"pol:{doc_id_str}"
+                nodes_by_id[node_id] = {
+                    "id": node_id,
+                    "kind": "policy",
+                    "label": doc.original_filename or "Policy Document",
+                    "source_id": doc_id_str,
+                    "organization_id": str(org_uuid),
+                    "document_type": doc.document_type.value if hasattr(doc.document_type, "value") else str(doc.document_type),
+                    "checksum": getattr(doc, "checksum", None),
+                }
+
+            # C. Compliance Reports & Requirements
             reports = db.scalars(
                 select(ComplianceReport).where(
-                    ComplianceReport.organization_id == organization_id,
+                    ComplianceReport.organization_id == org_uuid,
                     ComplianceReport.is_deleted == False,
                 )
             ).all()
 
             for report in reports:
-                pol_id = str(report.policy_document_id)
-                reg_id = str(report.regulation_id)
-                rep_id = str(report.id)
-                finding_id = f"finding:{report.id}"
-                report_by_policy_id[pol_id] = report
+                pol_node_id = f"pol:{report.policy_document_id}"
+                reg_node_id = f"reg:{report.regulation_id}"
 
-                compliance_edges.append(
-                    {
-                        "id": f"applies_to:{reg_id}:{pol_id}",
-                        "kind": "APPLIES_TO",
-                        "source": reg_id,
-                        "target": pol_id,
-                        "score": report.overall_score or 0.0,
-                    }
-                )
-
-                report_json = report.report_json or {}
-                findings_data = []
-                if isinstance(report_json, dict) and "findings" in report_json:
-                    findings_data = report_json.get("findings") or []
-                first_f = findings_data[0] if (isinstance(findings_data, list) and findings_data) else {}
-
-                recs = report.recommendations
-                rec_text = "Remediate non-compliant clauses according to applicable regulation standards."
-                if isinstance(recs, list) and recs:
-                    rec_item = recs[0]
-                    rec_text = rec_item.get("recommendation") if isinstance(rec_item, dict) else str(rec_item)
-                elif first_f.get("recommendation"):
-                    rec_text = first_f.get("recommendation")
-
-                reasoning_text = (
-                    first_f.get("reasoning")
-                    or first_f.get("description")
-                    or f"Automated compliance analysis identified key obligations. Overall score: {int(report.overall_score or 0)}%."
-                )
-
-                finding_nodes.append(
-                    {
-                        "id": finding_id,
-                        "kind": "finding",
-                        "label": f"Compliance Finding ({int(report.overall_score or 0)}% Score)",
-                        "source_type": "finding",
-                        "text": f"Status: {report.status.value if hasattr(report.status, 'value') else report.status}. Score: {int(report.overall_score or 0)}%. Total Clauses: {report.total_clauses or 0}, Compliant: {report.compliant_clauses or 0}, Non-Compliant: {report.non_compliant_clauses or 0}.",
-                        "report_id": rep_id,
-                        "policy_id": pol_id,
-                        "regulation_id": reg_id,
-                        "overall_score": report.overall_score,
-                        "risk_level": report.risk_level or "MEDIUM",
-                        "status": report.status.value if hasattr(report.status, "value") else str(report.status),
-                        "created_at": report.created_at.isoformat() if report.created_at else None,
-                        "reasoning": reasoning_text,
-                        "recommendation": rec_text,
-                        "policy_clause_id": first_f.get("policy_clause_id"),
-                        "policy_clause_text": first_f.get("policy_clause_text") or "Clause obligation requirement",
-                        "regulation_clause_id": first_f.get("regulation_clause_id"),
-                        "regulation_clause_text": first_f.get("regulation_clause_text") or "Statutory regulation provision",
-                        "confidence": first_f.get("confidence") or 0.88,
-                    }
-                )
-
-                compliance_edges.append(
-                    {
-                        "id": f"has_finding:{pol_id}:{finding_id}",
-                        "kind": "HAS_FINDING",
-                        "source": pol_id,
-                        "target": finding_id,
-                    }
-                )
-        except Exception:
-            pass
-
-    if organization_id:
-        document_cypher = """
-        MATCH (d:Document)
-        WHERE d.organization_id = $org_id OR d.id IN $linked_reg_ids OR d.pg_document_id IN $linked_reg_ids
-        OPTIONAL MATCH (d)-[:HAS_CLAUSE]->(c:Clause)
-        WITH d, count(c) AS clause_count, coalesce(d.checksum, toLower(trim(d.title)), d.id) AS entity_key
-        WITH entity_key, head(collect(d)) AS d, sum(clause_count) AS total_clause_count
-        RETURN d.id AS id,
-               d.title AS title,
-               d.source_type AS source_type,
-               d.organization_id AS organization_id,
-               d.document_type AS document_type,
-               d.checksum AS checksum,
-               total_clause_count AS clause_count
-        ORDER BY coalesce(d.title, d.id)
-        LIMIT $limit
-        """
-        document_params = {
-            "org_id": str(organization_id),
-            "linked_reg_ids": linked_reg_ids,
-            "limit": max_documents,
-        }
-    else:
-        # Fallback / un-scoped global query with title/checksum deduplication
-        document_cypher = """
-        MATCH (d:Document)
-        OPTIONAL MATCH (d)-[:HAS_CLAUSE]->(c:Clause)
-        WITH d, count(c) AS clause_count, coalesce(d.checksum, toLower(trim(d.title)), d.id) AS entity_key
-        WITH entity_key, head(collect(d)) AS d, sum(clause_count) AS total_clause_count
-        RETURN d.id AS id,
-               d.title AS title,
-               d.source_type AS source_type,
-               d.organization_id AS organization_id,
-               d.document_type AS document_type,
-               d.checksum AS checksum,
-               total_clause_count AS clause_count
-        ORDER BY coalesce(d.title, d.id)
-        LIMIT $limit
-        """
-        document_params = {"limit": max_documents}
-
-    document_rows = run_query(document_cypher, document_params)
-    document_ids = [row["id"] for row in document_rows if row.get("id")]
-    if not document_ids and not finding_nodes:
-        return {
-            "status": "ok",
-            "nodes": [],
-            "edges": [],
-            "meta": {
-                "documents": 0,
-                "clauses": 0,
-                "has_clause_edges": 0,
-                "similarity_edges": 0,
-            },
-        }
-
-    clause_rows = run_query(
-        """
-        MATCH (d:Document)-[:HAS_CLAUSE]->(c:Clause)
-        WHERE d.id IN $document_ids
-        RETURN d.id AS document_id,
-               c.id AS clause_id,
-               c.text AS clause_text,
-               c.source_type AS source_type,
-               c.type AS clause_type
-        ORDER BY document_id, clause_id
-        LIMIT $limit
-        """,
-        {"document_ids": document_ids, "limit": max_clauses},
-    )
-
-    clause_ids = [row["clause_id"] for row in clause_rows if row.get("clause_id")]
-    similarity_rows = []
-    if clause_ids:
-        similarity_rows = run_query(
-            """
-            MATCH (c1:Clause)-[r:SIMILAR_TO]->(c2:Clause)
-            WHERE c1.id IN $clause_ids AND c2.id IN $clause_ids
-            RETURN c1.id AS source_id,
-                   c2.id AS target_id,
-                   r.score AS score
-            ORDER BY r.score DESC
-            LIMIT $limit
-            """,
-            {"clause_ids": clause_ids, "limit": max_similarity_edges},
-        )
-
-    nodes: list[dict] = []
-    edges: list[dict] = []
-    seen_nodes: set[str] = set()
-
-    for row in document_rows:
-        node_id = str(row.get("id") or "")
-        if not node_id or node_id in seen_nodes:
-            continue
-        seen_nodes.add(node_id)
-        doc_report = report_by_policy_id.get(node_id)
-        doc_payload: dict[str, Any] = {
-            "id": node_id,
-            "kind": "document",
-            "label": row.get("title") or "Untitled",
-            "source_type": row.get("source_type") or "unknown",
-            "clause_count": int(row.get("clause_count") or 0),
-            "organization_id": row.get("organization_id"),
-            "document_type": row.get("document_type"),
-        }
-        if doc_report:
-            doc_payload["report_id"] = str(doc_report.id)
-            doc_payload["overall_score"] = doc_report.overall_score
-            doc_payload["findings_count"] = (
-                (doc_report.non_compliant_clauses or 0) + (doc_report.partial_clauses or 0)
-                if (doc_report.non_compliant_clauses is not None or doc_report.partial_clauses is not None)
-                else (doc_report.total_matches or 2)
-            )
-            doc_payload["last_analyzed_at"] = doc_report.created_at.isoformat() if doc_report.created_at else None
-        nodes.append(doc_payload)
-
-    for f_node in finding_nodes:
-        if f_node["id"] not in seen_nodes:
-            seen_nodes.add(f_node["id"])
-            nodes.append(f_node)
-
-    for c_edge in compliance_edges:
-        if c_edge["source"] in seen_nodes and c_edge["target"] in seen_nodes:
-            edges.append(c_edge)
-
-    for row in clause_rows:
-        clause_id = str(row.get("clause_id") or "")
-        document_id = str(row.get("document_id") or "")
-        if not clause_id or not document_id:
-            continue
-        if clause_id not in seen_nodes:
-            seen_nodes.add(clause_id)
-            nodes.append(
-                {
-                    "id": clause_id,
-                    "kind": "clause",
-                    "label": row.get("clause_text") or "",
-                    "source_type": row.get("source_type") or "unknown",
-                    "clause_type": row.get("clause_type") or "general",
+                # Connect Regulation -> Policy via APPLIES_TO
+                edge_id = f"applies_to:{reg_node_id}:{pol_node_id}"
+                edges_by_id[edge_id] = {
+                    "id": edge_id,
+                    "kind": "APPLIES_TO",
+                    "source": reg_node_id,
+                    "target": pol_node_id,
+                    "score": float(report.overall_score or 0.0),
+                    "report_id": str(report.id),
+                    "risk_level": report.risk_level or "MEDIUM",
                 }
-            )
-        edges.append(
-            {
-                "id": f"has_clause:{document_id}:{clause_id}",
-                "kind": "HAS_CLAUSE",
-                "source": document_id,
-                "target": clause_id,
-            }
-        )
 
-    for row in similarity_rows:
-        source_id = str(row.get("source_id") or "")
-        target_id = str(row.get("target_id") or "")
-        if not source_id or not target_id:
-            continue
-        edges.append(
-            {
-                "id": f"similar_to:{source_id}:{target_id}",
-                "kind": "SIMILAR_TO",
-                "source": source_id,
-                "target": target_id,
-                "score": float(row.get("score") or 0.0),
-            }
-        )
+                # Update Policy node with analysis summary
+                if pol_node_id in nodes_by_id:
+                    nodes_by_id[pol_node_id]["report_id"] = str(report.id)
+                    nodes_by_id[pol_node_id]["overall_score"] = report.overall_score
+                    nodes_by_id[pol_node_id]["risk_level"] = report.risk_level
+                    nodes_by_id[pol_node_id]["last_analyzed_at"] = (
+                        report.created_at.isoformat() if report.created_at else None
+                    )
+
+                # Extract Evaluated Clauses
+                report_json = report.report_json or {}
+                evaluated_clauses = []
+                if isinstance(report_json, dict) and "evaluated_clauses" in report_json:
+                    evaluated_clauses = report_json.get("evaluated_clauses") or []
+                elif report.summary:
+                    try:
+                        parsed = json.loads(report.summary)
+                        if isinstance(parsed, dict):
+                            evaluated_clauses = parsed.get("evaluated_clauses") or []
+                    except Exception:
+                        pass
+
+                for idx, c in enumerate(evaluated_clauses):
+                    if not isinstance(c, dict):
+                        continue
+                    clause_code = str(c.get("regulation_clause_id") or f"clause_{idx + 1}")
+                    req_node_id = f"req:{report.regulation_id}:{clause_code}"
+                    cov_status = _normalize_coverage_status(c.get("status"))
+
+                    # Requirement Node
+                    if req_node_id not in nodes_by_id:
+                        nodes_by_id[req_node_id] = {
+                            "id": req_node_id,
+                            "kind": "requirement",
+                            "label": clause_code,
+                            "text": c.get("regulation_text") or f"Requirement {clause_code}",
+                            "coverage_status": cov_status,
+                            "similarity_score": float(c.get("similarity_score") or 0.0),
+                            "confidence": str(c.get("confidence") or "HIGH"),
+                            "missing_aspects": c.get("missing_aspects") or [],
+                            "conflicting_evidence": bool(c.get("conflicting_evidence", False)),
+                            "reasoning": c.get("reasoning") or "",
+                            "recommendation": c.get("recommendation"),
+                            "regulation_id": str(report.regulation_id),
+                            "policy_id": str(report.policy_document_id),
+                        }
+
+                    # Regulation -> HAS_REQUIREMENT -> Requirement
+                    req_edge_id = f"has_req:{reg_node_id}:{req_node_id}"
+                    edges_by_id[req_edge_id] = {
+                        "id": req_edge_id,
+                        "kind": "HAS_REQUIREMENT",
+                        "source": reg_node_id,
+                        "target": req_node_id,
+                    }
+
+                    # Policy Section Evidence
+                    pol_evidence = c.get("matched_policy_text")
+                    if pol_evidence:
+                        pol_clause_code = str(c.get("matched_policy_clause_id") or f"sec_{idx + 1}")
+                        pol_sec_node_id = f"pol_sec:{report.policy_document_id}:{pol_clause_code}"
+
+                        if pol_sec_node_id not in nodes_by_id:
+                            nodes_by_id[pol_sec_node_id] = {
+                                "id": pol_sec_node_id,
+                                "kind": "policy_section",
+                                "label": pol_clause_code,
+                                "text": pol_evidence,
+                                "policy_id": str(report.policy_document_id),
+                            }
+
+                        # Policy -> CONTAINS -> Policy Section
+                        contains_edge_id = f"contains:{pol_node_id}:{pol_sec_node_id}"
+                        edges_by_id[contains_edge_id] = {
+                            "id": contains_edge_id,
+                            "kind": "CONTAINS",
+                            "source": pol_node_id,
+                            "target": pol_sec_node_id,
+                        }
+
+                        # Requirement -> MATCHED_WITH -> Policy Section
+                        matched_edge_id = f"matched:{req_node_id}:{pol_sec_node_id}"
+                        edges_by_id[matched_edge_id] = {
+                            "id": matched_edge_id,
+                            "kind": "MATCHED_WITH",
+                            "source": req_node_id,
+                            "target": pol_sec_node_id,
+                            "score": float(c.get("similarity_score") or 0.0),
+                            "coverage_status": cov_status,
+                        }
+
+            # D. Findings (`ReportFinding`)
+            findings = (
+                db.query(ReportFinding)
+                .join(ComplianceReport, ReportFinding.report_id == ComplianceReport.id)
+                .filter(ComplianceReport.organization_id == org_uuid)
+                .all()
+            )
+
+            for f in findings:
+                f_id_str = str(f.id)
+                finding_node_id = f"finding:{f_id_str}"
+                rep = f.report
+
+                nodes_by_id[finding_node_id] = {
+                    "id": finding_node_id,
+                    "kind": "finding",
+                    "label": f"F-{f_id_str[:8]}",
+                    "finding_id": f_id_str,
+                    "severity": f.severity or "MEDIUM",
+                    "lifecycle_status": f.lifecycle_status or "OPEN",
+                    "status": f.status or "NON_COMPLIANT",
+                    "coverage_status": "GAP" if (f.status or "").upper() == "NON_COMPLIANT" else "PARTIALLY_COVERED",
+                    "reasoning": f.reasoning or "",
+                    "recommendation": f.recommendation or "",
+                    "citation": f.citation or "",
+                    "report_id": str(f.report_id),
+                    "policy_id": str(rep.policy_document_id) if rep else None,
+                    "regulation_id": str(rep.regulation_id) if rep else None,
+                    "regulation_clause_id": f.regulation_clause_id,
+                    "policy_clause_id": f.policy_clause_id,
+                }
+
+                if rep:
+                    pol_node_id = f"pol:{rep.policy_document_id}"
+                    reg_node_id = f"reg:{rep.regulation_id}"
+
+                    # Finding -> RELATES_TO -> Policy
+                    edge_f_pol = f"rel_pol:{finding_node_id}:{pol_node_id}"
+                    edges_by_id[edge_f_pol] = {
+                        "id": edge_f_pol,
+                        "kind": "RELATES_TO",
+                        "source": finding_node_id,
+                        "target": pol_node_id,
+                    }
+
+                    # Finding -> RELATES_TO -> Regulation
+                    edge_f_reg = f"rel_reg:{finding_node_id}:{reg_node_id}"
+                    edges_by_id[edge_f_reg] = {
+                        "id": edge_f_reg,
+                        "kind": "RELATES_TO",
+                        "source": finding_node_id,
+                        "target": reg_node_id,
+                    }
+
+                    # Requirement -> HAS_FINDING -> Finding
+                    if f.regulation_clause_id:
+                        req_node_id = f"req:{rep.regulation_id}:{f.regulation_clause_id}"
+                        edge_req_find = f"has_finding:{req_node_id}:{finding_node_id}"
+                        edges_by_id[edge_req_find] = {
+                            "id": edge_req_find,
+                            "kind": "HAS_FINDING",
+                            "source": req_node_id,
+                            "target": finding_node_id,
+                        }
+
+            # E. Finding Remediations (`FindingRemediation`)
+            remediations = db.scalars(
+                select(FindingRemediation).where(FindingRemediation.organization_id == org_uuid)
+            ).all()
+
+            for rem in remediations:
+                rem_id_str = str(rem.id)
+                rem_node_id = f"rem:{rem_id_str}"
+                finding_node_id = f"finding:{rem.finding_id}"
+
+                nodes_by_id[rem_node_id] = {
+                    "id": rem_node_id,
+                    "kind": "remediation",
+                    "label": rem.title or "Remediation Plan",
+                    "remediation_id": rem_id_str,
+                    "finding_id": str(rem.finding_id),
+                    "status": rem.status or "PENDING",
+                    "description": rem.description or "",
+                    "target_date": rem.target_date.isoformat() if getattr(rem, "target_date", None) else None,
+                }
+
+                # Finding -> HAS_REMEDIATION -> Remediation
+                edge_f_rem = f"has_rem:{finding_node_id}:{rem_node_id}"
+                edges_by_id[edge_f_rem] = {
+                    "id": edge_f_rem,
+                    "kind": "HAS_REMEDIATION",
+                    "source": finding_node_id,
+                    "target": rem_node_id,
+                }
+
+        except Exception as exc:
+            logger.warning("Error synthesizing relational compliance graph: %s", exc)
+
+    # 3. Neo4j Fusion (if available, merge additional clauses & similarity edges)
+    if is_neo4j_available():
+        try:
+            neo_nodes = run_query("MATCH (d:Document)-[:HAS_CLAUSE]->(c:Clause) RETURN d.id AS doc_id, c.id AS clause_id, c.text AS text LIMIT 50")
+            for row in neo_nodes:
+                c_id = str(row.get("clause_id") or "")
+                d_id = f"pol:{row.get('doc_id')}"
+                if c_id and c_id not in nodes_by_id:
+                    nodes_by_id[c_id] = {
+                        "id": c_id,
+                        "kind": "policy_section",
+                        "label": c_id,
+                        "text": row.get("text") or "",
+                    }
+                    if d_id in nodes_by_id:
+                        edges_by_id[f"has_clause:{d_id}:{c_id}"] = {
+                            "id": f"has_clause:{d_id}:{c_id}",
+                            "kind": "CONTAINS",
+                            "source": d_id,
+                            "target": c_id,
+                        }
+        except Exception as exc:
+            logger.warning("Neo4j fusion query notice: %s", exc)
+
+    all_nodes = list(nodes_by_id.values())
+    all_edges = list(edges_by_id.values())
+
+    # 4. Targeted Neighborhood / Focus Node Filtering (Depth 1 or 2)
+    target_node_id: str | None = None
+    if focus_node:
+        target_node_id = focus_node
+    elif finding_id:
+        target_node_id = f"finding:{finding_id}" if not finding_id.startswith("finding:") else finding_id
+    elif regulation_id:
+        target_node_id = f"reg:{regulation_id}" if not regulation_id.startswith("reg:") else regulation_id
+    elif document_id:
+        target_node_id = f"pol:{document_id}" if not document_id.startswith("pol:") else document_id
+    elif search:
+        search_lower = search.lower()
+        matched = next((n for n in all_nodes if search_lower in (n.get("label") or "").lower() or search_lower in (n.get("text") or "").lower()), None)
+        if matched:
+            target_node_id = matched["id"]
+
+    if target_node_id and target_node_id in nodes_by_id:
+        # Bounded neighborhood traversal
+        active_ids = {target_node_id}
+        current_layer = {target_node_id}
+
+        for _ in range(min(depth, 3)):
+            next_layer = set()
+            for edge in all_edges:
+                if edge["source"] in current_layer and edge["target"] not in active_ids:
+                    next_layer.add(edge["target"])
+                elif edge["target"] in current_layer and edge["source"] not in active_ids:
+                    next_layer.add(edge["source"])
+            active_ids.update(next_layer)
+            current_layer = next_layer
+            if not current_layer:
+                break
+
+        # Filter nodes and edges to active neighborhood
+        all_nodes = [n for n in all_nodes if n["id"] in active_ids]
+        all_edges = [e for e in all_edges if e["source"] in active_ids and e["target"] in active_ids]
+
+        # Mark focused node
+        for n in all_nodes:
+            if n["id"] == target_node_id:
+                n["is_focused"] = True
 
     return {
         "status": "ok",
-        "nodes": nodes,
-        "edges": edges,
+        "nodes": all_nodes,
+        "edges": all_edges,
         "meta": {
-            "documents": len(document_rows),
-            "clauses": len({row.get('clause_id') for row in clause_rows if row.get('clause_id')}),
-            "has_clause_edges": len(clause_rows),
-            "similarity_edges": len(similarity_rows),
+            "total_nodes": len(all_nodes),
+            "total_edges": len(all_edges),
+            "focus_node": target_node_id,
         },
     }
 
@@ -370,3 +488,4 @@ def _get_knowledge_graph_snapshot(build: dict) -> dict:
             "relationships": len(edges),
         },
     }
+

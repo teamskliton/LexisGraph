@@ -260,12 +260,18 @@ async def build_similarity_endpoint(
 
 @router.get("/graph-view")
 async def graph_view(
-    max_documents: int = Query(12, ge=1, le=50),
-    max_clauses: int = Query(120, ge=0, le=500),
-    max_similarity_edges: int = Query(180, ge=0, le=1000),
+    max_documents: int = Query(20, ge=1, le=50),
+    max_clauses: int = Query(150, ge=0, le=500),
+    max_similarity_edges: int = Query(200, ge=0, le=1000),
     knowledge_graph_only: bool = Query(False),
     build_id: str | None = Query(default=None),
     organization_id: uuid.UUID | None = Query(default=None),
+    focus_node: str | None = Query(default=None),
+    depth: int = Query(2, ge=1, le=4),
+    search: str | None = Query(default=None),
+    finding_id: str | None = Query(default=None),
+    document_id: str | None = Query(default=None),
+    regulation_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_current_user),
 ) -> dict:
@@ -303,12 +309,19 @@ async def graph_view(
             build_id=build_id,
             organization_id=str(organization_id) if organization_id else None,
             db=db,
+            focus_node=focus_node,
+            depth=depth,
+            search=search,
+            finding_id=finding_id,
+            document_id=document_id,
+            regulation_id=regulation_id,
         )
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
         logger.exception("Graph view failed")
         raise HTTPException(status_code=500, detail="Graph view failed") from exc
+
 
 
 @router.get("/graph-jobs/latest")

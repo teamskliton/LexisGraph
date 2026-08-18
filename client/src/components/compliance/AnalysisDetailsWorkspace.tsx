@@ -62,6 +62,7 @@ import { documentService } from "@/services/document-service";
 import { DocumentResponse } from "@/types/document";
 import { organizationsService, Organization } from "@/services/api/organizations";
 import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
+import { GapAnalysisWorkspace } from "@/components/compliance/GapAnalysisWorkspace";
 
 interface AnalysisDetailsWorkspaceProps {
   reportId: string;
@@ -84,6 +85,8 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  // Sprint 8.1: Gap Analysis workspace tab
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"DETAILS" | "GAP_ANALYSIS">("DETAILS");
 
   const loadWorkspace = useCallback(async () => {
     const isUUID = !!reportId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(reportId);
@@ -476,6 +479,59 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
           </div>
         </div>
       </Card>
+
+      {/* ── SPRINT 8.1: WORKSPACE TAB SWITCHER ── */}
+      {report.status === "COMPLETED" && (
+        <div
+          className="flex items-center gap-1 p-1 rounded-xl border border-border/50 bg-muted/20 w-fit"
+          role="tablist"
+          aria-label="Analysis workspace tabs"
+        >
+          {([
+            { id: "DETAILS" as const, label: "Report Details", icon: <FileCheck2 className="h-3.5 w-3.5" /> },
+            { id: "GAP_ANALYSIS" as const, label: "Gap Analysis", icon: <ShieldAlert className="h-3.5 w-3.5" /> },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeWorkspaceTab === tab.id}
+              onClick={() => setActiveWorkspaceTab(tab.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                activeWorkspaceTab === tab.id
+                  ? "bg-card text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.id === "GAP_ANALYSIS" && (
+                <Badge
+                  variant="outline"
+                  className="text-[9px] px-1.5 py-0 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 font-bold"
+                >
+                  NEW
+                </Badge>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── SPRINT 8.1: GAP ANALYSIS TAB CONTENT ── */}
+      {activeWorkspaceTab === "GAP_ANALYSIS" && report.status === "COMPLETED" && (
+        <div role="tabpanel" aria-label="Gap Analysis">
+          <GapAnalysisWorkspace
+            reportId={reportId}
+            organizationId={report.organization_id}
+          />
+        </div>
+      )}
+
+      {/* ── EXISTING SECTIONS (Report Details tab) ── */}
+      {activeWorkspaceTab === "DETAILS" && (
+        <>
 
       {/* ── SECTION 2: EXECUTIVE SUMMARY ── */}
       <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
@@ -1056,6 +1112,11 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
           </div>
         )}
       </Card>
+
+      {/* Sprint 8.1: Close DETAILS tab wrapper */}
+      </>
+      )}
+
     </div>
   );
 };

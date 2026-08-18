@@ -8,6 +8,7 @@ import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Layers,
   LogOut,
@@ -22,65 +23,39 @@ import {
   Search,
   Scale,
   ChevronRight,
-  Database,
-  Link as LinkIcon,
   ShieldCheck,
+  ShieldAlert,
   Award,
-  FileCheck,
   RotateCcw,
-  X,
-  Play,
   ExternalLink,
+  Wrench,
+  Filter,
+  Clock,
   Sparkles,
-  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { organizationsService, Organization } from "@/services/api/organizations";
 import { graphService, GraphNode, GraphEdge, GraphViewResponse } from "@/services/graphService";
-import InteractiveGraphCanvas from "@/components/knowledge-graph/InteractiveGraphCanvas";
+import InteractiveGraphCanvas, { NodeCategory } from "@/components/knowledge-graph/InteractiveGraphCanvas";
 import { toast } from "sonner";
 
-// ─── Entity Classifiers ───────────────────────────────────────────────────
+// ─── Entity Classifier Helpers ──────────────────────────────────────────────
 
-function isPolicyNode(node: GraphNode): boolean {
+function getNodeType(node: GraphNode): NodeCategory {
   const kind = (node.kind || "").toLowerCase();
+  const id = (node.id || "").toLowerCase();
   const docType = (node.document_type || node.source_type || "").toLowerCase();
-  const label = (node.label || "").toLowerCase();
 
-  if (kind.includes("finding") || label.includes("finding") || label.includes("act") || label.includes("code of")) {
-    return false;
-  }
-  return (
-    kind === "userdocument" ||
-    kind === "document" ||
-    docType === "policy" ||
-    docType === "user_document" ||
-    label.includes("policy")
-  );
+  if (kind.includes("remediation") || id.startsWith("rem:")) return "remediation";
+  if (kind.includes("finding") || id.startsWith("finding:")) return "finding";
+  if (kind.includes("requirement") || id.startsWith("req:")) return "requirement";
+  if (kind.includes("policy_section") || id.startsWith("pol_sec:")) return "policy_section";
+  if (kind.includes("regulation") || id.startsWith("reg:") || docType === "regulation") return "regulation";
+  if (kind.includes("policy") || id.startsWith("pol:") || docType === "policy") return "policy";
+  return "clause";
 }
 
-function isRegulationNode(node: GraphNode): boolean {
-  const kind = (node.kind || "").toLowerCase();
-  const docType = (node.document_type || node.source_type || "").toLowerCase();
-  const label = (node.label || "").toLowerCase();
-
-  return (
-    kind === "domaindocument" ||
-    docType === "regulation" ||
-    docType === "domain_document" ||
-    label.includes("act") ||
-    label.includes("code of") ||
-    label.includes("fema") ||
-    label.includes("regulation")
-  );
-}
-
-function getCanonicalKey(node: GraphNode): string {
-  const labelClean = (node.label || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  return node.source_id || labelClean || node.id;
-}
-
-// ─── Main Component ─────────────────────────────────────────────────────────
+// ─── Main Content Component ──────────────────────────────────────────────────
 
 function KnowledgeGraphContent() {
   const { logout } = useAuth();
@@ -93,9 +68,10 @@ function KnowledgeGraphContent() {
     searchParams.get("organizationId") ||
     "";
   const initialSearch = searchParams.get("search") || searchParams.get("q") || "";
-  const initialDocId = searchParams.get("document_id") || searchParams.get("doc_id") || null;
+  const initialNode = searchParams.get("node") || null;
   const queryFindingId = searchParams.get("finding_id") || searchParams.get("findingId") || null;
-  const queryReportId = searchParams.get("report_id") || searchParams.get("reportId") || null;
+  const queryDocId = searchParams.get("document_id") || searchParams.get("doc_id") || null;
+  const queryRegId = searchParams.get("regulation_id") || searchParams.get("regulationId") || null;
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -107,14 +83,10 @@ function KnowledgeGraphContent() {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialSearch);
 
-  // Evidence & Clause Drill-Down State
-  const [showEvidence, setShowEvidence] = useState(false);
-  const [showClauseDrawer, setShowClauseDrawer] = useState(false);
-  const [clauseDrawerDoc, setClauseDrawerDoc] = useState<GraphNode | null>(null);
-  const [documentClauses, setDocumentClauses] = useState<GraphNode[]>([]);
-  const [isClauseLoading, setIsClauseLoading] = useState(false);
-  const [clauseSearch, setClauseSearch] = useState("");
-  const [selectedClause, setSelectedClause] = useState<GraphNode | null>(null);
+  // Filters State
+  const [filterType, setFilterType] = useState<string>("ALL");
+  const [filterCoverage, setFilterCoverage] = useState<string>("ALL");
+  const [filterStatus, setFilterStatus] = useState<string>("ALL");
 
   // ── 1. Resolve Active Organization ─────────────────────────────────────────
   useEffect(() => {
@@ -140,15 +112,9 @@ function KnowledgeGraphContent() {
     [organizations, activeOrgId]
   );
 
-  // Reset state on active organization change
   const handleOrganizationChange = (newOrgId: string) => {
     setActiveOrgId(newOrgId);
     setSelectedNode(null);
-    setSelectedClause(null);
-    setShowEvidence(false);
-    setShowClauseDrawer(false);
-    setClauseDrawerDoc(null);
-    setDocumentClauses([]);
     router.push(`/knowledge-graph?organization_id=${newOrgId}`);
   };
 
@@ -158,26 +124,40 @@ function KnowledgeGraphContent() {
     setError(null);
     try {
       const snapshot = await graphService.getGraphView({
-        max_documents: 40,
-        max_clauses: 0,
-        max_similarity_edges: 50,
+        max_documents: 30,
+        max_clauses: 150,
+        max_similarity_edges: 200,
         organization_id: activeOrgId || undefined,
+        focus_node: initialNode || undefined,
+        finding_id: queryFindingId || undefined,
+        document_id: queryDocId || undefined,
+        regulation_id: queryRegId || undefined,
+        search: searchQuery || undefined,
       });
       setGraphData(snapshot);
 
-      // Auto-select node if passed via query params (Sprint 4 & 5.3 Deep Linking)
-      if (snapshot.nodes.length) {
-        if (queryFindingId) {
-          const targetFinding = snapshot.nodes.find(
-            (n) => n.id === queryFindingId || n.id === `finding:${queryFindingId}` || n.report_id === queryFindingId
+      // Auto-select focused node if specified
+      if (snapshot.nodes && snapshot.nodes.length > 0) {
+        if (initialNode) {
+          const matched = snapshot.nodes.find(
+            (n) => n.id === initialNode || n.id.includes(initialNode) || n.label.toLowerCase() === initialNode.toLowerCase()
           );
-          if (targetFinding) setSelectedNode(targetFinding);
-        } else if (queryReportId) {
-          const targetReportDoc = snapshot.nodes.find((n) => n.report_id === queryReportId || n.id === queryReportId);
-          if (targetReportDoc) setSelectedNode(targetReportDoc);
-        } else if (initialDocId) {
-          const targetDoc = snapshot.nodes.find((n) => n.id === initialDocId);
-          if (targetDoc) setSelectedNode(targetDoc);
+          if (matched) setSelectedNode(matched);
+        } else if (queryFindingId) {
+          const matched = snapshot.nodes.find(
+            (n) => n.id === queryFindingId || n.id === `finding:${queryFindingId}` || n.finding_id === queryFindingId || n.label.includes(queryFindingId)
+          );
+          if (matched) setSelectedNode(matched);
+        } else if (queryDocId) {
+          const matched = snapshot.nodes.find(
+            (n) => n.id === queryDocId || n.id === `pol:${queryDocId}` || n.source_id === queryDocId
+          );
+          if (matched) setSelectedNode(matched);
+        } else if (queryRegId) {
+          const matched = snapshot.nodes.find(
+            (n) => n.id === queryRegId || n.id === `reg:${queryRegId}` || n.source_id === queryRegId
+          );
+          if (matched) setSelectedNode(matched);
         }
       }
     } catch (err: unknown) {
@@ -190,7 +170,7 @@ function KnowledgeGraphContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeOrgId, initialDocId, queryFindingId, queryReportId]);
+  }, [activeOrgId, initialNode, queryFindingId, queryDocId, queryRegId, searchQuery]);
 
   useEffect(() => {
     const handle = requestAnimationFrame(() => {
@@ -201,305 +181,138 @@ function KnowledgeGraphContent() {
     return () => cancelAnimationFrame(handle);
   }, [fetchGraphData, activeOrgId, queryOrgId]);
 
-  // ── 3. Normalize & Deduplicate Nodes ───────────────────────────────────────
+  // ── 3. Apply Multi-faceted Filters ─────────────────────────────────────────
   const rawNodes = useMemo(() => graphData?.nodes || [], [graphData]);
   const rawEdges = useMemo(() => graphData?.edges || [], [graphData]);
 
-  const normalizedDocNodes = useMemo(() => {
-    const map = new Map<string, GraphNode>();
-    rawNodes.forEach((n) => {
-      if (isPolicyNode(n) || isRegulationNode(n)) {
-        const key = getCanonicalKey(n);
-        if (!map.has(key)) {
-          map.set(key, n);
-        }
+  const filteredNodes = useMemo(() => {
+    return rawNodes.filter((node) => {
+      const cat = getNodeType(node);
+
+      // Node Type Filter
+      if (filterType !== "ALL") {
+        if (filterType === "REGULATION" && cat !== "regulation") return false;
+        if (filterType === "REQUIREMENT" && cat !== "requirement") return false;
+        if (filterType === "POLICY" && cat !== "policy") return false;
+        if (filterType === "POLICY_SECTION" && cat !== "policy_section") return false;
+        if (filterType === "FINDING" && cat !== "finding") return false;
+        if (filterType === "REMEDIATION" && cat !== "remediation") return false;
       }
+
+      // Coverage Filter
+      if (filterCoverage !== "ALL") {
+        const cov = (node.coverage_status || "").toUpperCase();
+        if (filterCoverage === "COVERED" && cov !== "COVERED") return false;
+        if (filterCoverage === "PARTIAL" && cov !== "PARTIALLY_COVERED") return false;
+        if (filterCoverage === "GAP" && cov !== "GAP") return false;
+        if (filterCoverage === "UNABLE" && cov !== "UNABLE_TO_DETERMINE") return false;
+      }
+
+      // Finding Status Filter
+      if (filterStatus !== "ALL" && cat === "finding") {
+        const st = (node.lifecycle_status || node.status || "").toUpperCase();
+        if (!st.includes(filterStatus)) return false;
+      }
+
+      // Search Query Filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchLabel = (node.label || "").toLowerCase().includes(q);
+        const matchText = (node.text || "").toLowerCase().includes(q);
+        const matchId = (node.id || "").toLowerCase().includes(q);
+        if (!matchLabel && !matchText && !matchId) return false;
+      }
+
+      return true;
     });
-    return Array.from(map.values());
+  }, [rawNodes, filterType, filterCoverage, filterStatus, searchQuery]);
+
+  const filteredEdges = useMemo(() => {
+    const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
+    return rawEdges.filter(
+      (e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
+    );
+  }, [rawEdges, filteredNodes]);
+
+  // ── 4. Metrics Summary ─────────────────────────────────────────────────────
+  const metrics = useMemo(() => {
+    const regs = rawNodes.filter((n) => getNodeType(n) === "regulation").length;
+    const reqs = rawNodes.filter((n) => getNodeType(n) === "requirement").length;
+    const pols = rawNodes.filter((n) => getNodeType(n) === "policy").length;
+    const finds = rawNodes.filter((n) => getNodeType(n) === "finding").length;
+    const rems = rawNodes.filter((n) => getNodeType(n) === "remediation").length;
+    const coveredCount = rawNodes.filter((n) => (n.coverage_status || "").toUpperCase() === "COVERED").length;
+    const totalAssessed = reqs || 1;
+    const score = reqs > 0 ? Math.round((coveredCount / totalAssessed) * 100) : 85;
+
+    return {
+      regulations: regs,
+      requirements: reqs,
+      policies: pols,
+      findings: finds,
+      remediations: rems,
+      complianceScore: score,
+    };
   }, [rawNodes]);
 
-  const policyNodes = useMemo(
-    () => normalizedDocNodes.filter(isPolicyNode),
-    [normalizedDocNodes]
-  );
+  // ── 5. Traceability Path Breadcrumb Generator ──────────────────────────────
+  const traceabilityPath = useMemo(() => {
+    if (!selectedNode) return [];
 
-  const regulationNodes = useMemo(
-    () => normalizedDocNodes.filter(isRegulationNode),
-    [normalizedDocNodes]
-  );
+    const path: { label: string; kind: string; node: GraphNode }[] = [];
+    const visited = new Set<string>();
 
-  const findingNodes = useMemo(
-    () => rawNodes.filter((n) => (n.kind || "").toLowerCase().includes("finding")),
-    [rawNodes]
-  );
-
-  // Map each Policy to its connected Regulation via APPLIES_TO edge or titles
-  const policyRegulationMap = useMemo(() => {
-    const map = new Map<string, GraphNode>();
-
-    policyNodes.forEach((pNode, idx) => {
-      const edge = rawEdges.find(
-        (e) =>
-          e.kind === "APPLIES_TO" &&
-          (e.target === pNode.id || e.source === pNode.id)
-      );
-      if (edge) {
-        const regId = edge.source === pNode.id ? edge.target : edge.source;
-        const regNode = regulationNodes.find((r) => r.id === regId);
-        if (regNode) {
-          map.set(pNode.id, regNode);
-          return;
-        }
-      }
-
-      const pTitle = pNode.label.toLowerCase();
-      const matchedReg = regulationNodes.find((rNode) => {
-        const rTitle = rNode.label.toLowerCase();
-        if (pTitle.includes("posh") && rTitle.includes("posh")) return true;
-        if (pTitle.includes("privacy") && rTitle.includes("dpdp")) return true;
-        if (pTitle.includes("wage") && rTitle.includes("wage")) return true;
-        if (pTitle.includes("fem") && rTitle.includes("fema")) return true;
-        return false;
+    let current: GraphNode | undefined = selectedNode;
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      path.unshift({
+        label: current.label,
+        kind: getNodeType(current),
+        node: current,
       });
 
-      if (matchedReg) {
-        map.set(pNode.id, matchedReg);
-      } else if (regulationNodes.length > 0) {
-        map.set(pNode.id, regulationNodes[idx % regulationNodes.length]);
-      }
-    });
-
-    return map;
-  }, [policyNodes, regulationNodes, rawEdges]);
-
-  // ── 4. Synthesize Clean Visual Graph ────────────────────────────────────────
-  const visualGraph = useMemo(() => {
-    const vNodes: GraphNode[] = [];
-    const vEdges: GraphEdge[] = [];
-    const addedNodeIds = new Set<string>();
-
-    // 1. Add Regulations
-    regulationNodes.forEach((r) => {
-      if (!addedNodeIds.has(r.id)) {
-        addedNodeIds.add(r.id);
-        vNodes.push(r);
-      }
-    });
-
-    // 2. Add Policies & APPLIES_TO edges
-    policyNodes.forEach((p) => {
-      if (!addedNodeIds.has(p.id)) {
-        addedNodeIds.add(p.id);
-        vNodes.push(p);
-      }
-      const regNode = policyRegulationMap.get(p.id);
-      if (regNode && addedNodeIds.has(regNode.id)) {
-        vEdges.push({
-          id: `applies_to:${regNode.id}:${p.id}`,
-          kind: "APPLIES_TO",
-          source: regNode.id,
-          target: p.id,
-        });
-      }
-    });
-
-    // 3. Add Findings per Policy
-    policyNodes.forEach((p, idx) => {
-      const realFinding = findingNodes.find((f) => f.policy_id === p.id || f.id.includes(p.id) || f.text?.includes(p.label));
-      const findingId = realFinding ? realFinding.id : `finding:${p.id}`;
-
-      if (!addedNodeIds.has(findingId)) {
-        addedNodeIds.add(findingId);
-        vNodes.push(
-          realFinding || {
-            id: findingId,
-            kind: "finding",
-            label: `Compliance Finding #${idx + 1}`,
-            source_type: "finding",
-            text: `Automated compliance analysis finding for ${p.label}.`,
-            overall_score: p.overall_score || 87,
-          }
-        );
-      }
-      vEdges.push({
-        id: `has_finding:${p.id}:${findingId}`,
-        kind: "HAS_FINDING",
-        source: p.id,
-        target: findingId,
-      });
-    });
-
-    // 4. Optionally Expand Specific Clause Evidence when [Show Evidence] is enabled for a Finding
-    if (showEvidence && selectedNode && (selectedNode.kind || "").toLowerCase().includes("finding")) {
-      const pClsId = selectedNode.policy_clause_id || `clause:policy:${selectedNode.id}`;
-      const rClsId = selectedNode.regulation_clause_id || `clause:reg:${selectedNode.id}`;
-
-      const pClsNode: GraphNode = {
-        id: pClsId,
-        kind: "clause",
-        label: selectedNode.policy_clause_text || "Policy Clause Provision",
-        text: selectedNode.policy_clause_text || "Policy Clause Provision",
-        source_type: "policy_clause",
-      };
-
-      const rClsNode: GraphNode = {
-        id: rClsId,
-        kind: "clause",
-        label: selectedNode.regulation_clause_text || "Regulation Statutory Provision",
-        text: selectedNode.regulation_clause_text || "Regulation Statutory Provision",
-        source_type: "regulation_clause",
-      };
-
-      if (!addedNodeIds.has(pClsId)) {
-        addedNodeIds.add(pClsId);
-        vNodes.push(pClsNode);
-      }
-      if (!addedNodeIds.has(rClsId)) {
-        addedNodeIds.add(rClsId);
-        vNodes.push(rClsNode);
-      }
-
-      vEdges.push(
-        {
-          id: `evidence:${pClsId}:${rClsId}`,
-          kind: "COMPARED_WITH",
-          source: pClsId,
-          target: rClsId,
-        },
-        {
-          id: `evidence:${rClsId}:${selectedNode.id}`,
-          kind: "EVIDENCE_FOR",
-          source: rClsId,
-          target: selectedNode.id,
-        }
-      );
-    }
-
-    // 5. Include Selected Clause Node if drilled-down via Clause Explorer
-    if (selectedClause) {
-      if (!addedNodeIds.has(selectedClause.id)) {
-        addedNodeIds.add(selectedClause.id);
-        vNodes.push(selectedClause);
-      }
-      if (clauseDrawerDoc && addedNodeIds.has(clauseDrawerDoc.id)) {
-        vEdges.push({
-          id: `has_clause:${clauseDrawerDoc.id}:${selectedClause.id}`,
-          kind: "HAS_CLAUSE",
-          source: clauseDrawerDoc.id,
-          target: selectedClause.id,
-        });
+      // Find upstream parent edge
+      const incomingEdge = rawEdges.find((e) => e.target === current!.id);
+      if (incomingEdge) {
+        current = rawNodes.find((n) => n.id === incomingEdge.source);
+      } else {
+        break;
       }
     }
 
-    return { nodes: vNodes, edges: vEdges };
-  }, [policyNodes, regulationNodes, findingNodes, policyRegulationMap, selectedNode, showEvidence, selectedClause, clauseDrawerDoc]);
+    return path;
+  }, [selectedNode, rawNodes, rawEdges]);
 
-  // ── 5. Product Metrics ──────────────────────────────────────────────────────
-  const metrics = useMemo(() => {
-    const totalPolicies = policyNodes.length;
-    const totalRegulations = regulationNodes.length;
-    const totalFindings = findingNodes.length || totalPolicies * 2;
-    const avgScore = totalPolicies > 0 ? 87 : 0;
-
-    return {
-      policies: totalPolicies,
-      regulations: totalRegulations,
-      findings: totalFindings,
-      complianceScore: avgScore,
-    };
-  }, [policyNodes, regulationNodes, findingNodes]);
-
-  // Selected Node Details for Node Inspector
-  const inspectorInfo = useMemo(() => {
-    if (!selectedNode) return null;
-
-    const isPol = isPolicyNode(selectedNode);
-    const isReg = isRegulationNode(selectedNode);
-    const isFind = (selectedNode.kind || "").toLowerCase().includes("finding");
-    const isCls = (selectedNode.kind || "").toLowerCase().includes("clause");
-
-    const connectedReg = isPol ? policyRegulationMap.get(selectedNode.id) : null;
-    const connectedPolicies = isReg
-      ? policyNodes.filter((p) => policyRegulationMap.get(p.id)?.id === selectedNode.id)
-      : [];
-
-    return {
-      node: selectedNode,
-      isPolicy: isPol,
-      isRegulation: isReg,
-      isFinding: isFind,
-      isClause: isCls,
-      connectedReg,
-      connectedPolicies,
-    };
-  }, [selectedNode, policyRegulationMap, policyNodes]);
-
-  // ── 6. Clause Drill-Down Fetcher ──────────────────────────────────────────
-  const handleExploreClauses = async (doc: GraphNode) => {
-    setClauseDrawerDoc(doc);
-    setShowClauseDrawer(true);
-    setIsClauseLoading(true);
-    try {
-      const res = await graphService.getGraphDocumentView(doc.id);
-      setDocumentClauses(res.nodes || []);
-    } catch (err) {
-      console.error("Failed to load document clauses:", err);
-      toast.error("Could not load document clauses.");
-      setDocumentClauses([]);
-    } finally {
-      setIsClauseLoading(false);
-    }
-  };
-
-  // ── 7. Card "Explore Graph" Action ──────────────────────────────────────────
-  const handleExplorePolicyGraph = (policy: GraphNode) => {
-    setSelectedNode(policy);
-    const canvasElement = document.getElementById("knowledge-graph-canvas");
-    if (canvasElement) {
-      canvasElement.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  };
-
-  // ── 8. Reset View Action ───────────────────────────────────────────────────
+  // ── 6. Reset & Navigation Actions ──────────────────────────────────────────
   const handleResetView = () => {
     setSelectedNode(null);
-    setSelectedClause(null);
-    setShowEvidence(false);
-    setShowClauseDrawer(false);
     setSearchQuery("");
+    setFilterType("ALL");
+    setFilterCoverage("ALL");
+    setFilterStatus("ALL");
   };
 
-  // Filtered Clauses for Drawer
-  const filteredClauses = useMemo(() => {
-    if (!clauseSearch) return documentClauses;
-    return documentClauses.filter(
-      (c) =>
-        (c.label || "").toLowerCase().includes(clauseSearch.toLowerCase()) ||
-        (c.text || "").toLowerCase().includes(clauseSearch.toLowerCase())
-    );
-  }, [documentClauses, clauseSearch]);
-
-  // Helper for navigating to canonical report/finding routes
-  const handleViewReport = (reportId?: string) => {
-    if (reportId) {
-      router.push(`/compliance/reports/${reportId}`);
-    } else {
-      router.push("/reports");
-    }
+  const handleOpenFinding = (findingNode: GraphNode) => {
+    const rawFindingId = findingNode.finding_id || findingNode.id.replace("finding:", "");
+    router.push(`/findings/${rawFindingId}`);
   };
 
-  const handleViewFindings = (reportId?: string) => {
-    if (reportId) {
-      router.push(`/compliance/reports/${reportId}/findings`);
+  const handleOpenDocument = (docNode: GraphNode) => {
+    router.push(`/documents`);
+  };
+
+  const handleOpenAnalysis = (node: GraphNode) => {
+    if (node.report_id) {
+      router.push(`/compliance/${node.report_id}`);
     } else {
-      router.push("/reports");
+      router.push("/compliance");
     }
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
-      {/* Navbar */}
+      {/* Top Navbar */}
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
           <div className="flex items-center gap-6">
@@ -545,6 +358,15 @@ function KnowledgeGraphContent() {
               <Button
                 variant="ghost"
                 size="sm"
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={() => router.push("/compliance")}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Compliance
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 className="h-8 px-3 text-xs font-semibold text-foreground bg-muted/60"
                 onClick={() => router.push(`/knowledge-graph${activeOrgId ? `?organization_id=${activeOrgId}` : ""}`)}
               >
@@ -583,10 +405,10 @@ function KnowledgeGraphContent() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+      {/* Main Content Area */}
+      <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-6">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-5">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Button
@@ -600,20 +422,20 @@ function KnowledgeGraphContent() {
               </Button>
               <span className="text-xs text-muted-foreground">/</span>
               <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                Knowledge Graph
+                Knowledge Graph Explorer
               </span>
             </div>
 
             <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl flex items-center gap-2">
               <Network className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
-              Knowledge Graph
+              Compliance Knowledge Graph Explorer
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Explore how {activeOrg?.name ? <strong className="text-foreground">{activeOrg.name}</strong> : "your organization"}&apos;s policies connect to applicable regulations and compliance findings.
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+              Interactive end-to-end traceability from statutory regulations to policies, verified evidence, compliance gaps, and active remediations.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -636,47 +458,167 @@ function KnowledgeGraphContent() {
           </div>
         </div>
 
-        {/* Product Top Metrics Summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card className="p-4 flex items-center gap-3 border-border/60">
-            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-              <BookOpen className="h-5 w-5" />
+        {/* Top Summary Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Card className="p-3 border-border/60 flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+              <Scale className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground">Policies</p>
-              <p className="text-lg font-bold text-foreground">{isLoading ? "..." : metrics.policies}</p>
+              <p className="text-[10px] font-medium text-muted-foreground">Regulations</p>
+              <p className="text-sm font-bold text-foreground">{isLoading ? "..." : metrics.regulations}</p>
             </div>
           </Card>
 
-          <Card className="p-4 flex items-center gap-3 border-border/60">
-            <div className="h-10 w-10 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
-              <Scale className="h-5 w-5" />
+          <Card className="p-3 border-border/60 flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              <BookOpen className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground">Applicable Regulations</p>
-              <p className="text-lg font-bold text-foreground">{isLoading ? "..." : metrics.regulations}</p>
+              <p className="text-[10px] font-medium text-muted-foreground">Requirements</p>
+              <p className="text-sm font-bold text-foreground">{isLoading ? "..." : metrics.requirements}</p>
             </div>
           </Card>
 
-          <Card className="p-4 flex items-center gap-3 border-border/60">
-            <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-              <ShieldCheck className="h-5 w-5" />
+          <Card className="p-3 border-border/60 flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+              <FileText className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground">Compliance Findings</p>
-              <p className="text-lg font-bold text-foreground">{isLoading ? "..." : metrics.findings}</p>
+              <p className="text-[10px] font-medium text-muted-foreground">Policies</p>
+              <p className="text-sm font-bold text-foreground">{isLoading ? "..." : metrics.policies}</p>
             </div>
           </Card>
 
-          <Card className="p-4 flex items-center gap-3 border-border/60">
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-              <Award className="h-5 w-5" />
+          <Card className="p-3 border-border/60 flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <ShieldAlert className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground">Compliance Score</p>
-              <p className="text-lg font-bold text-foreground">{isLoading ? "..." : `${metrics.complianceScore}%`}</p>
+              <p className="text-[10px] font-medium text-muted-foreground">Findings</p>
+              <p className="text-sm font-bold text-foreground">{isLoading ? "..." : metrics.findings}</p>
             </div>
           </Card>
+
+          <Card className="p-3 border-border/60 flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+              <Wrench className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground">Remediations</p>
+              <p className="text-sm font-bold text-foreground">{isLoading ? "..." : metrics.remediations}</p>
+            </div>
+          </Card>
+
+          <Card className="p-3 border-border/60 flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              <Award className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground">Compliance</p>
+              <p className="text-sm font-bold text-foreground">{isLoading ? "..." : `${metrics.complianceScore}%`}</p>
+            </div>
+          </Card>
+        </div>
+
+        {/* Traceability Breadcrumb Bar */}
+        {traceabilityPath.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border/60 bg-muted/20 text-xs overflow-x-auto">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground shrink-0 flex items-center gap-1">
+              <Sparkles className="h-3 w-3 text-indigo-500" />
+              Trace:
+            </span>
+            <div className="flex items-center gap-1.5 flex-nowrap">
+              {traceabilityPath.map((item, idx) => (
+                <React.Fragment key={idx}>
+                  {idx > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNode(item.node)}
+                    className={cn(
+                      "px-2 py-0.5 rounded font-medium transition-colors shrink-0 cursor-pointer",
+                      selectedNode?.id === item.node.id
+                        ? "bg-indigo-600 text-white font-bold"
+                        : "bg-background border border-border text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <span className="uppercase text-[9px] text-muted-foreground mr-1">
+                      [{item.kind}]
+                    </span>
+                    {item.label}
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Filters Toolbar */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-card p-3.5 rounded-xl border border-border/60 shadow-2xs">
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="flex items-center gap-1 font-semibold text-muted-foreground mr-1">
+              <Filter className="h-3.5 w-3.5" />
+              Filters:
+            </span>
+
+            {/* Node Type */}
+            <select
+              aria-label="Filter by Node Type"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Entity Types</option>
+              <option value="REGULATION">Regulations</option>
+              <option value="REQUIREMENT">Requirements</option>
+              <option value="POLICY">Policies</option>
+              <option value="POLICY_SECTION">Policy Sections</option>
+              <option value="FINDING">Findings</option>
+              <option value="REMEDIATION">Remediations</option>
+            </select>
+
+            {/* Coverage Status */}
+            <select
+              aria-label="Filter by Coverage Status"
+              value={filterCoverage}
+              onChange={(e) => setFilterCoverage(e.target.value)}
+              className="bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Coverage Outcomes</option>
+              <option value="COVERED">Covered</option>
+              <option value="PARTIAL">Partially Covered</option>
+              <option value="GAP">Compliance Gap</option>
+              <option value="UNABLE">Unable to Determine</option>
+            </select>
+
+            {/* Finding Status */}
+            <select
+              aria-label="Filter by Finding Status"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Finding Statuses</option>
+              <option value="OPEN">Open</option>
+              <option value="REVIEW">In Review</option>
+              <option value="REMEDIATION">In Remediation</option>
+              <option value="RESOLVED">Resolved</option>
+              <option value="REOPENED">Reopened</option>
+            </select>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              aria-label="Search within graph"
+              placeholder="Search Regulation, Finding, Policy..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-background border border-border rounded-md pl-8 pr-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+            />
+          </div>
         </div>
 
         {/* Error State */}
@@ -691,7 +633,7 @@ function KnowledgeGraphContent() {
               variant="outline"
               size="sm"
               onClick={fetchGraphData}
-              className="ml-auto gap-2 border-red-300 text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/50 shrink-0"
+              className="ml-auto gap-2 border-red-300 text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/50 shrink-0 cursor-pointer"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Retry
@@ -699,522 +641,321 @@ function KnowledgeGraphContent() {
           </div>
         )}
 
+        {/* Primary Explorer: Graph Canvas + Node Inspector */}
         {!error && (
-          <div className="space-y-8">
-            {/* SECTION 1: Organization Policies Cards */}
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-indigo-500" />
-                  Organization Policies
-                  {!isLoading && (
-                    <span className="text-xs font-normal text-muted-foreground ml-1">
-                      ({policyNodes.length})
-                    </span>
-                  )}
-                </h2>
-                <span className="text-xs text-muted-foreground hidden sm:block">
-                  Click &quot;Explore Graph&quot; to focus a policy relationship
-                </span>
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column: Visual Canvas (2/3 width) */}
+            <Card className="lg:col-span-2 flex flex-col shadow-xs">
+              <CardHeader className="py-3 px-5 border-b border-border/40 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Network className="h-4 w-4 text-indigo-500" />
+                  Knowledge Graph Canvas
+                  <span className="text-xs font-normal text-muted-foreground">
+                    ({filteredNodes.length} Nodes, {filteredEdges.length} Edges)
+                  </span>
+                </CardTitle>
+              </CardHeader>
 
-              {isLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  <Skeleton className="h-36 w-full rounded-xl" />
-                  <Skeleton className="h-36 w-full rounded-xl" />
-                  <Skeleton className="h-36 w-full rounded-xl" />
-                </div>
-              ) : policyNodes.length === 0 ? (
-                <Card className="p-8 text-center space-y-2 border-dashed">
-                  <FileText className="h-8 w-8 text-muted-foreground mx-auto" />
-                  <h3 className="text-sm font-semibold text-foreground">No policy documents have been added to this organization</h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                    Upload policy documents in the Documents workspace to map regulatory relationships.
-                  </p>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {policyNodes.map((pNode) => {
-                    const connectedReg = policyRegulationMap.get(pNode.id);
-                    const isSelected = selectedNode?.id === pNode.id;
-                    return (
-                      <Card
-                        key={pNode.id}
-                        onClick={() => handleExplorePolicyGraph(pNode)}
-                        className={cn(
-                          "p-5 hover:border-indigo-500/60 transition-all shadow-xs hover:shadow-md cursor-pointer flex flex-col justify-between space-y-4 group border-border/60",
-                          isSelected && "border-indigo-600 bg-indigo-500/5 ring-1 ring-indigo-500"
-                        )}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
-                              POLICY
-                            </span>
-                            <span className="text-[10px] font-mono text-muted-foreground">
-                              {pNode.clause_count || 14} Clauses
-                            </span>
-                          </div>
-
-                          <h3 className="font-bold text-foreground text-sm leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2">
-                            {pNode.label}
-                          </h3>
-
-                          <div className="pt-1 space-y-1">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                              Applicable Regulation
-                            </p>
-                            {connectedReg ? (
-                              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5 truncate">
-                                <Scale className="h-3.5 w-3.5 text-violet-500 shrink-0" />
-                                <span className="truncate">{connectedReg.label}</span>
-                              </p>
-                            ) : (
-                              <p className="text-xs text-muted-foreground italic">No applicable regulations are available</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="pt-2 border-t border-border/40 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 group-hover:underline">
-                            Explore Graph
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </span>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* SECTION 2: Knowledge Graph Canvas & Node Inspector */}
-            <div id="knowledge-graph-canvas" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left Column: Visual Relationship Graph Canvas (2/3 width) */}
-              <Card className="lg:col-span-2 flex flex-col">
-                <CardHeader className="py-3 px-5 border-b border-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Network className="h-4 w-4 text-indigo-500" />
-                    Knowledge Graph ({visualGraph.nodes.length} Nodes, {visualGraph.edges.length} Relationships)
-                  </CardTitle>
-
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                    <input
-                      type="text"
-                      aria-label="Search policies or regulations"
-                      placeholder="Search policies or regulations..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        const q = e.target.value;
-                        setSearchQuery(q);
-                        if (q) {
-                          const matched = visualGraph.nodes.find((n) =>
-                            n.label.toLowerCase().includes(q.toLowerCase())
-                          );
-                          if (matched) setSelectedNode(matched);
-                        }
-                      }}
-                      className="w-full bg-background border border-border rounded-md pl-8 pr-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                    />
-                  </div>
-                </CardHeader>
-
-                <CardContent className="p-4 flex-1 space-y-4">
-                  {isLoading ? (
-                    <Skeleton className="h-[480px] w-full rounded-xl" />
-                  ) : visualGraph.nodes.length === 0 ? (
-                    <div className="rounded-xl border border-border/60 bg-muted/10 p-10 text-center flex flex-col items-center justify-center space-y-3 min-h-[480px]">
-                      <Network className="h-10 w-10 text-muted-foreground/50" />
-                      <h3 className="text-sm font-bold text-foreground">No relationships are available for this item</h3>
-                      <p className="text-xs text-muted-foreground max-w-xs">
-                        Upload policy documents to display policy-regulation relationships.
-                      </p>
-                    </div>
-                  ) : (
-                    <InteractiveGraphCanvas
-                      nodes={visualGraph.nodes}
-                      edges={visualGraph.edges}
-                      selectedNode={selectedNode}
-                      onSelectNode={setSelectedNode}
-                      searchQuery={searchQuery}
-                      onResetView={handleResetView}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Right Column: Node Inspector (1/3 width) */}
-              <Card className="lg:col-span-1 flex flex-col justify-between">
-                <CardHeader className="py-3 px-5 border-b border-border/40">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-indigo-500" />
-                    Node Inspector
-                  </CardTitle>
-                </CardHeader>
-
-                <CardContent className="p-5 flex-1 space-y-4">
-                  {inspectorInfo ? (
-                    <div className="space-y-4">
-                      {/* Node Header Tag */}
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={cn(
-                            "text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-border",
-                            inspectorInfo.isPolicy
-                              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
-                              : inspectorInfo.isRegulation
-                              ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30"
-                              : inspectorInfo.isFinding
-                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                          )}
-                        >
-                          {inspectorInfo.isPolicy
-                            ? "POLICY"
-                            : inspectorInfo.isRegulation
-                            ? "REGULATION"
-                            : inspectorInfo.isFinding
-                            ? "FINDING"
-                            : "CLAUSE"}
-                        </span>
-                        <span
-                          className="text-[10px] font-mono px-2 py-0.5 rounded border border-border bg-muted/40 text-muted-foreground"
-                          title={inspectorInfo.node.id}
-                        >
-                          {inspectorInfo.node.id.length > 16
-                            ? `${inspectorInfo.node.id.substring(0, 16)}...`
-                            : inspectorInfo.node.id}
-                        </span>
-                      </div>
-
-                      {/* Title */}
-                      <div>
-                        <h4 className="text-sm font-bold text-foreground leading-snug">
-                          {inspectorInfo.node.label || "Untitled Node"}
-                        </h4>
-                      </div>
-
-                      {/* ── Policy Inspector (Sprint 5.4) ── */}
-                      {inspectorInfo.isPolicy && (
-                        <div className="space-y-3 pt-1">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="p-2.5 rounded-lg border border-border/40 bg-muted/20 space-y-0.5">
-                              <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                                Document Type
-                              </p>
-                              <p className="text-xs font-semibold text-foreground">POLICY</p>
-                            </div>
-                            <div className="p-2.5 rounded-lg border border-border/40 bg-muted/20 space-y-0.5">
-                              <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                                Clause Count
-                              </p>
-                              <p className="text-xs font-semibold text-foreground">
-                                {inspectorInfo.node.clause_count || 14} Clauses
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                              <Scale className="h-3 w-3 text-violet-500" />
-                              Applicable Regulation
-                            </p>
-                            <p className="text-xs font-semibold text-foreground">
-                              {inspectorInfo.connectedReg ? inspectorInfo.connectedReg.label : "No applicable regulations are available"}
-                            </p>
-                          </div>
-
-                          {/* Real Report Details if Available */}
-                          {inspectorInfo.node.report_id || inspectorInfo.node.overall_score !== undefined ? (
-                            <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                  <Award className="h-3.5 w-3.5" />
-                                  Latest Compliance Report
-                                </span>
-                                <span className="text-xs font-bold text-foreground">
-                                  {inspectorInfo.node.overall_score ? `${int(inspectorInfo.node.overall_score)}%` : "89%"}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                                <span>Findings: {inspectorInfo.node.findings_count || 2}</span>
-                                {inspectorInfo.node.last_analyzed_at && (
-                                  <span>Analyzed: {new Date(inspectorInfo.node.last_analyzed_at).toLocaleDateString()}</span>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2 pt-1">
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  className="w-full text-xs font-semibold gap-1 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
-                                  onClick={() => handleViewReport(inspectorInfo.node.report_id)}
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                  Open Report
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-full text-xs font-semibold gap-1 cursor-pointer"
-                                  onClick={() => handleViewFindings(inspectorInfo.node.report_id)}
-                                >
-                                  <ShieldCheck className="h-3 w-3 text-indigo-500" />
-                                  View Findings
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-2">
-                              <p className="text-xs text-muted-foreground">
-                                No compliance analysis has been run for this policy yet.
-                              </p>
-                              <Button
-                                variant="default"
-                                size="sm"
-                                className="w-full text-xs font-semibold gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
-                                onClick={() => router.push(`/compliance/new?document_id=${inspectorInfo.node.id}`)}
-                              >
-                                <Play className="h-3.5 w-3.5 fill-current" />
-                                Run Analysis
-                              </Button>
-                            </div>
-                          )}
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full text-xs gap-1 cursor-pointer"
-                            onClick={() => handleExploreClauses(inspectorInfo.node)}
-                          >
-                            <FileCheck className="h-3.5 w-3.5 text-indigo-500" />
-                            Explore Clauses ({inspectorInfo.node.clause_count || 14})
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* ── Regulation Inspector (Sprint 5.4) ── */}
-                      {inspectorInfo.isRegulation && (
-                        <div className="space-y-3 pt-1">
-                          <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                              <FileCheck className="h-3 w-3 text-violet-500" />
-                              Clause Count
-                            </p>
-                            <p className="text-xs font-semibold text-foreground">
-                              {inspectorInfo.node.clause_count || 195} Clauses
-                            </p>
-                          </div>
-
-                          <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                              <BookOpen className="h-3 w-3 text-indigo-500" />
-                              Connected Policies ({inspectorInfo.connectedPolicies.length})
-                            </p>
-                            {inspectorInfo.connectedPolicies.length > 0 ? (
-                              <ul className="space-y-1 mt-1">
-                                {inspectorInfo.connectedPolicies.map((p) => (
-                                  <li
-                                    key={p.id}
-                                    onClick={() => setSelectedNode(p)}
-                                    className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
-                                  >
-                                    <LinkIcon className="h-3 w-3" />
-                                    {p.label}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="text-xs text-muted-foreground italic">No company policies connected.</p>
-                            )}
-                          </div>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full text-xs gap-1 cursor-pointer"
-                            onClick={() => handleExploreClauses(inspectorInfo.node)}
-                          >
-                            <FileCheck className="h-3.5 w-3.5 text-violet-500" />
-                            Explore Regulation Clauses
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* ── Finding Inspector (Sprint 5.4) ── */}
-                      {inspectorInfo.isFinding && (
-                        <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                              {inspectorInfo.node.risk_level || "HIGH SEVERITY"}
-                            </span>
-                            <span className="text-xs font-bold text-foreground">
-                              Confidence: {inspectorInfo.node.confidence ? `${Math.round(inspectorInfo.node.confidence * 100)}%` : "88%"}
-                            </span>
-                          </div>
-
-                          {/* Reasoning */}
-                          <div className="space-y-1">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Reasoning</p>
-                            <p className="text-xs text-foreground leading-relaxed">
-                              {inspectorInfo.node.reasoning || inspectorInfo.node.text || "Automated compliance analysis finding."}
-                            </p>
-                          </div>
-
-                          {/* Recommendation */}
-                          {inspectorInfo.node.recommendation && (
-                            <div className="p-2.5 rounded bg-background border border-border/40 space-y-1">
-                              <p className="text-[9px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
-                                <Sparkles className="h-3 w-3" />
-                                Recommended Remediation
-                              </p>
-                              <p className="text-xs text-muted-foreground leading-relaxed">
-                                {inspectorInfo.node.recommendation}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Action Buttons */}
-                          <div className="grid grid-cols-2 gap-2 pt-1">
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="w-full text-xs font-semibold gap-1 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
-                              onClick={() => handleViewFindings(inspectorInfo.node.report_id)}
-                            >
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              View Finding
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full text-xs font-semibold gap-1 cursor-pointer"
-                              onClick={() => handleViewReport(inspectorInfo.node.report_id)}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              View Report
-                            </Button>
-                          </div>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                              "w-full text-xs gap-1.5 cursor-pointer mt-1 border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
-                              showEvidence && "bg-indigo-500/15"
-                            )}
-                            onClick={() => setShowEvidence(!showEvidence)}
-                          >
-                            <GitBranch className="h-3.5 w-3.5" />
-                            {showEvidence ? "Hide Evidence" : "Show Evidence (Clauses)"}
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* ── Clause Inspector (Sprint 5.4) ── */}
-                      {inspectorInfo.isClause && (
-                        <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Clause Text
-                          </p>
-                          <p className="text-xs text-foreground leading-relaxed italic">
-                            &quot;{inspectorInfo.node.text || inspectorInfo.node.label}&quot;
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-center py-12 space-y-2 text-muted-foreground">
-                      <Database className="h-8 w-8 text-muted-foreground/50" />
-                      <p className="text-xs font-medium max-w-xs">
-                        Select a node to inspect its relationships.
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* SECTION 3: On-Demand Clause Drill-Down Panel / Drawer */}
-            {showClauseDrawer && clauseDrawerDoc && (
-              <Card className="p-6 space-y-4 border-indigo-500/40 bg-card shadow-lg">
-                <div className="flex items-center justify-between border-b border-border/40 pb-3">
-                  <div>
-                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
-                      CLAUSE EXPLORER
-                    </span>
-                    <h3 className="text-base font-bold text-foreground mt-1">
-                      {clauseDrawerDoc.label} Clauses
-                    </h3>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-48 sm:w-64">
-                      <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        type="text"
-                        aria-label="Search document clauses"
-                        placeholder="Search document clauses..."
-                        value={clauseSearch}
-                        onChange={(e) => setClauseSearch(e.target.value)}
-                        className="w-full bg-background border border-border rounded-md pl-8 pr-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                      />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Close Clause Explorer"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
-                      onClick={() => setShowClauseDrawer(false)}
-                    >
-                      <X className="h-4 w-4" />
+              <CardContent className="p-4 flex-1">
+                {isLoading ? (
+                  <Skeleton className="h-[520px] w-full rounded-xl" />
+                ) : filteredNodes.length === 0 ? (
+                  <div className="rounded-xl border border-border/60 bg-muted/10 p-10 text-center flex flex-col items-center justify-center space-y-3 min-h-[520px]">
+                    <Network className="h-10 w-10 text-muted-foreground/50" />
+                    <h3 className="text-sm font-bold text-foreground">No compliance relationships matched the filters</h3>
+                    <p className="text-xs text-muted-foreground max-w-xs">
+                      Try clearing the filters or searching for another requirement or finding ID.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={handleResetView} className="mt-2 cursor-pointer">
+                      Clear Filters
                     </Button>
                   </div>
-                </div>
-
-                {isClauseLoading ? (
-                  <div className="space-y-2 py-4">
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                  </div>
-                ) : filteredClauses.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic text-center py-6">
-                    No indexed clauses found for this document.
-                  </p>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
-                    {filteredClauses.map((clause, i) => {
-                      const isClsSelected = selectedClause?.id === clause.id;
-                      return (
-                        <div
-                          key={clause.id || i}
-                          onClick={() => {
-                            setSelectedClause(clause);
-                            setSelectedNode(clause);
-                          }}
+                  <InteractiveGraphCanvas
+                    nodes={filteredNodes}
+                    edges={filteredEdges}
+                    selectedNode={selectedNode}
+                    onSelectNode={setSelectedNode}
+                    searchQuery={searchQuery}
+                    onResetView={handleResetView}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Right Column: Node Details Inspector (1/3 width) */}
+            <Card className="lg:col-span-1 flex flex-col justify-between shadow-xs">
+              <CardHeader className="py-3 px-5 border-b border-border/40">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-indigo-500" />
+                  Node Inspector
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="p-5 flex-1 space-y-4">
+                {selectedNode ? (
+                  <div className="space-y-4">
+                    {/* Node Kind Badge */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border bg-muted/60 text-foreground">
+                        {getNodeType(selectedNode).replace("_", " ")}
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[120px]">
+                        {selectedNode.id}
+                      </span>
+                    </div>
+
+                    {/* Node Title */}
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground leading-snug">
+                        {selectedNode.label}
+                      </h3>
+                    </div>
+
+                    {/* Coverage Status Badge if present */}
+                    {selectedNode.coverage_status && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Coverage:
+                        </span>
+                        <Badge
+                          variant="outline"
                           className={cn(
-                            "p-3 rounded-lg border border-border/60 bg-muted/20 hover:border-indigo-500/60 transition-all cursor-pointer space-y-1 group",
-                            isClsSelected && "border-indigo-600 bg-indigo-500/10 ring-1 ring-indigo-500"
+                            "text-[10px] font-bold uppercase",
+                            selectedNode.coverage_status === "COVERED"
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                              : selectedNode.coverage_status === "PARTIALLY_COVERED"
+                              ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                              : selectedNode.coverage_status === "GAP"
+                              ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                              : "bg-slate-500/10 text-slate-600 border-slate-500/30"
                           )}
                         >
-                          <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-                            <span>Clause #{i + 1}</span>
-                            <span className="text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline">
-                              Focus in Graph →
-                            </span>
+                          {selectedNode.coverage_status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Requirement Inspector */}
+                    {getNodeType(selectedNode) === "requirement" && (
+                      <div className="space-y-3 pt-1">
+                        {selectedNode.text && (
+                          <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              Requirement Text
+                            </p>
+                            <p className="text-xs text-foreground line-clamp-4 leading-relaxed">
+                              {selectedNode.text}
+                            </p>
                           </div>
-                          <p className="text-xs text-foreground font-medium line-clamp-2 leading-relaxed">
-                            {clause.text || clause.label}
+                        )}
+
+                        {selectedNode.missing_aspects && selectedNode.missing_aspects.length > 0 && (
+                          <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-1">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                              Missing Aspects
+                            </p>
+                            <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5">
+                              {selectedNode.missing_aspects.map((asp, i) => (
+                                <li key={i}>{asp}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {selectedNode.similarity_score !== undefined && (
+                          <div className="text-[11px] text-muted-foreground italic">
+                            * Vector Sim: {(selectedNode.similarity_score || 0).toFixed(2)} (retrieval proximity)
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full text-xs font-semibold gap-1 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+                            onClick={() => handleOpenAnalysis(selectedNode)}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Open Analysis
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-xs font-semibold gap-1 cursor-pointer"
+                            onClick={() => handleOpenDocument(selectedNode)}
+                          >
+                            <FileText className="h-3 w-3" />
+                            View Document
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Finding Inspector */}
+                    {getNodeType(selectedNode) === "finding" && (
+                      <div className="p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                            {selectedNode.severity || "MEDIUM"} SEVERITY
+                          </span>
+                          <span className="text-[10px] font-mono font-semibold uppercase text-muted-foreground">
+                            {selectedNode.lifecycle_status || "OPEN"}
+                          </span>
+                        </div>
+
+                        {selectedNode.reasoning && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              Compliance Finding Reasoning
+                            </p>
+                            <p className="text-xs text-foreground line-clamp-3 leading-relaxed">
+                              {selectedNode.reasoning}
+                            </p>
+                          </div>
+                        )}
+
+                        {selectedNode.recommendation && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              Recommendation
+                            </p>
+                            <p className="text-xs text-foreground line-clamp-3 leading-relaxed">
+                              {selectedNode.recommendation}
+                            </p>
+                          </div>
+                        )}
+
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="w-full text-xs font-semibold gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white mt-1"
+                          onClick={() => handleOpenFinding(selectedNode)}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Open Finding Detail
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Policy Inspector */}
+                    {getNodeType(selectedNode) === "policy" && (
+                      <div className="space-y-3 pt-1">
+                        <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Organization
+                          </p>
+                          <p className="text-xs font-semibold text-foreground">
+                            {activeOrg?.name || "Authorized Workspace"}
                           </p>
                         </div>
-                      );
-                    })}
+
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full text-xs font-semibold gap-1 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+                            onClick={() => handleOpenDocument(selectedNode)}
+                          >
+                            <FileText className="h-3 w-3" />
+                            Open Policy
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-xs font-semibold gap-1 cursor-pointer"
+                            onClick={() => handleOpenAnalysis(selectedNode)}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Analysis Report
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Regulation Inspector */}
+                    {getNodeType(selectedNode) === "regulation" && (
+                      <div className="space-y-3 pt-1">
+                        <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Jurisdiction & Act
+                          </p>
+                          <p className="text-xs font-semibold text-foreground">
+                            {selectedNode.jurisdiction || "National"} • {selectedNode.act_name || selectedNode.label}
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="w-full text-xs font-semibold gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+                          onClick={() => router.push("/compliance")}
+                        >
+                          <Scale className="h-3.5 w-3.5" />
+                          View Compliance Overview
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Remediation Inspector */}
+                    {getNodeType(selectedNode) === "remediation" && (
+                      <div className="p-3.5 rounded-lg border border-cyan-500/30 bg-cyan-500/5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-600 border border-cyan-500/30">
+                            REMEDIATION PLAN
+                          </span>
+                          <span className="text-[10px] font-mono font-semibold uppercase text-muted-foreground">
+                            {selectedNode.status || "PENDING"}
+                          </span>
+                        </div>
+
+                        {selectedNode.description && (
+                          <p className="text-xs text-foreground leading-relaxed">
+                            {selectedNode.description}
+                          </p>
+                        )}
+
+                        {selectedNode.target_date && (
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-cyan-500" />
+                            Target: {new Date(selectedNode.target_date).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Policy Section Evidence Inspector */}
+                    {getNodeType(selectedNode) === "policy_section" && (
+                      <div className="p-3 rounded-lg border border-teal-500/30 bg-teal-500/5 space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                          Policy Evidence Text
+                        </p>
+                        <p className="text-xs text-foreground leading-relaxed line-clamp-6">
+                          {selectedNode.text || "No excerpt text available."}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs font-semibold gap-1 cursor-pointer mt-1"
+                          onClick={() => handleOpenDocument(selectedNode)}
+                        >
+                          <FileText className="h-3 w-3" />
+                          View Policy Document
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2 text-muted-foreground">
+                    <Activity className="h-8 w-8 text-muted-foreground/40" />
+                    <p className="text-xs font-semibold text-foreground">No node selected</p>
+                    <p className="text-[11px] text-muted-foreground max-w-xs">
+                      Click any node or relationship on the canvas to inspect its details, compliance coverage, and traceability.
+                    </p>
                   </div>
                 )}
-              </Card>
-            )}
+              </CardContent>
+            </Card>
           </div>
         )}
       </main>
@@ -1222,19 +963,13 @@ function KnowledgeGraphContent() {
   );
 }
 
-function int(val: number | null | undefined): number {
-  return Math.round(val || 0);
-}
-
-// ─── Page Export ──────────────────────────────────────────────────────────────
-
 export default function KnowledgeGraphPage() {
   return (
     <ProtectedRoute>
       <Suspense
         fallback={
-          <div className="p-10 text-center text-sm text-muted-foreground">
-            Loading Knowledge Graph...
+          <div className="flex h-screen items-center justify-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-primary" />
           </div>
         }
       >

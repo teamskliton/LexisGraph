@@ -41,7 +41,10 @@ def get_driver():
             _driver = GraphDatabase.driver(
                 NEO4J_URI,
                 auth=(NEO4J_USER, NEO4J_PASSWORD),
+                connection_timeout=2.0,
+                max_connection_lifetime=30,
             )
+
             _init_preview = (NEO4J_URI[:40] + "...") if len(NEO4J_URI) > 40 else NEO4J_URI
             logger.info("Neo4j driver initialized for uri=%s", _init_preview)
         except Exception as exc:  # noqa: BLE001
