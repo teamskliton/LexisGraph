@@ -71,8 +71,9 @@ def analyze_compliance(
     )
 
 
-from app.routes.compliance import get_compliance_overview
-from app.schemas.compliance_overview import ComplianceOverviewResponse
+from datetime import datetime
+from app.routes.compliance import get_compliance_overview, get_compliance_calendar
+from app.schemas.compliance_overview import ComplianceOverviewResponse, ComplianceCalendarResponse
 
 
 @router.get(
@@ -86,6 +87,33 @@ def compliance_overview_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> ComplianceOverviewResponse:
     return get_compliance_overview(organization_id=organization_id, db=db, current_user=current_user)
+
+
+@router.get(
+    "/calendar",
+    response_model=ComplianceCalendarResponse,
+    summary="Get compliance remediation deadlines calendar for active organization",
+)
+def compliance_calendar_endpoint(
+    organization_id: Optional[uuid.UUID] = Query(None, description="Optional Organization UUID filter"),
+    start_date: Optional[datetime] = Query(None, description="Optional start timestamp filter"),
+    end_date: Optional[datetime] = Query(None, description="Optional end timestamp filter"),
+    assigned_to_me: bool = Query(False, description="Filter deadlines assigned to authenticated user"),
+    overdue_only: bool = Query(False, description="Filter overdue deadlines only"),
+    severity: Optional[str] = Query(None, description="Filter by severity level"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ComplianceCalendarResponse:
+    return get_compliance_calendar(
+        organization_id=organization_id,
+        start_date=start_date,
+        end_date=end_date,
+        assigned_to_me=assigned_to_me,
+        overdue_only=overdue_only,
+        severity=severity,
+        db=db,
+        current_user=current_user,
+    )
 
 
 @router.get(

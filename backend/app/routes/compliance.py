@@ -472,6 +472,11 @@ def get_compliance_overview(
 
 
 @router.get(
+    "/compliance/calendar",
+    response_model=ComplianceCalendarResponse,
+    summary="Get compliance remediation deadlines calendar for active organization",
+)
+@router.get(
     "/calendar",
     response_model=ComplianceCalendarResponse,
     summary="Get compliance remediation deadlines calendar for active organization",
