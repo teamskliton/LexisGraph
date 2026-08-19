@@ -268,6 +268,16 @@ export function ComplianceOperationsOverview() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => router.push("/compliance/calendar")}
+              className="gap-1.5 text-xs font-semibold cursor-pointer border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              <span>Deadlines Calendar</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => router.push("/compliance/my-work?view=all")}
               className="gap-1.5 text-xs font-semibold cursor-pointer border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
             >

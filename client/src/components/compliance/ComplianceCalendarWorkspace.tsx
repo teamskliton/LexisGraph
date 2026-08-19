@@ -39,6 +39,9 @@ import {
   ComplianceCalendarData,
   ComplianceDeadlineItem,
 } from "@/services/api/compliance";
+import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
+import { Organization } from "@/services/api/organizations";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -49,6 +52,13 @@ import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
 export function ComplianceCalendarWorkspace() {
   const router = useRouter();
   const { user } = useAuth();
+
+  const [activeOrgId, setActiveOrgId] = useState<string | undefined>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("selected_organization_id") || undefined;
+    }
+    return undefined;
+  });
 
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -65,7 +75,19 @@ export function ComplianceCalendarWorkspace() {
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
-  const activeOrgId = undefined;
+  // Synchronize Active Organization on event
+  useEffect(() => {
+    const handleOrgChange = () => {
+      if (typeof window !== "undefined") {
+        const storedId = localStorage.getItem("selected_organization_id");
+        if (storedId) {
+          setActiveOrgId(storedId);
+        }
+      }
+    };
+    window.addEventListener("organization_changed", handleOrgChange);
+    return () => window.removeEventListener("organization_changed", handleOrgChange);
+  }, []);
 
   const monthStart = useMemo(() => startOfMonth(currentMonth), [currentMonth]);
   const monthEnd = useMemo(() => endOfMonth(currentMonth), [currentMonth]);
@@ -97,7 +119,17 @@ export function ComplianceCalendarWorkspace() {
       setCalendarData(data);
     } catch (err: any) {
       console.error("Failed to fetch compliance calendar:", err);
-      const errMsg = err?.response?.data?.detail || "Unable to load compliance deadlines.";
+      const rawDetail = err?.response?.data?.detail;
+      let errMsg = "Unable to load compliance deadlines.";
+      if (typeof rawDetail === "string") {
+        errMsg = rawDetail;
+      } else if (Array.isArray(rawDetail)) {
+        errMsg = rawDetail.map((d: any) => d?.msg || d?.detail || (typeof d === "string" ? d : JSON.stringify(d))).join("; ");
+      } else if (rawDetail && typeof rawDetail === "object") {
+        errMsg = rawDetail?.msg || rawDetail?.detail || JSON.stringify(rawDetail);
+      } else if (err?.message) {
+        errMsg = err.message;
+      }
       setError(errMsg);
       toast.error(errMsg);
     } finally {
@@ -203,6 +235,8 @@ export function ComplianceCalendarWorkspace() {
           </div>
 
           <div className="flex items-center gap-2">
+            <OrganizationSwitcher onOrganizationChanged={(org) => setActiveOrgId(org.id)} />
+            <ThemeToggle />
             <Button
               variant="outline"
               size="sm"
