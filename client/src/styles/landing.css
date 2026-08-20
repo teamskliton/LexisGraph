@@ -1,0 +1,399 @@
+/* ==========================================================================
+   LexisGraph Design System — Landing Page Extensions
+   Extends (never duplicates) the core design system
+   ========================================================================== */
+
+/* -------------------------------------------------------------------------
+   Section Layout
+   ------------------------------------------------------------------------- */
+
+.landing-section {
+  padding-block: clamp(4rem, 8vw, 7rem);
+  position: relative;
+}
+
+.landing-section-sm {
+  padding-block: clamp(3rem, 5vw, 4.5rem);
+  position: relative;
+}
+
+.landing-container {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+.landing-container-wide {
+  width: 100%;
+  max-width: 1400px;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+/* -------------------------------------------------------------------------
+   Typography Overlines / Section Labels
+   ------------------------------------------------------------------------- */
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;  /* 11px */
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 0.875rem;
+}
+
+.section-label::before {
+  content: "";
+  display: inline-block;
+  width: 1.5rem;
+  height: 2px;
+  background: var(--primary);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------------------------
+   Flow Connectors (SolutionFlow, HowItWorks)
+   ------------------------------------------------------------------------- */
+
+.flow-connector {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: linear-gradient(to bottom, var(--primary), var(--accent));
+  opacity: 0.35;
+}
+
+.flow-connector-h {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  background: linear-gradient(to right, var(--primary), var(--accent));
+  opacity: 0.35;
+}
+
+.flow-node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  border: 2px solid var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  transition: background var(--duration-base) var(--ease-default),
+              box-shadow var(--duration-base) var(--ease-default);
+}
+
+.flow-node:hover,
+.flow-node:focus-within {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 0 0 6px var(--primary-muted);
+}
+
+/* -------------------------------------------------------------------------
+   Knowledge Graph Nodes
+   ------------------------------------------------------------------------- */
+
+.graph-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1.5px solid;
+  cursor: default;
+  transition: transform var(--duration-base) var(--ease-default),
+              box-shadow var(--duration-base) var(--ease-default);
+}
+
+.graph-node:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.graph-node-primary {
+  background: var(--primary-subtle);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.graph-node-accent {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.graph-node-warning {
+  background: var(--warning-subtle);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.graph-node-danger {
+  background: var(--danger-subtle);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.graph-node-info {
+  background: var(--info-subtle);
+  border-color: var(--info);
+  color: var(--info);
+}
+
+/* -------------------------------------------------------------------------
+   Scroll-Reveal Animation Utilities
+   ------------------------------------------------------------------------- */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s var(--ease-default),
+              transform 0.6s var(--ease-default);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+.reveal-delay-5 { transition-delay: 0.5s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Hero Background Mesh / Gradient
+   ------------------------------------------------------------------------- */
+
+.hero-mesh {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 40%, rgba(37,99,235,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 70%, rgba(16,185,129,0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 50% 10%, rgba(79,70,229,0.07) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.dark .hero-mesh {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 40%, rgba(37,99,235,0.20) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 70%, rgba(16,185,129,0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 50% 10%, rgba(79,70,229,0.12) 0%, transparent 50%);
+}
+
+/* -------------------------------------------------------------------------
+   Step Number Badges
+   ------------------------------------------------------------------------- */
+
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  border: 1.5px solid var(--primary-muted);
+  color: var(--primary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
+  font-feature-settings: "tnum";
+}
+
+/* -------------------------------------------------------------------------
+   Lifecycle Track (FindingLifecycle)
+   ------------------------------------------------------------------------- */
+
+.lifecycle-track {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.lifecycle-segment {
+  flex: 1;
+  height: 3px;
+  background: var(--border);
+  transition: background var(--duration-slow) var(--ease-default);
+}
+
+.lifecycle-segment.active {
+  background: var(--primary);
+}
+
+.lifecycle-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--radius-full);
+  background: var(--border);
+  border: 2px solid var(--background);
+  flex-shrink: 0;
+  transition: background var(--duration-slow) var(--ease-default),
+              box-shadow var(--duration-slow) var(--ease-default);
+}
+
+.lifecycle-dot.active {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-muted);
+}
+
+/* -------------------------------------------------------------------------
+   Comparison Table (DifferentiationSection)
+   ------------------------------------------------------------------------- */
+
+.comparison-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-default);
+}
+
+.comparison-cell:hover {
+  background: var(--surface-muted);
+}
+
+/* -------------------------------------------------------------------------
+   Product Preview Cards
+   ------------------------------------------------------------------------- */
+
+.preview-card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: transform var(--duration-base) var(--ease-default),
+              box-shadow var(--duration-base) var(--ease-default);
+}
+
+.preview-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.preview-card-header {
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preview-card-body {
+  padding: 1.25rem;
+}
+
+/* -------------------------------------------------------------------------
+   Navbar Glass on Scroll
+   ------------------------------------------------------------------------- */
+
+.landing-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-sticky);
+  transition: background var(--duration-base) var(--ease-default),
+              box-shadow var(--duration-base) var(--ease-default),
+              border-color var(--duration-base) var(--ease-default);
+  border-bottom: 1px solid transparent;
+}
+
+.landing-nav.scrolled {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-bottom-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+/* -------------------------------------------------------------------------
+   CTA Gradient Section
+   ------------------------------------------------------------------------- */
+
+.cta-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--gradient-hero-from) 0%,
+    var(--gradient-hero-via) 50%,
+    var(--gradient-hero-to) 100%
+  );
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-gradient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 60% at 30% 50%, rgba(255,255,255,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------------------
+   SVG Knowledge Graph Animation
+   ------------------------------------------------------------------------- */
+
+@keyframes node-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%       { opacity: 1;    transform: scale(1.06); }
+}
+
+@keyframes edge-draw {
+  from { stroke-dashoffset: 200; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+.graph-node-animate {
+  animation: float-gentle 4s ease-in-out infinite;
+}
+
+.graph-edge-animate {
+  stroke-dasharray: 200;
+  animation: edge-draw 1.5s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-node-animate,
+  .graph-edge-animate {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
