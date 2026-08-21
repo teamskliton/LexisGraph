@@ -207,11 +207,12 @@ def get_compliance_report_by_id(
             detail="Compliance report not found.",
         )
 
-    # Validate Organization ownership
-    if report.organization.created_by != user_id and report.created_by != user_id:
+    # Validate Organization access
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, user_id, report.organization_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the organization owner can access this compliance report.",
+            detail="You do not have access to this compliance report.",
         )
 
     # Parse details: summary column stores the full result JSON payload
@@ -318,10 +319,12 @@ def delete_compliance_report_by_id(
             detail="Compliance report not found.",
         )
 
-    if report.organization.created_by != user_id and report.created_by != user_id:
+    from app.core.rbac_dependencies import is_org_admin
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, user_id, report.organization_id) or not is_org_admin(db, user_id, report.organization_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the organization owner can delete this compliance report.",
+            detail="Only organization admins can delete this compliance report.",
         )
 
     crud.delete_compliance_report(db, report_id)
@@ -435,8 +438,9 @@ def get_gap_analysis_for_report(
             detail="Compliance report not found.",
         )
 
-    # Authorization: reuse existing ownership check pattern
-    if report.organization.created_by != user_id and report.created_by != user_id:
+    # Authorization: verify organization access
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, user_id, report.organization_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this compliance report.",

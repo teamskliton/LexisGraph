@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy import select
 from app.services.activity_service import log_activity
 from app.services.storage import store_document, StorageError, InvalidMimeTypeError, FileTooLargeError
+from app.services.document_processor import process_document, process_regulation
 
 logger = logging.getLogger(__name__)
 

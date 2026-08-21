@@ -63,6 +63,7 @@ import { DocumentResponse } from "@/types/document";
 import { organizationsService, Organization } from "@/services/api/organizations";
 import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
 import { GapAnalysisWorkspace } from "@/components/compliance/GapAnalysisWorkspace";
+import { ShareReportModal } from "@/components/compliance/ShareReportModal";
 
 interface AnalysisDetailsWorkspaceProps {
   reportId: string;
@@ -83,6 +84,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   // Sprint 8.1: Gap Analysis workspace tab
@@ -221,10 +223,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
 
   // Export & Action handlers
   const handleShare = () => {
-    if (typeof window !== "undefined") {
-      navigator.clipboard.writeText(window.location.href);
-      toast.success("Analysis workspace URL copied to clipboard!");
-    }
+    setIsShareModalOpen(true);
   };
 
   const handleCopyText = (text: string) => {
@@ -1117,6 +1116,22 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       </>
       )}
 
+      {/* Share Audit Modal */}
+      <ShareReportModal
+        open={isShareModalOpen}
+        onOpenChange={setIsShareModalOpen}
+        report={report}
+        reportId={report?.id || reportId}
+        organizationName={organization?.name}
+        regulationName={regDoc?.original_filename || (report?.regulation_id ? `Regulation #${report.regulation_id.slice(0, 8)}` : undefined)}
+        policyName={policyDoc?.original_filename || (report?.policy_document_id ? `Policy #${report.policy_document_id.slice(0, 8)}` : undefined)}
+        overallScore={report?.overall_score ?? details?.overall_score}
+        riskLevel={report?.risk_level}
+        totalClauses={details?.total_regulation_clauses}
+        compliantCount={details?.compliant_count ?? report?.total_matches}
+        partialCount={details?.partially_compliant_count ?? report?.total_partial_matches}
+        gapCount={details?.non_compliant_count ?? report?.total_missing}
+      />
     </div>
   );
 };

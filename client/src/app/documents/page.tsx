@@ -158,6 +158,29 @@ export function DocumentsContent() {
     return () => window.removeEventListener("organization_changed", handleOrgChange);
   }, [loadWorkspaceData]);
 
+  // Automatic polling when policies are in a processing / uploaded state
+  const hasProcessingPolicies = useMemo(() => {
+    return policies.some(
+      (p) => p.processing_status === "PROCESSING" || p.processing_status === "UPLOADED"
+    );
+  }, [policies]);
+
+  useEffect(() => {
+    if (!hasProcessingPolicies || !activeOrgId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const policyData = await documentService.getDocuments(activeOrgId);
+        const onlyPolicies = (policyData || []).filter((d) => d.document_type === "POLICY");
+        setPolicies(onlyPolicies);
+      } catch (err) {
+        console.warn("Polling workspace documents failed:", err);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [hasProcessingPolicies, activeOrgId]);
+
   // Policy Deletion
   const handleDeletePolicy = async () => {
     if (!deleteTarget) return;

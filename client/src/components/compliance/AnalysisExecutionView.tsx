@@ -86,24 +86,29 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
       .catch(() => {});
   }, [orgId, job?.organization_id]);
 
-  // When job completes, fetch completed report details
+  const fetchedReportIdRef = React.useRef<string | null>(null);
+
+  // When job completes, fetch completed report details (safely guard against re-fetching on error)
   useEffect(() => {
-    if (status === "COMPLETED" && job?.report_id && !completedReport && !isReportLoading) {
+    const reportId = job?.report_id;
+    if (status === "COMPLETED" && reportId && fetchedReportIdRef.current !== reportId) {
+      fetchedReportIdRef.current = reportId;
       setIsReportLoading(true);
       complianceService
-        .getComplianceReport(job.report_id)
+        .getComplianceReport(reportId)
         .then((rep) => {
           setCompletedReport(rep);
           toast.success("Compliance analysis complete! Report is ready.");
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("Failed to load completed report summary:", err);
           toast.error("Analysis completed, but failed to load report summary.");
         })
         .finally(() => {
           setIsReportLoading(false);
         });
     }
-  }, [status, job?.report_id, completedReport, isReportLoading]);
+  }, [status, job?.report_id]);
 
   const isRunning = status === "QUEUED" || status === "RUNNING";
   const isCompleted = status === "COMPLETED";

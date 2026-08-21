@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { complianceApi, ComplianceJob } from '@/services/api/compliance';
+import { getToken } from '@/utils/auth-storage';
 
 export type ConnectionType = 'ws' | 'sse' | 'polling' | 'disconnected';
 
@@ -71,7 +72,7 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
     (targetJobId: string) => {
       clearAllConnections();
       setConnectionType('polling');
-      console.log(`[useJobProgress] Fallback: Starting REST Polling (10s interval) for job ${targetJobId}`);
+      console.log(`[useJobProgress] Polling active (2s interval) for job ${targetJobId}`);
 
       const poll = async () => {
         try {
@@ -92,7 +93,7 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
       };
 
       poll();
-      pollTimerRef.current = setInterval(poll, 10000);
+      pollTimerRef.current = setInterval(poll, 2000);
     },
     [clearAllConnections]
   );
@@ -103,8 +104,9 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
       setConnectionType('sse');
       console.log(`[useJobProgress] Fallback: Connecting SSE stream for job ${targetJobId}`);
 
+      const authToken = token || getToken() || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '');
       const apiHost = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-      const sseUrl = `${apiHost.replace(/\/$/, '')}/jobs/${targetJobId}/stream?token=${encodeURIComponent(token)}`;
+      const sseUrl = `${apiHost.replace(/\/$/, '')}/jobs/${targetJobId}/stream?token=${encodeURIComponent(authToken)}`;
       const es = new EventSource(sseUrl);
       sseRef.current = es;
 
@@ -122,7 +124,7 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
       };
 
       es.onerror = (err) => {
-        console.warn('[useJobProgress] SSE connection error, falling back to Polling:', err);
+        console.warn('[useJobProgress] SSE connection notice, falling back to Polling:', err);
         es.close();
         startPolling(targetJobId);
       };
@@ -137,7 +139,7 @@ export function useJobProgress(jobId: string | null): UseJobProgressReturn {
       clearAllConnections();
       setConnectionType('ws');
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const token = getToken() || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '');
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = process.env.NEXT_PUBLIC_API_URL
         ? process.env.NEXT_PUBLIC_API_URL.replace(/^http/, 'ws').replace(/\/api\/v1\/?$/, '')

@@ -111,8 +111,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 JWT_SECRET: str = os.getenv("JWT_SECRET", "")
 #: Algorithm used for signing.  HS256 is standard for symmetric signing.
 JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-#: Access token lifetime in minutes.
-ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+#: Access token lifetime in minutes (default 24 hours).
+ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
 if not JWT_SECRET:
     logger.warning("JWT_SECRET is not set — tokens will be signed with an insecure default")

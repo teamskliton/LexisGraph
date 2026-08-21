@@ -79,6 +79,31 @@ export const PolicyCenter = memo(function PolicyCenter({
   const [previewDoc, setPreviewDoc] = useState<OrganizationDocumentExtended | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
+  const mapDocs = useCallback((rawDocs: DocumentResponse[]): OrganizationDocumentExtended[] => {
+    return (rawDocs || []).map((d: DocumentResponse) => {
+      let statusVal: ProcessingStatus = "Uploaded";
+      if (d.processing_status === "PROCESSED") statusVal = "Analysis Ready";
+      else if (d.processing_status === "PROCESSING") statusVal = "Processing";
+      else if (d.processing_status === "FAILED") statusVal = "Error";
+
+      return {
+        id: d.id,
+        organizationId: d.organization_id,
+        name: d.original_filename || `Policy ${d.id}`,
+        category: (d.document_type as DocumentCategory) || "Policy",
+        file_size: `${(d.file_size / (1024 * 1024)).toFixed(1)} MB`,
+        file_type: d.original_filename?.endsWith(".docx") ? "docx" : "pdf",
+        version: "v1.0",
+        uploaded_at: d.created_at,
+        uploaded_by: d.uploaded_by || "Legal Admin",
+        status: statusVal,
+        tags: ["Internal Policy", "POSH", "Governance"],
+        clause_count: 18,
+        extracted_nodes: 34,
+      };
+    });
+  }, []);
+
   const fetchPolicies = useCallback(async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
     else setIsLoading(true);
@@ -86,41 +111,42 @@ export const PolicyCenter = memo(function PolicyCenter({
 
     try {
       const rawDocs = await documentService.getDocuments(organizationId);
-      const mapped: OrganizationDocumentExtended[] = (rawDocs || []).map((d: DocumentResponse) => {
-        let statusVal: ProcessingStatus = "Uploaded";
-        if (d.processing_status === "PROCESSED") statusVal = "Analysis Ready";
-        else if (d.processing_status === "PROCESSING") statusVal = "Processing";
-        else if (d.processing_status === "FAILED") statusVal = "Error";
-
-        return {
-          id: d.id,
-          organizationId: d.organization_id,
-          name: d.original_filename || `Policy ${d.id}`,
-          category: (d.document_type as DocumentCategory) || "Policy",
-          file_size: `${(d.file_size / (1024 * 1024)).toFixed(1)} MB`,
-          file_type: d.original_filename?.endsWith(".docx") ? "docx" : "pdf",
-          version: "v1.0",
-          uploaded_at: d.created_at,
-          uploaded_by: d.uploaded_by || "Legal Admin",
-          status: statusVal,
-          tags: ["Internal Policy", "POSH", "Governance"],
-          clause_count: 18,
-          extracted_nodes: 34,
-        };
-      });
-
-      setDocuments(mapped);
+      setDocuments(mapDocs(rawDocs));
     } catch {
       setError("Failed to load policy documents. Please check backend connection and retry.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [organizationId]);
+  }, [organizationId, mapDocs]);
 
   useEffect(() => {
     fetchPolicies();
   }, [fetchPolicies]);
+
+  // Automatic polling when documents are in a processing / uploaded state
+  const hasProcessingDocs = useMemo(() => {
+    return documents.some(
+      (d) => d.status === "Processing" || d.status === "Uploaded" || d.status === "Parsing"
+    );
+  }, [documents]);
+
+  useEffect(() => {
+    if (!hasProcessingDocs || !organizationId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const rawDocs = await documentService.getDocuments(organizationId);
+        if (rawDocs) {
+          setDocuments(mapDocs(rawDocs));
+        }
+      } catch (e) {
+        console.warn("Polling policy documents status failed:", e);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [hasProcessingDocs, organizationId, mapDocs]);
 
   // Derived Header KPI stats
   const totalPolicies = documents.length;
@@ -492,6 +518,9 @@ export const PolicyCenter = memo(function PolicyCenter({
         onOpenChange={setIsUploadOpen}
         onUploadSuccess={(newDocs) => {
           setDocuments((prev) => [...newDocs, ...prev]);
+          documentService.getDocuments(organizationId).then((rawDocs) => {
+            if (rawDocs) setDocuments(mapDocs(rawDocs));
+          }).catch(() => {});
         }}
         organizationId={organizationId}
       />

@@ -138,16 +138,17 @@ def _gemini_reasoning(prompt: str) -> str | None:
         return None
 
     candidate_models = [
-        _env("GEMINI_MODEL", "gemini-flash-latest"),
-        "gemini-flash-latest",
+        _env("GEMINI_MODEL", "gemini-flash-lite-latest"),
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash",
+        "gemini-3-flash-preview",
         "gemma-4-26b-a4b-it",
-        "gemma-4-31b-it",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-flash",
     ]
-    timeout_seconds = float(_env("GEMINI_TIMEOUT_SECONDS", "10") or "10")
+    timeout_seconds = float(_env("GEMINI_TIMEOUT_SECONDS", "25") or "25")
 
     for model_name in dict.fromkeys(candidate_models):
+        if not model_name:
+            continue
         try:
             url = (
                 "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -189,10 +190,17 @@ def _resolve_reasoning(prompt: str) -> str | None:
     if provider == "gemini":
         return _gemini_reasoning(prompt)
 
-    if openrouter_enabled:
-        return _openrouter_reasoning(prompt)
+    # In "auto" mode: Try Gemini first (or fallback between providers seamlessly)
     if gemini_enabled:
-        return _gemini_reasoning(prompt)
+        result = _gemini_reasoning(prompt)
+        if result:
+            return result
+
+    if openrouter_enabled:
+        result = _openrouter_reasoning(prompt)
+        if result:
+            return result
+
     return None
 
 
@@ -255,12 +263,15 @@ def _stream_gemini_reasoning(prompt: str) -> Iterator[str]:
         return
 
     candidate_models = [
-        _env("GEMINI_MODEL", "gemini-flash-latest"),
-        "gemini-flash-latest",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-flash",
+        _env("GEMINI_MODEL", "gemini-flash-lite-latest"),
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash",
+        "gemini-3-flash-preview",
+        "gemma-4-26b-a4b-it",
     ]
     for model_name in dict.fromkeys(candidate_models):
+        if not model_name:
+            continue
         try:
             url = (
                 "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -295,7 +306,7 @@ def _stream_gemini_reasoning(prompt: str) -> Iterator[str]:
 
 
 def _stream_resolve_reasoning(prompt: str) -> Iterator[str]:
-    """Stream tokens from the active LLM provider (OpenRouter or Gemini)."""
+    """Stream tokens from the active LLM provider (Gemini or OpenRouter), with seamless failover."""
     provider = _provider_mode()
     openrouter_enabled = _is_enabled_key(_env("OPENROUTER_API_KEY"))
     gemini_enabled = _is_enabled_key(_env("GEMINI_API_KEY"))
@@ -307,12 +318,27 @@ def _stream_resolve_reasoning(prompt: str) -> Iterator[str]:
         yield from _stream_gemini_reasoning(prompt)
         return
 
-    if openrouter_enabled:
-        yield from _stream_openrouter_reasoning(prompt)
-        return
+    # In "auto" mode: stream from Gemini first
     if gemini_enabled:
-        yield from _stream_gemini_reasoning(prompt)
-        return
+        streamed = False
+        for token in _stream_gemini_reasoning(prompt):
+            streamed = True
+            yield token
+        if streamed:
+            return
+
+    if openrouter_enabled:
+        streamed = False
+        for token in _stream_openrouter_reasoning(prompt):
+            streamed = True
+            yield token
+        if streamed:
+            return
+
+    # Fallback to non-streaming resolution if streaming produced nothing
+    fallback_res = _resolve_reasoning(prompt)
+    if fallback_res:
+        yield fallback_res
 
 
 def generate_compliance_reasoning(

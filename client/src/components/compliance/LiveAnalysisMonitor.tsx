@@ -24,6 +24,7 @@ import {
   Wifi,
   Terminal,
   Check,
+  Share2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/compliance/shared/StatusBadge";
@@ -37,6 +38,7 @@ import { complianceService, ComplianceReport } from "@/services/api/compliance";
 import { organizationsService, Organization } from "@/services/api/organizations";
 import { documentService } from "@/services/document-service";
 import { DocumentResponse } from "@/types/document";
+import { ShareReportModal } from "@/components/compliance/ShareReportModal";
 
 interface LiveAnalysisMonitorProps {
   jobId: string;
@@ -69,6 +71,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
   const [completedReport, setCompletedReport] = useState<ComplianceReport | null>(null);
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Live Timer
   useEffect(() => {
@@ -102,24 +105,29 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
       .catch(() => {});
   }, [policyId, job?.policy_document_id]);
 
-  // Load Completed Report details upon completion
+  const fetchedReportIdRef = React.useRef<string | null>(null);
+
+  // Load Completed Report details upon completion (safely guard against re-fetching on error)
   useEffect(() => {
-    if (status === "COMPLETED" && job?.report_id && !completedReport && !isReportLoading) {
+    const reportId = job?.report_id;
+    if (status === "COMPLETED" && reportId && fetchedReportIdRef.current !== reportId) {
+      fetchedReportIdRef.current = reportId;
       setIsReportLoading(true);
       complianceService
-        .getComplianceReport(job.report_id)
+        .getComplianceReport(reportId)
         .then((rep) => {
           setCompletedReport(rep);
           toast.success("Analysis execution completed! Compliance report ready.");
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("Failed to load completed report:", err);
           toast.error("Job completed, but failed to load report details.");
         })
         .finally(() => {
           setIsReportLoading(false);
         });
     }
-  }, [status, job?.report_id, completedReport, isReportLoading]);
+  }, [status, job?.report_id]);
 
   const isRunning = status === "QUEUED" || status === "RUNNING";
   const isCompleted = status === "COMPLETED";
@@ -285,6 +293,15 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
 
             {job?.report_id && (
               <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="cursor-pointer text-xs gap-1.5"
+                >
+                  <Share2 className="h-4 w-4 text-indigo-500" /> Share Audit
+                </Button>
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -514,6 +531,23 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
           ))}
         </div>
       </Card>
+
+      {/* Share Audit Modal */}
+      <ShareReportModal
+        open={isShareModalOpen}
+        onOpenChange={setIsShareModalOpen}
+        report={completedReport}
+        reportId={job?.report_id || jobId}
+        organizationName={organization?.name}
+        policyName={policyDoc?.original_filename || (job?.policy_document_id ? `Policy #${job.policy_document_id.slice(0, 8)}` : undefined)}
+        regulationName={regId || job?.regulation_id ? `Regulation #${(regId || job?.regulation_id)?.slice(0, 8)}` : undefined}
+        overallScore={completedReport?.overall_score}
+        riskLevel={completedReport?.risk_level}
+        totalClauses={completedReport?.details?.total_regulation_clauses}
+        compliantCount={completedReport?.details?.compliant_count ?? completedReport?.total_matches}
+        partialCount={completedReport?.details?.partially_compliant_count ?? completedReport?.total_partial_matches}
+        gapCount={completedReport?.details?.non_compliant_count ?? completedReport?.total_missing}
+      />
     </div>
   );
 };

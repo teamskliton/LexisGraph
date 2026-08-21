@@ -547,6 +547,56 @@ def _heuristic_fallback(regulation_clause: str, matched_policy_clauses: list[dic
     }
 
 
+def _extract_json_from_llm(llm_response: str) -> list | dict | None:
+    """Robustly extract JSON array or object from raw LLM output, ignoring preambles or fences."""
+    if not llm_response or not llm_response.strip():
+        return None
+
+    cleaned = llm_response.strip()
+
+    # 1. Direct parse attempt
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, (list, dict)):
+            return data
+    except Exception:
+        pass
+
+    # 2. Markdown code block ```json ... ``` or ``` ... ```
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned, flags=re.IGNORECASE)
+    if match:
+        try:
+            data = json.loads(match.group(1).strip())
+            if isinstance(data, (list, dict)):
+                return data
+        except Exception:
+            pass
+
+    # 3. Outer bracket array [ ... ]
+    start_bracket = cleaned.find("[")
+    end_bracket = cleaned.rfind("]")
+    if start_bracket != -1 and end_bracket > start_bracket:
+        try:
+            data = json.loads(cleaned[start_bracket : end_bracket + 1])
+            if isinstance(data, list):
+                return data
+        except Exception:
+            pass
+
+    # 4. Outer brace object { ... }
+    start_brace = cleaned.find("{")
+    end_brace = cleaned.rfind("}")
+    if start_brace != -1 and end_brace > start_brace:
+        try:
+            data = json.loads(cleaned[start_brace : end_brace + 1])
+            if isinstance(data, dict):
+                return [data]
+        except Exception:
+            pass
+
+    return None
+
+
 def _parse_batch_llm_response(
     llm_response: str,
     batch_items: list[dict[str, Any]],
@@ -555,15 +605,12 @@ def _parse_batch_llm_response(
     Parse the LLM batch response — a JSON array of evaluation results.
     Extracts status, confidence, missing_aspects, conflicting_evidence, reasoning, and recommendation.
     """
-    try:
-        cleaned = re.sub(r"^```(?:json)?\s*", "", llm_response.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        raw_list = json.loads(cleaned)
-        if isinstance(raw_list, dict):
-            raw_list = [raw_list]
-        elif not isinstance(raw_list, list):
-            return None
-    except Exception:  # noqa: BLE001
+    raw_extracted = _extract_json_from_llm(llm_response)
+    if raw_extracted is None:
+        return None
+
+    raw_list: list = [raw_extracted] if isinstance(raw_extracted, dict) else raw_extracted
+    if not isinstance(raw_list, list):
         return None
 
     results: list[dict[str, Any]] = []
