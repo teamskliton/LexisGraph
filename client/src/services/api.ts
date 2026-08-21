@@ -25,6 +25,8 @@ api.interceptors.request.use(
   }
 );
 
+let isRedirectingToLogin = false;
+
 // Interceptor to handle 401 (expired/invalid token) responses globally.
 // Clears the stale token and bounces to /login so individual callers
 // don't each have to handle "session expired" — and so a stale token
@@ -46,11 +48,14 @@ api.interceptors.response.use(
         url.startsWith("/auth/register") ||
         url === "/auth/me";
 
-      if (typeof window !== "undefined" && !isAuthEndpoint) {
+      if (typeof window !== "undefined" && !isAuthEndpoint && !isRedirectingToLogin) {
+        isRedirectingToLogin = true;
         // Defer the redirect to escape the current promise chain.
         setTimeout(() => {
           if (window.location.pathname !== "/login") {
             window.location.assign("/login");
+          } else {
+            isRedirectingToLogin = false;
           }
         }, 0);
       }

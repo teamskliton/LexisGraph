@@ -98,6 +98,33 @@ export const RegulationLibrary = memo(function RegulationLibrary({
     fetchRegulations();
   }, [fetchRegulations]);
 
+  // Automatic polling when regulations are in a processing / uploaded / parsing state
+  const hasProcessingRegulations = useMemo(() => {
+    return regulations.some(
+      (r) =>
+        r.processing_status === "PROCESSING" ||
+        r.processing_status === "UPLOADED" ||
+        r.processing_status === "PARSING"
+    );
+  }, [regulations]);
+
+  useEffect(() => {
+    if (!hasProcessingRegulations || !organizationId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await regulationsApi.listRegulations(organizationId, searchQuery);
+        if (data) {
+          setRegulations(data);
+        }
+      } catch (err) {
+        console.warn("Polling regulations failed:", err);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [hasProcessingRegulations, organizationId, searchQuery]);
+
   // Toggle Link / Unlink for Analysis
   const handleToggleLink = async (reg: GlobalRegulation) => {
     const isCurrentlyLinked = linkedIds.includes(reg.id);

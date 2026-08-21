@@ -221,20 +221,38 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
 
             update_job_progress(db, job_id, 60, "Hybrid ranking")
 
-            # Stage 6: 75% LLM reasoning
-            update_job_progress(db, job_id, 75, "LLM reasoning")
+            # Stage 6: 75% - 89% LLM reasoning
             all_eval_results: list[dict[str, Any]] = []
-            llm_batch_size = 8
+            llm_batch_size = 10
+            total_items = len(retrieval_items)
+            total_batches = (total_items + llm_batch_size - 1) // llm_batch_size if total_items > 0 else 1
 
-            for batch_start in range(0, len(retrieval_items), llm_batch_size):
+            for batch_num, batch_start in enumerate(range(0, total_items, llm_batch_size), start=1):
                 job = db.get(ComplianceJob, job_id)
                 if job and job.status == ComplianceJobStatus.CANCELLED:
                     logger.info("Job cancelled during Stage 6 batch evaluation: job_id=%s", job_id)
                     return
 
                 batch = retrieval_items[batch_start : batch_start + llm_batch_size]
+                processed_so_far = min(batch_start + len(batch), total_items)
+                stage_progress = 75 + int(14 * (batch_num - 1) / max(total_batches, 1))
+                update_job_progress(
+                    db,
+                    job_id,
+                    stage_progress,
+                    f"LLM reasoning: evaluating requirements ({processed_so_far}/{total_items})",
+                )
+
                 batch_results = evaluate_batch_compliance_with_llm(batch)
                 all_eval_results.extend(batch_results)
+
+                post_stage_progress = 75 + int(14 * batch_num / max(total_batches, 1))
+                update_job_progress(
+                    db,
+                    job_id,
+                    min(post_stage_progress, 89),
+                    f"LLM reasoning: evaluated {processed_so_far}/{total_items} requirements",
+                )
 
             # Stage 7: 90% Generating recommendations
             job = db.get(ComplianceJob, job_id)
