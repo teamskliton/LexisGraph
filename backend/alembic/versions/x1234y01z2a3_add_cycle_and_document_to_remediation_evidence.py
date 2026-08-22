@@ -23,6 +23,29 @@ def upgrade() -> None:
     inspector = sa.inspect(conn)
     tables = inspector.get_table_names()
 
+    # 0. Ensure remediation_cycles table exists
+    if "remediation_cycles" not in tables:
+        op.create_table(
+            "remediation_cycles",
+            sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+            sa.Column("remediation_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("finding_remediations.id", ondelete="CASCADE"), nullable=False, index=True),
+            sa.Column("finding_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("report_findings.id", ondelete="CASCADE"), nullable=False, index=True),
+            sa.Column("organization_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True),
+            sa.Column("cycle_number", sa.Integer(), nullable=False, server_default="1"),
+            sa.Column("status", sa.String(50), nullable=False, server_default="SUBMITTED", index=True),
+            sa.Column("submission_note", sa.Text(), nullable=True),
+            sa.Column("submitted_by", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+            sa.Column("submitted_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now(), index=True),
+            sa.Column("reviewed_by", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True),
+            sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("result", sa.String(50), nullable=True),
+            sa.Column("rejection_reason", sa.Text(), nullable=True),
+            sa.Column("verification_note", sa.Text(), nullable=True),
+            sa.Column("evidence_snapshot", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        )
+        inspector = sa.inspect(conn)
+        tables = inspector.get_table_names()
+
     # 1. Update remediation_evidence table
     if "remediation_evidence" in tables:
         re_cols = [col["name"] for col in inspector.get_columns("remediation_evidence")]

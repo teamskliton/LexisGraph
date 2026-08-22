@@ -2,7 +2,7 @@
 Security utilities.
 
 Provides:
-    - Password hashing and verification (bcrypt / argon2 via passlib)
+    - Password hashing and verification (bcrypt)
     - JWT access token creation and verification (python-jose)
 
 Usage
@@ -26,9 +26,9 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
+import bcrypt
 from dotenv import load_dotenv
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 logger = logging.getLogger(__name__)
 
@@ -36,71 +36,63 @@ logger = logging.getLogger(__name__)
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv(os.path.join(_BACKEND_DIR, ".env"), override=True)
 
-# ---------------------------------------------------------------------------
-# Password hashing context
-# ---------------------------------------------------------------------------
-
-# ``deprecated="auto"`` automatically uses the best available backend.
-# ``bcrypt`` is preferred when available; ``argon2`` is used as fallback.
-pwd_context = CryptContext(
-    schemes=["bcrypt", "argon2"],
-    default="bcrypt",
-    bcrypt__rounds=12,          # CPU cost factor — adjust higher for production
-    argon2__memory_cost=65536,  # 64 MiB RAM cost
-    argon2__time_cost=3,
-    argon2__parallelism=4,
-)
-
 
 def hash_password(plain_password: str) -> str:
     """
-    Hash a plain-text password.
-
-    Uses bcrypt with a work factor of 12 (≈220 ms per hash on modern hardware).
-    The resulting string contains the algorithm identifier, cost parameters,
-    salt, and hash — safe to store directly in the database.
+    Hash a plain-text password using bcrypt.
 
     Parameters
     ----------
     plain_password : str
-        The password to hash.  Must not be empty.
+        The password to hash. Must not be empty.
 
     Returns
     -------
     str
-        The hashed password, e.g. ``"$2b$12$XYZ..."``.
+        The hashed password (e.g. "$2b$12$...").
 
     Raises
     ------
     ValueError
-        If ``plain_password`` is empty or contains only whitespace.
+        If plain_password is empty or contains only whitespace.
     """
     if not plain_password or not plain_password.strip():
         raise ValueError("Password cannot be empty")
 
-    return pwd_context.hash(plain_password)
+    password_bytes = plain_password.encode("utf-8")
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify a plain-text password against a stored hash.
-
-    Automatically detects the algorithm used in ``hashed_password`` and
-    performs a constant-time comparison to prevent timing attacks.
+    Verify a plain-text password against a stored bcrypt hash.
 
     Parameters
     ----------
     plain_password : str
         The password supplied by the user.
     hashed_password : str
-        The stored hash (from a prior call to ``hash_password``).
+        The stored hash (from a prior call to hash_password).
 
     Returns
     -------
     bool
-        ``True`` if the password matches, ``False`` otherwise.
+        True if the password matches, False otherwise.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    if not plain_password or not hashed_password:
+        return False
+
+    try:
+        password_bytes = plain_password.encode("utf-8")
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
