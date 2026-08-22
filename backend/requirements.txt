@@ -19,9 +19,12 @@ python-dotenv>=1.0.0
 sqlalchemy
 psycopg2-binary
 alembic
-# JWT authentication
+# JWT authentication and password hashing
 python-jose[cryptography]
+bcrypt
 # Qdrant vector store
 qdrant-client
 # Redis cache / session store
 redis
+# Email validation for Pydantic
+email-validator
