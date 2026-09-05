@@ -29,7 +29,7 @@
    - **Knowledge Graph (Neo4j):** Document hierarchy, clauses, legal entities, cross-references, and match relationships.
    - **Vector Store (Qdrant):** Dense semantic embeddings for clause similarity retrieval.
 4. **Hybrid Compliance Scoring:** Calculates compliance alignment (`compliant`, `partial`, `gap`) using vector semantic similarity combined with Neo4j graph context and optional LLM reasoning.
-5. **Interactive Exploration & Reporting:** Serves REST APIs consumed by a Next.js 15 frontend featuring a Graph Explorer, Compliance Viewer, and Report Exporter.
+5. **Interactive Exploration & Reporting:** Serves REST APIs consumed by a Next.js 16 frontend (`client/`) featuring a Graph Explorer, Compliance Viewer, and Report Exporter.
 
 ---
 
@@ -46,7 +46,7 @@ LexisGraph leverages specialized storage engines tailored for distinct workloads
 | **Cache & Task Queue** | Redis | Session caching & asynchronous background jobs |
 | **Object / File Storage**| Local Filesystem (`backend/storage/uploads/`) | PDFs, uploaded files, generated reports |
 | **Legacy Storage** | MongoDB | Read-only legacy document store (*do not use for new features*) |
-| **Client Frontend** | Next.js 15 (App Router) + TypeScript + Tailwind CSS | Interactive dashboard, graph explorer, compliance reporting |
+| **Client Frontend** | Next.js 16 (App Router) + TypeScript + Tailwind CSS | Interactive dashboard, graph explorer, compliance reporting (`client/`) |
 
 ---
 
@@ -156,7 +156,7 @@ backend/
 
 ## 5. `/client` — Architecture & Completed Features
 
-The client is a **Next.js 15 App Router** project written in TypeScript.
+The client is a **Next.js 16 App Router** project written in TypeScript.
 
 ### Directory Structure
 
@@ -210,7 +210,7 @@ client/
 
 | Sprint | Scope & Key Deliverables | Status |
 |---|---|---|
-| **Sprint 1 & 2** | Knowledge Graph prototype in Neo4j, Qdrant vector store setup, basic similarity scoring engine, initial React frontend setup. | ✅ Completed |
+| **Sprint 1 & 2** | Knowledge Graph prototype in Neo4j, Qdrant vector store setup, basic similarity scoring engine, initial client frontend setup. | ✅ Completed |
 | **Sprint 3** | **Document Management System:** PostgreSQL `Document` model, Alembic migrations, `storage.py` local storage service, async document upload API, tracking columns (`progress`, `current_step`), frontend Next.js auth & document pages. | ✅ Completed |
 | **Sprint 4 (Current/Next)** | **Automated Ingestion & Parsing Pipeline:** PDF text extraction, legal clause chunking, Named Entity Recognition (NER), automatic graph builder pipeline trigger, Qdrant auto-indexing. | 🚧 In Progress |
 | **Sprint 5 (Planned)** | **Advanced Compliance & RAG Reasoning:** Durable background task queue (Celery/Redis), LLM multi-provider fallback engine, exportable compliance audit PDF reports. | ⏳ Planned |
