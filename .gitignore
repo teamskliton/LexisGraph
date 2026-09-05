@@ -1,24 +1,46 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
+# ==========================================
+# LexisGraph .gitignore
+# ==========================================
 
 # Environments & Secret Files
 .env
 .env.*
-!.env.example
 *.env
+!.env.example
 backend/.env
+client/.env*.local
 
-# Virtual Environments
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 .venv/
 venv/
 ENV/
 env/
 backend/.venv/
 
-# Uploaded document files (local storage) — keep dir, ignore contents
+# Testing & Code Quality
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+coverage/
+
+# Node.js & Frontend Client
+node_modules/
+client/node_modules/
+.npm/
+.eslintcache
+.next/
+client/.next/
+out/
+client/out/
+client/next-env.d.ts
+
+# Local Storage & Uploads (keep directory placeholders)
 backend/storage/uploads/regulations/*
 backend/storage/uploads/policies/*
 backend/storage/uploads/evidence/*
@@ -26,31 +48,7 @@ backend/storage/uploads/evidence/*
 !backend/storage/uploads/policies/.gitkeep
 !backend/storage/uploads/evidence/.gitkeep
 
-# Testing & Coverage
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-
-# Node & Frontend
-node_modules/
-frontend/node_modules/
-frontend/dist/
-frontend/build/
-.npm/
-.eslintcache
-
-# OS & IDE Junk
-.DS_Store
-Thumbs.db
-desktop.ini
-.idea/
-*.swp
-*.swo
-.agents/
-external data/
-
-# Data & Ingestion Outputs
+# Data & Ingestion Artifacts
 backend/data/raw/*
 !backend/data/raw/.gitkeep
 backend/data/processed/*
@@ -62,30 +60,24 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+external data/
 
-/docs/
-
-# Dependencies
-node_modules/
-
-# Next.js
-.next/
-out/
-
-# Environment
-.env
-.env.*
-!.env.example
-
-# Logs
+# Logs & Diagnostics
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# OS
+# OS & Editor Files
 .DS_Store
 Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Documentation
-docs/
-
-# Coverage
-coverage/
+# AI Agent & Assistant Artifacts
+.agents/
+.claude/
+brain/
