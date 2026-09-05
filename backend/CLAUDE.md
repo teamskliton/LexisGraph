@@ -334,4 +334,4 @@ return user                         ← raises 403 if is_active=False
 - [x] Implement `POST /auth/token` route (login)
 - [x] Add `get_current_user` FastAPI dependency (`app/core/dependencies.py`)
 - [x] Add `GET /auth/me` route (protected, returns `UserResponse`)
-- [ ] Protect routes with `Depends(get_current_user)`
+- [x] Protect routes with `Depends(get_current_user)`
