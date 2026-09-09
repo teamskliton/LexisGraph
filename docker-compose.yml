@@ -132,26 +132,25 @@ services:
       - lexis_net
 
   # ── Caddy (reverse proxy) ──────────────────────────────────────────────────
-  # Uncomment this block when you are ready to wire up HTTPS.
-  # Caddy auto-provisions TLS certificates via Let's Encrypt.
-  # Requires a Caddyfile at the repo root (see .env.example for DOMAIN).
-  #
-  # caddy:
-  #   image: caddy:2-alpine
-  #   container_name: caddy
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #     - "443:443/udp"   # HTTP/3
-  #   volumes:
-  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
-  #     - caddy_data:/data
-  #     - caddy_config:/config
-  #   depends_on:
-  #     - backend
-  #   networks:
-  #     - lexis_net
+  # Auto-provisions and renews TLS certificates via Let's Encrypt / ZeroSSL.
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    environment:
+      - DOMAIN=${DOMAIN:-lexisgraph.duckdns.org}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    networks:
+      - lexis_net
 
 volumes:
   postgres_data:
@@ -159,5 +158,5 @@ volumes:
   neo4j_data:
   qdrant_data:
   redis_data:
-  # caddy_data:
-  # caddy_config:
+  caddy_data:
+  caddy_config:
