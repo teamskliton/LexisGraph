@@ -10,34 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dotenv import load_dotenv
 
-from app.db.mongo import get_database
 from app.db.neo4j import run_query
-
-load_dotenv()
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("check_connections")
-
-
-def check_mongo() -> bool:
-    logger.info("Testing MongoDB connection...")
-    try:
-        db = get_database()
-        command_result = db.command("ping")
-        logger.info("MongoDB connected successfully. Ping result: %s", command_result)
-        user_count = db["user_documents"].count_documents({})
-        ext_count = db["external_documents"].count_documents({})
-        dom_count = db["domain_documents"].count_documents({})
-        logger.info(
-            "MongoDB document counts -> user: %s | external: %s | domain: %s",
-            user_count,
-            ext_count,
-            dom_count,
-        )
-        return True
-    except Exception as exc:  # noqa: BLE001
-        logger.error("MongoDB connection failed: %s", exc)
-        return False
+from app.db.postgres import test_connection as check_postgres
+from app.db.qdrant import test_connection as check_qdrant
+from app.db.redis_client import test_connection as check_redis
 
 
 def check_neo4j() -> bool:
@@ -105,7 +81,12 @@ def check_openrouter_or_gemini() -> bool:
 
 if __name__ == "__main__":
     logger.info("=== LexisGraph Connection Check ===")
-    mongo_ok = check_mongo()
+    pg_ok = check_postgres()
     neo4j_ok = check_neo4j()
+    qdrant_ok = check_qdrant()
+    redis_ok = check_redis()
     llm_ok = check_openrouter_or_gemini()
-    logger.info("Summary: Mongo=%s | Neo4j=%s | LLM=%s", mongo_ok, neo4j_ok, llm_ok)
+    logger.info(
+        "Summary: Postgres=%s | Neo4j=%s | Qdrant=%s | Redis=%s | LLM=%s",
+        pg_ok, neo4j_ok, qdrant_ok, redis_ok, llm_ok
+    )

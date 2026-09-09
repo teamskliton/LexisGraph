@@ -16,8 +16,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.db.mongo import close_client as close_mongo_client
-from app.db.mongo import get_client as get_mongo_client
 from app.db.neo4j import close_driver as close_neo4j_driver
 from app.db.neo4j import test_connection as test_neo4j_connection
 from app.db.postgres import close_engine as close_postgres_engine
@@ -61,14 +59,11 @@ def _print_env_diagnostic() -> None:
     env_path = Path(__file__).resolve().parent.parent / ".env"
     neo_uri = os.getenv("NEO4J_URI", "NOT SET")
     neo_uri_disp = (neo_uri[:35] + "...") if len(neo_uri) > 35 else neo_uri
-    mongo_uri = os.getenv("MONGO_URI", "NOT SET")
-    mongo_disp = (mongo_uri[:30] + "...") if len(mongo_uri) > 30 else mongo_uri
     print(f"[DIAG] Looking for .env at: {env_path}")
     print(f"[DIAG] .env exists: {env_path.exists()}")
     print(f"[DIAG] NEO4J_URI = {neo_uri_disp}")
     print(f"[DIAG] NEO4J_USER = {os.getenv('NEO4J_USER', 'NOT SET')}")
     print(f"[DIAG] NEO4J_DATABASE = {os.getenv('NEO4J_DATABASE', 'NOT SET')}")
-    print(f"[DIAG] MONGO_URI = {mongo_disp}")
 
 
 def configure_logging() -> None:
@@ -140,13 +135,6 @@ def shutdown_scheduler() -> None:
 async def lifespan(_: FastAPI):
     _print_env_diagnostic()
 
-    # ── MongoDB (existing) ────────────────────────────────────────────────────
-    try:
-        get_mongo_client().admin.command("ping")
-        logger.info("Startup check: MongoDB connectivity OK")
-    except Exception:  # noqa: BLE001
-        logger.exception("Startup check: MongoDB connectivity FAILED")
-
     # ── Neo4j (existing) ──────────────────────────────────────────────────────
     try:
         test_neo4j_connection()
@@ -214,11 +202,6 @@ async def lifespan(_: FastAPI):
         close_neo4j_driver()
     except Exception:  # noqa: BLE001
         logger.exception("Failed to close Neo4j driver")
-
-    try:
-        close_mongo_client()
-    except Exception:  # noqa: BLE001
-        logger.exception("Failed to close MongoDB client")
 
     try:
         close_postgres_engine()

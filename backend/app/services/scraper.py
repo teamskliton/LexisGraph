@@ -7,7 +7,6 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-from app.db.mongo import store_document
 from app.services.preprocessing import build_processed_document, validate_pipeline_output
 from app.utils.file_handler import file_exists_with_hash, save_processed_json, save_raw_file
 from app.utils.hash import generate_content_hash
@@ -428,12 +427,7 @@ def ingest_external_records(records: list[dict], source_type: str) -> dict:
             continue
 
         try:
-            document_id = store_document(payload, "external")
-            if not document_id:
-                duplicates += 1
-                logger.info("Skipping duplicate external document in MongoDB for hash=%s", content_hash)
-                continue
-
+            document_id = content_hash
             logger.info(
                 "External record stored: raw_path=%s processed_path=%s hash=%s clauses=%s source_type=%s",
                 raw_path,

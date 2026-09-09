@@ -4,7 +4,6 @@ from collections import Counter
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-from app.db.mongo import get_database
 from app.db.neo4j import run_query
 from app.services.embedding_model import (
     get_embedding_model,
@@ -14,8 +13,6 @@ from app.services.embedding_model import (
 from app.services.graph_builder import generate_clause_id
 
 logger = logging.getLogger(__name__)
-
-_COLLECTIONS = ("user_documents", "external_documents")
 
 
 def is_model_loaded() -> bool:
@@ -27,35 +24,34 @@ def preload_model() -> None:
 
 
 def _collect_clauses(collection_names: tuple[str, ...] | None = None) -> list[dict]:
-    """Collect unique clause texts and embeddings from MongoDB."""
-    database = get_database()
-    source_collections = collection_names or _COLLECTIONS
-    clauses_by_id: dict[str, dict] = {}
-
-    for collection_name in source_collections:
-        collection = database[collection_name]
-        for doc in collection.find({}, {"clauses": 1}):
-            clauses = doc.get("clauses", []) or []
-            for clause in clauses:
-                text = (clause.get("text") or "").strip()
-                embedding = clause.get("embedding")
-                if not text or not isinstance(embedding, list) or not embedding:
-                    continue
-                if not all(isinstance(value, (int, float)) for value in embedding):
-                    continue
-
-                clause_id = generate_clause_id(text)
-                if clause_id in clauses_by_id:
-                    continue
-
-                clauses_by_id[clause_id] = {
-                    "clause_id": clause_id,
+    """Collect unique clause texts and embeddings from Qdrant vector store."""
+    try:
+        from app.db.qdrant import get_client
+        from app.services.vector_store import COLLECTION_USER
+        client = get_client()
+        points, _ = client.scroll(
+            collection_name=COLLECTION_USER,
+            limit=200,
+            with_payload=True,
+            with_vectors=True,
+        )
+        clauses = []
+        for point in points:
+            payload = point.payload or {}
+            text = payload.get("text", "")
+            vector = point.vector
+            if text and isinstance(vector, list):
+                cid = payload.get("clause_id") or generate_clause_id(text)
+                clauses.append({
+                    "clause_id": cid,
                     "text": text,
-                    "embedding": embedding,
-                    "collection": collection_name,
-                }
-
-    return list(clauses_by_id.values())
+                    "embedding": vector,
+                    "collection": COLLECTION_USER,
+                })
+        return clauses
+    except Exception as exc:
+        logger.warning("Qdrant clause collection for retrieval fallback notice: %s", exc)
+        return []
 
 
 def _filter_common_dimension_clauses(clauses: list[dict]) -> list[dict]:
