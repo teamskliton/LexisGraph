@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { NAV_LINKS, HERO } from "./landing-content";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export default function LandingNavbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -73,8 +74,9 @@ export default function LandingNavbar() {
               ))}
             </ul>
 
-            {/* Desktop CTAs */}
+            {/* Desktop CTAs & Theme Toggle */}
             <div className="hidden md:flex items-center gap-2">
+              <ThemeToggle />
               <Link
                 href="/login"
                 className="px-4 py-1.5 text-sm font-medium text-foreground hover:text-primary hover:bg-primary-subtle border border-transparent hover:border-primary-muted rounded-lg transition-all duration-150"
@@ -89,17 +91,20 @@ export default function LandingNavbar() {
               </Link>
             </div>
 
-            {/* Mobile hamburger */}
-            <button
-              id="mobile-menu-toggle"
-              aria-label={open ? "Close navigation menu" : "Open navigation menu"}
-              aria-expanded={open}
-              aria-controls="mobile-menu"
-              className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors duration-150"
-              onClick={() => setOpen((v) => !v)}
-            >
-              {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            {/* Mobile actions */}
+            <div className="flex items-center gap-1 md:hidden">
+              <ThemeToggle />
+              <button
+                id="mobile-menu-toggle"
+                aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+                aria-expanded={open}
+                aria-controls="mobile-menu"
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors duration-150"
+                onClick={() => setOpen((v) => !v)}
+              >
+                {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
         </div>
       </nav>
@@ -147,6 +152,10 @@ export default function LandingNavbar() {
               </ul>
             </nav>
             <div className="p-4 border-t border-border flex flex-col gap-2">
+              <div className="flex items-center justify-between px-2 py-1 mb-1">
+                <span className="text-sm font-medium text-muted-foreground">Appearance</span>
+                <ThemeToggle />
+              </div>
               <Link
                 href="/login"
                 onClick={() => setOpen(false)}
