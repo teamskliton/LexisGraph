@@ -34,7 +34,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.db.mongo import get_database
 from app.db.neo4j import run_query as run_neo4j_query
 from app.db.qdrant import get_client as get_qdrant_client
 from app.db.models import Document, Organization
@@ -57,43 +56,20 @@ _LLM_BATCH_SIZE = 8          # How many clauses to evaluate per LLM call (5–10
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Clause Retrieval Helpers (MongoDB, Qdrant scroll, Neo4j, Fallback)
+# Step 1: Clause Retrieval Helpers (Qdrant scroll, Neo4j, Fallback)
 # ---------------------------------------------------------------------------
 
 def retrieve_clauses_for_document(doc: Document) -> list[dict[str, Any]]:
     """
     Retrieve clauses for a given document across existing storage layers:
-    1. MongoDB document store (using mongo_document_id or doc.id)
-    2. Qdrant vector store (using document_id filter — scroll, not search)
-    3. Neo4j knowledge graph (using Document-[:HAS_CLAUSE]->Clause nodes)
-    4. Fallback: On-disk file text preprocessing
+    1. Qdrant vector store (using document_id filter — scroll, not search)
+    2. Neo4j knowledge graph (using Document-[:HAS_CLAUSE]->Clause nodes)
+    3. Fallback: On-disk file text preprocessing
     """
     clauses_by_id: dict[str, dict[str, Any]] = {}
     doc_id_str = str(doc.id)
 
-    # 1. MongoDB check
-    try:
-        database = get_database()
-        mongo_id = doc.mongo_document_id or doc_id_str
-        for collection_name in ("user_documents", "external_documents", "domain_documents"):
-            collection = database[collection_name]
-            mongo_doc = collection.find_one({"$or": [{"_id": mongo_id}, {"mongo_document_id": mongo_id}]})
-            if mongo_doc and mongo_doc.get("clauses"):
-                for clause in mongo_doc["clauses"]:
-                    if isinstance(clause, dict):
-                        text = str(clause.get("text") or "").strip()
-                        if text:
-                            cid = str(clause.get("id") or clause.get("clause_id") or generate_clause_id(text))
-                            clauses_by_id[cid] = {
-                                "clause_id": cid,
-                                "text": text,
-                                "type": str(clause.get("type") or "general"),
-                                "embedding": clause.get("embedding"),
-                            }
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("MongoDB clause retrieval notice for doc_id=%s: %s", doc_id_str, exc)
-
-    # 2. Qdrant check if Mongo found nothing
+    # 1. Qdrant check
     if not clauses_by_id:
         try:
             qclient = get_qdrant_client()

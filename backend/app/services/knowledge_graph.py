@@ -10,11 +10,12 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Iterable
 
-import numpy as np
-from bson import ObjectId
-from bson.errors import InvalidId
+from pathlib import Path
+import json
+from uuid import UUID
 
-from app.db.mongo import get_database
+import numpy as np
+
 from app.db.neo4j import is_neo4j_available, run_query
 from app.services.compliance import _PARTIAL_THRESHOLD, _SIMILARITY_THRESHOLD
 from app.services.embedding_model import get_embedding_model
@@ -23,11 +24,33 @@ TOP_K = 3
 
 
 def _find_document(collection_name: str, document_id: str) -> dict | None:
+    # 1. Search processed JSON files on disk
+    for search_dir in (Path("data/processed"), Path("data/domain_documents"), Path("data/raw")):
+        if search_dir.exists():
+            for p in search_dir.glob(f"**/*{document_id}*.json"):
+                try:
+                    return json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+    # 2. Search via PostgreSQL Document / Regulation
     try:
-        query = {"_id": ObjectId(document_id)}
-    except InvalidId:
-        query = {"_id": document_id}
-    return get_database()[collection_name].find_one(query)
+        from app.db.session import get_session
+        from app.db.models import Document, Regulation
+        from app.services.preprocessing import build_processed_document
+        from app.utils.file_handler import extract_text
+        with get_session() as session:
+            try:
+                uid = UUID(document_id)
+                doc = session.get(Document, uid) or session.get(Regulation, uid)
+                if doc and doc.file_path and Path(doc.file_path).exists():
+                    text = extract_text(Path(doc.file_path))
+                    title = doc.original_filename if hasattr(doc, "original_filename") else getattr(doc, "title", "Untitled")
+                    return build_processed_document(title, text, "IT")
+            except ValueError:
+                pass
+    except Exception:
+        pass
+    return None
 
 
 def _valid_clauses(document: dict) -> list[dict]:

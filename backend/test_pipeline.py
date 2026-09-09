@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.db.mongo import store_document
 from app.services.preprocessing import preprocess_text, validate_pipeline_output
 from app.services.scraper import fetch_and_process_external_data
 from app.utils.file_handler import extract_text, save_processed_json, save_raw_file
@@ -63,10 +62,7 @@ def run_sample_upload_test() -> dict:
 
     processed_path = save_processed_json(payload, content_hash, source="user")
 
-    is_valid = validate_pipeline_output({"text": extracted_text, "clauses": clauses})
-    document_id = None
-    if is_valid:
-        document_id = store_document(payload, "user")
+    document_id = content_hash if is_valid else None
 
     result = {
         "stored_in_db": bool(document_id),

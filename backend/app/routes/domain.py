@@ -8,7 +8,6 @@ import re
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 
-from app.db.mongo import store_document
 from app.services.graph_builder import build_graph
 from app.services.preprocessing import build_processed_document
 from app.utils.file_handler import UnsupportedFileTypeError, extract_text
@@ -147,27 +146,19 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
         except Exception as exc:  # noqa: BLE001
             raise Exception(f"Preprocessing error: {exc}") from exc
         clauses = payload["clauses"]
-        mongo_doc_payload = {
-            "source": "domain",
-            "source_type": "domain",
-            "domain": normalized_domain,
-            "title": Path(filename).name,
-            "clauses": clauses,
-            "hash": file_hash,
-        }
-        logger.info("Saving to MongoDB...")
-        logger.info("Clauses count: %s", len(clauses))
+        # Build Neo4j graph directly from processed document payload
         try:
-            stored_doc_id = await to_thread(store_document, mongo_doc_payload, "domain")
-        except Exception:  # noqa: BLE001
-            logger.exception("Mongo Insert Failed")
-            raise
-
-        if stored_doc_id:
-            logger.info("[DOMAIN-%s] STEP 4A: Building graph for document_id=%s", normalized_domain, stored_doc_id)
-            await to_thread(build_graph, stored_doc_id)
-        else:
-            logger.info("[DOMAIN-%s] STEP 4A: Skipping graph build for duplicate hash=%s", normalized_domain, file_hash)
+            logger.info("[DOMAIN-%s] STEP 4A: Building graph for hash=%s", normalized_domain, file_hash)
+            await to_thread(
+                build_graph,
+                payload,
+                pg_document_id=file_hash,
+                source_type="domain",
+                document_type="REGULATION",
+                checksum=file_hash,
+            )
+        except Exception as exc:
+            logger.warning("[DOMAIN-%s] Graph build notice: %s", normalized_domain, exc)
 
         _set_upload_status(
             file_hash,

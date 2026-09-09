@@ -215,7 +215,7 @@ async def delete_graph_history(
 async def build_graph_endpoint(
     current_user: User | None = Depends(get_optional_current_user),
 ) -> dict:
-    """Build deduplication-safe Document/Clause graph in Neo4j from MongoDB."""
+    """Build deduplication-safe Document/Clause graph in Neo4j."""
     _require_analyst_or_admin(current_user)
     job = start_job("build-graph")
     try:

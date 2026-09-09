@@ -4,7 +4,9 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.db.mongo import get_collection
+from sqlalchemy import select
+from app.db.session import get_session
+from app.db.models.document import Document
 from app.services.export_service import export_to_excel, export_to_pdf
 
 router = APIRouter()
@@ -12,21 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 def _get_latest_documents(source: str, limit: int = 20) -> list[dict]:
-    collection = get_collection(source)
-    cursor = (
-        collection.find(
-            {},
+    with get_session() as session:
+        docs = session.scalars(select(Document).order_by(Document.created_at.desc()).limit(limit)).all()
+        return [
             {
-                "title": 1,
-                "source_type": 1,
-                "date": 1,
-                "clauses": 1,
-            },
-        )
-        .sort("created_at", -1)
-        .limit(limit)
-    )
-    return list(cursor)
+                "title": doc.original_filename,
+                "source_type": doc.document_type.value if hasattr(doc.document_type, "value") else str(doc.document_type),
+                "date": doc.created_at.strftime("%Y-%m-%d") if doc.created_at else "",
+                "clauses": [],
+            }
+            for doc in docs
+        ]
 
 
 def _build_export_response(data: list[dict], export_format: str, file_name: str) -> StreamingResponse:

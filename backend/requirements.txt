@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 python-multipart
-pymongo
 spacy
 sentence-transformers
 pdfplumber
