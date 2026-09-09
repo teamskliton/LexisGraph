@@ -1,0 +1,36 @@
+# ==============================================================================
+# LexisGraph — Caddyfile Reverse Proxy Configuration
+# ==============================================================================
+# Caddy automatically provisions and renews TLS certificates via Let's Encrypt /
+# ZeroSSL for any public domain with a valid DNS A/AAAA record pointing to this VPS.
+
+{$DOMAIN:lexisgraph.duckdns.org} {
+    # Transparent compression for API responses (Zstandard & Gzip)
+    encode zstd gzip
+
+    # Production API Security Headers
+    header {
+        # Prevent MIME-type sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Prevent clickjacking by forbidding embedding in iframes
+        X-Frame-Options "DENY"
+
+        # Keep referrer information safe across origins
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Hide Caddy server signature
+        -Server
+    }
+
+    # Reverse proxy all incoming traffic to the FastAPI backend container
+    # Note: Caddy automatically sets X-Forwarded-For, X-Forwarded-Proto,
+    # and X-Forwarded-Host so FastAPI receives the true client IP and HTTPS scheme.
+    reverse_proxy backend:8000
+
+    # Structured request logging to stdout (viewable via `docker compose logs -f caddy`)
+    log {
+        output stdout
+        format console
+    }
+}
