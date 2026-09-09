@@ -4,8 +4,13 @@ import * as React from "react";
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export function ThemeToggle() {
+interface ThemeToggleProps {
+  className?: string;
+}
+
+export function ThemeToggle({ className }: ThemeToggleProps = {}) {
   const { setTheme, resolvedTheme } = useTheme();
 
   const toggle = () => {
@@ -17,7 +22,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon-sm"
       onClick={toggle}
-      className="relative rounded-lg hover:bg-muted dark:hover:bg-zinc-800 transition-colors"
+      className={cn("relative rounded-lg hover:bg-muted dark:hover:bg-zinc-800 transition-colors", className)}
       aria-label="Toggle theme"
     >
       {/* Render both icons; visibility is driven by the resolved theme via CSS.

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FOOTER_LINKS } from "./landing-content";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export default function LandingFooter() {
   const year = new Date().getFullYear();
@@ -62,9 +63,12 @@ export default function LandingFooter() {
           <p className="text-xs text-subtle-foreground">
             © {year} LexisGraph. All rights reserved.
           </p>
-          <p className="text-xs text-subtle-foreground">
-            Compliance Intelligence Platform
-          </p>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-subtle-foreground">
+              Compliance Intelligence Platform
+            </span>
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </footer>
