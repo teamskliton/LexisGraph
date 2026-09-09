@@ -168,12 +168,11 @@ All read from `backend/.env`:
 
 ## Constraints
 
-- **DO NOT use MongoDB** for any new application data
-- **DO NOT modify existing GraphRAG services**
-- **DO NOT delete existing code**
-- **All new application data** must use PostgreSQL
-- **Existing MongoDB files** (`app/db/mongo.py`, etc.) must remain untouched — other team members may still use them
-- **Existing PostgreSQL file** `app/db/postgres.py` is legacy — do not modify
+- **All application data** must use PostgreSQL (via SQLAlchemy 2.0 / Alembic)
+- **Vectors** use Qdrant (`qdrant-client`)
+- **Knowledge graph** uses Neo4j
+- **Cache & Jobs** use Redis
+- **Existing PostgreSQL file** `app/db/postgres.py` is legacy singleton — do not modify
 
 ---
 
