@@ -118,11 +118,19 @@ def login(data: UserLogin, db: Session = Depends(get_db)) -> Token:
         (User.username == data.username) | (User.email == data.username)
     ).first()
 
-    if user is None or not verify_password(data.password, user.hashed_password):
-        logger.warning("Login failed — invalid credentials for username/email: %s", data.username)
+    if user is None:
+        logger.warning("Login failed — user not found for username/email: %s", data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password.",
+            detail="No account found with this username or email. Please create an account.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not verify_password(data.password, user.hashed_password):
+        logger.warning("Login failed — incorrect password for username/email: %s", data.username)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password. Please verify your password and try again.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
