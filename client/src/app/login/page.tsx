@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { Eye, EyeOff, ShieldCheck, Scale, Network, ArrowRight, Loader2 } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, Scale, Network, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -24,6 +24,8 @@ function LoginContent() {
   const { user, login, isLoading: authLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isNoAccount, setIsNoAccount] = useState(false);
   const router = useRouter();
 
   // Redirect if already logged in
@@ -51,11 +53,26 @@ function LoginContent() {
 
   const onSubmit = async (data: LoginInput) => {
     setIsSubmitting(true);
+    setErrorMessage(null);
+    setIsNoAccount(false);
     try {
       await login(data, inviteToken || undefined);
-    } catch (err) {
-      // Errors handled by toast inside auth-context
+    } catch (err: any) {
       console.error(err);
+      const detail =
+        err?.response?.data?.detail ||
+        (typeof err?.message === "string" ? err.message : "Invalid credentials. Please try again.");
+      setErrorMessage(detail);
+      const lower = String(detail).toLowerCase();
+      if (
+        lower.includes("no account found") ||
+        lower.includes("not found") ||
+        lower.includes("create an account") ||
+        lower.includes("register") ||
+        err?.response?.status === 404
+      ) {
+        setIsNoAccount(true);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -153,6 +170,32 @@ function LoginContent() {
           <Card className="border-border bg-card/50 backdrop-blur-sm shadow-xl p-6 rounded-2xl">
             <CardContent className="p-0">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                {/* Visual Error Banner */}
+                {errorMessage && (
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-sm text-red-600 dark:text-red-400 space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-xs uppercase tracking-wider text-red-700 dark:text-red-300">
+                          {isNoAccount ? "No Account Found" : "Sign In Failed"}
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-300/90 leading-relaxed">
+                          {errorMessage}
+                        </p>
+                      </div>
+                    </div>
+                    {isNoAccount && (
+                      <div className="pt-2 pl-7 border-t border-red-500/15">
+                        <Link
+                          href="/register"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                        >
+                          Create an account here <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Username / Email field */}
                 <div className="space-y-1.5">
                   <label htmlFor="username" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
