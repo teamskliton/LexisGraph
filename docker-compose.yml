@@ -103,18 +103,6 @@ services:
     networks:
       - lexis_net
 
-  # ── MongoDB ────────────────────────────────────────────────────────────────
-  mongo:
-    image: mongo:7
-    container_name: mongo_db
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    networks:
-      - lexis_net
-
   # ── FastAPI Backend ────────────────────────────────────────────────────────
   # Bound to 127.0.0.1:8000 — Caddy (or nginx) will reverse-proxy to it.
   # Requires backend/Dockerfile to exist before `docker compose up`.
@@ -137,8 +125,6 @@ services:
       qdrant:
         condition: service_started
       redis:
-        condition: service_started
-      mongo:
         condition: service_started
     networks:
       - lexis_net
@@ -171,6 +157,5 @@ volumes:
   neo4j_data:
   qdrant_data:
   redis_data:
-  mongo_data:
   # caddy_data:
   # caddy_config:

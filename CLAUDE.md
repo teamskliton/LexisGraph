@@ -45,7 +45,6 @@ LexisGraph leverages specialized storage engines tailored for distinct workloads
 | **Vector Store** | Qdrant | Dense vector embeddings & similarity search |
 | **Cache & Task Queue** | Redis | Session caching & asynchronous background jobs |
 | **Object / File Storage**| Local Filesystem (`backend/storage/uploads/`) | PDFs, uploaded files, generated reports |
-| **Legacy Storage** | MongoDB | Read-only legacy document store (*do not use for new features*) |
 | **Client Frontend** | Next.js 16 (App Router) + TypeScript + Tailwind CSS | Interactive dashboard, graph explorer, compliance reporting (`client/`) |
 
 ---
@@ -220,9 +219,10 @@ client/
 ## 7. Key System Constraints & Developer Guidelines
 
 1. **Database Usage Rules:**
-   - **PostgreSQL ONLY** for all new application data, users, metadata, and transactional records.
-   - **Do NOT use MongoDB** for any new features. MongoDB scripts (`app/db/mongo.py`) are legacy and read-only.
-   - **Do NOT modify** `app/db/postgres.py` or `app/db/mongo.py` — legacy drivers required for backwards compatibility.
+   - **PostgreSQL ONLY** for all application data, users, metadata, and transactional records.
+   - **Neo4j** for graph relationships, clause hierarchy, and structural traversal.
+   - **Qdrant** for dense clause embeddings and semantic vector similarity.
+   - **Redis** for session caching and job orchestration.
 2. **Migration Discipline:**
    - All schema updates MUST be implemented via Alembic migrations under `backend/alembic/versions/`.
    - Never modify or delete previously applied migration scripts.
