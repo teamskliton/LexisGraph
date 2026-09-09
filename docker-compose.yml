@@ -1,65 +1,161 @@
-version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Named internal network — all services talk to each other by service name
+# (e.g. postgres://postgres:5432, redis://redis:6379) without publishing
+# ports to the host. Only ports that need host access are explicitly mapped.
+# ---------------------------------------------------------------------------
+networks:
+  lexis_net:
+    driver: bridge
 
 services:
 
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  # Bound to 127.0.0.1 so it is only reachable from the VPS loopback.
+  # Access from your laptop via:  ssh -L 5433:localhost:5433 user@vps
   postgres:
     image: postgres:16
     container_name: postgres_db
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: lexisgraph
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lexis_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ── pgAdmin ────────────────────────────────────────────────────────────────
+  # NOT internet-facing. Access via:  ssh -L 5050:localhost:5050 user@vps
+  # then open http://localhost:5050 in your browser.
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@lexisgraph.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - lexis_net
 
+  # ── Neo4j ──────────────────────────────────────────────────────────────────
+  # Both the Browser UI (7474) and Bolt protocol (7687) are localhost-only.
+  # Bolt must be tunnelled alongside the UI for the browser to work:
+  #   ssh -L 7474:localhost:7474 -L 7687:localhost:7687 user@vps
+  # The backend reaches Neo4j at bolt://neo4j:7687 over the Docker network.
   neo4j:
     image: neo4j:5
     container_name: neo4j_db
-    restart: always
+    restart: unless-stopped
     environment:
-      NEO4J_AUTH: neo4j/password
+      NEO4J_AUTH: ${NEO4J_USER}/${NEO4J_PASSWORD}
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     volumes:
       - neo4j_data:/data
+    networks:
+      - lexis_net
 
+  # ── Qdrant ─────────────────────────────────────────────────────────────────
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant_db
-    restart: always
+    restart: unless-stopped
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    networks:
+      - lexis_net
 
+  # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7
     container_name: redis_db
-    restart: always
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lexis_net
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────────
+  # Bound to 127.0.0.1:8000 — Caddy (or nginx) will reverse-proxy to it.
+  # Requires backend/Dockerfile to exist before `docker compose up`.
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lexisgraph_backend
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - lexis_net
+
+  # ── Caddy (reverse proxy) ──────────────────────────────────────────────────
+  # Uncomment this block when you are ready to wire up HTTPS.
+  # Caddy auto-provisions TLS certificates via Let's Encrypt.
+  # Requires a Caddyfile at the repo root (see .env.example for DOMAIN).
+  #
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #     - "443:443/udp"   # HTTP/3
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - lexis_net
 
 volumes:
   postgres_data:
   pgadmin_data:
   neo4j_data:
   qdrant_data:
+  redis_data:
+  # caddy_data:
+  # caddy_config:
