@@ -769,17 +769,36 @@ def analyze_compliance_engine(
     """
     Execute Hybrid GraphRAG compliance evaluation for an Organization.
 
-    Pipeline:
-        Phase 1 — Retrieval (per clause, O(N × K)):
-            For each regulation clause (N):
-              a. Embed → Qdrant query_points (Top-K policy matches)
-              b. Neo4j structural context for the best policy match
+    Pipeline (Updated — includes Applicability Classification Layer):
+        Phase 0 — Regulation Clause Retrieval:
+            Retrieve all raw regulation clauses from MongoDB / Qdrant / Neo4j / file.
 
-        Phase 2 — LLM Evaluation (batched, O(⌈N/B⌉) LLM calls):
-            Group clauses into batches of B (default 8).
+        Phase 1 — Atomic Requirement Extraction:
+            Decompose coarse clause text into individual, independently assessable
+            obligations using LLM (with rule-based fallback).  Each clause may
+            produce 1–N AtomicRequirement objects.
+
+        Phase 2 — Applicability Classification:
+            For each AtomicRequirement, determine whether it places an obligation
+            that this specific internal company policy must satisfy.
+            APPLICABLE   → proceed to retrieval + LLM evaluation
+            NOT_APPLICABLE → skip entirely; record reason in report
+            UNCERTAIN      → proceed to retrieval + LLM evaluation (conservative framing)
+
+        Phase 3 — Hybrid Retrieval (per applicable/uncertain requirement, O(N × K)):
+            a. Embed → Qdrant query_points (Top-K policy matches)   70% weight
+            b. Neo4j structural context for the best policy match    30% weight
+
+        Phase 4 — Batched LLM Evaluation (O(⌈N/B⌉) LLM calls):
+            Group applicable requirements into batches of B (default 8).
             One LLM call per batch → JSON array response.
             Per-item heuristic fallback if a batch entry fails to parse.
             Retry-once per batch on full LLM failure.
+
+        Phase 5 — Aggregate + Score:
+            Scoring denominator = applicable + uncertain (NOT NOT_APPLICABLE).
+            NOT_APPLICABLE requirements are excluded from the score calculation
+            but are recorded in the report for auditor transparency.
 
     Parameters
     ----------
@@ -790,15 +809,20 @@ def analyze_compliance_engine(
     policy_document : Document
         The target policy document being audited.
     llm_batch_size : int
-        Number of clauses per LLM batch call (default: _LLM_BATCH_SIZE).
+        Number of requirements per LLM batch call (default: _LLM_BATCH_SIZE).
 
     Returns
     -------
     dict[str, Any]
-        Structured compliance findings JSON payload.
+        Structured compliance findings JSON payload, now including:
+          - not_applicable_count
+          - applicable_count
+          - uncertain_count
+          - not_applicable_clauses  (list of skipped requirements with reasons)
     """
     logger.info(
-        "[COMPLIANCE_ENGINE] Starting Hybrid GraphRAG analysis org=%s reg_doc=%s policy_doc=%s batch_size=%s",
+        "[COMPLIANCE_ENGINE] Starting Hybrid GraphRAG + Applicability Filter analysis "
+        "org=%s reg_doc=%s policy_doc=%s batch_size=%s",
         organization.id,
         regulation_document.id,
         policy_document.id,
@@ -806,8 +830,11 @@ def analyze_compliance_engine(
     )
 
     policy_doc_id_str = str(policy_document.id)
+    policy_title = getattr(policy_document, "original_filename", "") or "Unknown Policy"
 
-    # Step 1: Retrieve all regulation clauses
+    # -----------------------------------------------------------------------
+    # Phase 0: Retrieve all regulation clauses
+    # -----------------------------------------------------------------------
     reg_clauses = retrieve_clauses_for_document(regulation_document)
 
     if not reg_clauses:
@@ -820,13 +847,17 @@ def analyze_compliance_engine(
             "partially_compliant_count": 0,
             "non_compliant_count": 0,
             "failed_count": 0,
+            "not_applicable_count": 0,
+            "applicable_count": 0,
+            "uncertain_count": 0,
             "evaluated_clauses": [],
             "missing_clauses": [],
             "weak_clauses": [],
+            "not_applicable_clauses": [],
             "recommendations": ["Ensure regulation document contains readable text/clauses."],
         }
 
-    # Ensure all regulation clauses have embeddings for Qdrant search
+    # Ensure all regulation clauses have embeddings for downstream Qdrant search
     model = None
     for reg_item in reg_clauses:
         if not isinstance(reg_item.get("embedding"), list) or not reg_item["embedding"]:
@@ -842,42 +873,150 @@ def analyze_compliance_engine(
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Embedding failed for clause %s: %s", reg_item["clause_id"], exc)
 
-    evaluated_clauses: list[dict[str, Any]] = []
-    missing_clauses: list[dict[str, Any]] = []
-    weak_clauses: list[dict[str, Any]] = []
-    recommendations_set: list[str] = []
+    # -----------------------------------------------------------------------
+    # Phase 1: Atomic Requirement Extraction
+    # -----------------------------------------------------------------------
+    regulation_name = getattr(regulation_document, "original_filename", "") or "Regulation"
+    # Use the Regulation title if available (Regulation model has .title)
+    if hasattr(regulation_document, "title") and getattr(regulation_document, "title", None):
+        regulation_name = str(regulation_document.title)
 
-    compliant_count = 0
-    partially_compliant_count = 0
-    non_compliant_count = 0
-    failed_count = 0
+    logger.info(
+        "[COMPLIANCE_ENGINE] Phase 1 — Extracting atomic requirements from %s regulation clauses",
+        len(reg_clauses),
+    )
+
+    try:
+        from app.services.atomic_extractor import AtomicRequirementExtractor
+        extractor = AtomicRequirementExtractor(regulation_name=regulation_name)
+        atomic_requirements = extractor.extract(reg_clauses)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "[COMPLIANCE_ENGINE] AtomicRequirementExtractor failed (%s) — "
+            "falling back to one-requirement-per-clause", exc,
+        )
+        # Fallback: treat each clause as one atomic requirement (old behavior)
+        from app.services.atomic_extractor import _make_fallback_requirement
+        atomic_requirements = [_make_fallback_requirement(c, regulation_name) for c in reg_clauses]
+
+    logger.info(
+        "[COMPLIANCE_ENGINE] Phase 1 complete: %s clauses → %s atomic requirements",
+        len(reg_clauses), len(atomic_requirements),
+    )
 
     # -----------------------------------------------------------------------
-    # Phase 1: Retrieval — Qdrant vector search + Neo4j structural context
-    #          This is per-clause but fast (indexed searches, no LLM calls).
+    # Phase 2: Applicability Classification
     # -----------------------------------------------------------------------
-    # Retrieve all policy clauses (used as in-memory fallback if Qdrant is empty/mocked)
+    logger.info(
+        "[COMPLIANCE_ENGINE] Phase 2 — Classifying applicability of %s requirements "
+        "against policy '%s'",
+        len(atomic_requirements), policy_title,
+    )
+
+    try:
+        from app.services.applicability_classifier import ApplicabilityClassifier
+        classifier = ApplicabilityClassifier(
+            policy_title=policy_title,
+            policy_scope=(
+                f"Internal policy document '{policy_title}' for organization "
+                f"'{getattr(organization, 'name', str(organization.id))}'"
+            ),
+        )
+        applicability_map = classifier.classify(atomic_requirements)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "[COMPLIANCE_ENGINE] ApplicabilityClassifier failed (%s) — "
+            "treating all requirements as APPLICABLE", exc,
+        )
+        # Fallback: all APPLICABLE (equivalent to old behavior)
+        from app.services.applicability_classifier import ApplicabilityResult
+        applicability_map = {
+            req.requirement_id: ApplicabilityResult(
+                requirement_id=req.requirement_id,
+                applicability_status="APPLICABLE",
+                applicability_reason="Applicability classifier unavailable; defaulting to APPLICABLE.",
+                applicability_confidence=0.50,
+                classified_by="LLM_FALLBACK",
+            )
+            for req in atomic_requirements
+        }
+
+    # Partition requirements by applicability status
+    applicable_reqs: list = []
+    not_applicable_reqs: list = []
+    uncertain_reqs: list = []
+
+    for req in atomic_requirements:
+        result = applicability_map.get(req.requirement_id)
+        if result is None:
+            uncertain_reqs.append(req)
+        elif result.applicability_status == "NOT_APPLICABLE":
+            not_applicable_reqs.append((req, result))
+        elif result.applicability_status == "UNCERTAIN":
+            uncertain_reqs.append(req)
+        else:  # APPLICABLE
+            applicable_reqs.append(req)
+
+    logger.info(
+        "[COMPLIANCE_ENGINE] Applicability filter: APPLICABLE=%s UNCERTAIN=%s NOT_APPLICABLE=%s",
+        len(applicable_reqs), len(uncertain_reqs), len(not_applicable_reqs),
+    )
+
+    # -----------------------------------------------------------------------
+    # Phase 3: Hybrid Retrieval (APPLICABLE + UNCERTAIN requirements only)
+    # -----------------------------------------------------------------------
+    # Retrieve all policy clauses (used as in-memory fallback if Qdrant is empty)
     all_policy_clauses = retrieve_clauses_for_document(policy_document)
 
     retrieval_items: list[dict[str, Any]] = []
+    # Track which requirement_id maps to its retrieval index
+    req_to_retrieval_idx: dict[str, int] = {}
 
-    for clause_idx, reg_item in enumerate(reg_clauses):
-        reg_text = reg_item["text"]
-        reg_id = reg_item["clause_id"]
-        reg_emb = reg_item.get("embedding")
+    # Build a lookup: clause_id → embedding from the original clauses, so that
+    # atomic requirements that share a source clause can reuse its embedding
+    clause_embedding_lookup: dict[str, list[float]] = {
+        str(c.get("clause_id") or ""): c.get("embedding") or []
+        for c in reg_clauses
+    }
 
-        # Qdrant: semantic search for matching policy clauses
+    def _get_req_embedding(req: "AtomicRequirement") -> list[float] | None:
+        """Return the best available embedding for an atomic requirement."""
+        # 1. Direct embedding on the requirement (set during extraction)
+        if req.embedding and isinstance(req.embedding, list):
+            return req.embedding
+        # 2. Source clause embedding
+        emb = clause_embedding_lookup.get(req.clause_id)
+        if emb and isinstance(emb, list):
+            return emb
+        # 3. Generate fresh embedding for the requirement text
+        try:
+            nonlocal model
+            if model is None:
+                model = get_embedding_model()
+            vec = model.encode(req.requirement_text)
+            return vec.tolist() if hasattr(vec, "tolist") else list(vec)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[COMPLIANCE_ENGINE] Embedding failed for req %s: %s", req.requirement_id, exc)
+            return None
+
+    requirements_to_evaluate = applicable_reqs + uncertain_reqs  # UNCERTAIN also evaluated
+
+    for req_idx, req in enumerate(requirements_to_evaluate):
+        req_emb = _get_req_embedding(req)
+        req_to_retrieval_idx[req.requirement_id] = req_idx
+
+        # Qdrant: semantic search for matching policy clauses (70% weight)
         matched_policy_clauses: list[dict[str, Any]] = []
-        if reg_emb and isinstance(reg_emb, list):
+        if req_emb and isinstance(req_emb, list):
             raw_matches = _search_policy_clauses_in_qdrant(
-                regulation_embedding=reg_emb,
+                regulation_embedding=req_emb,
                 policy_document_id=policy_doc_id_str,
                 top_k=_QDRANT_TOP_K,
                 all_policy_clauses=all_policy_clauses,
             )
             matched_policy_clauses = _deduplicate_policy_matches(raw_matches)
 
-        # Neo4j: structural context for the best policy match
+        # Neo4j: structural context for the best policy match (30% weight)
         structural_context: dict[str, Any] = {
             "parent_document": None,
             "sibling_clauses": [],
@@ -886,31 +1025,45 @@ def analyze_compliance_engine(
         if matched_policy_clauses:
             structural_context = _get_structural_context(matched_policy_clauses[0]["clause_id"])
 
+        # Annotate UNCERTAIN items so the LLM evaluates them conservatively
+        is_uncertain = req in uncertain_reqs
         retrieval_items.append({
-            "index": clause_idx + 1,      # 1-based for LLM readability
-            "reg_id": reg_id,
-            "regulation_clause": reg_text,
+            "index": req_idx + 1,                  # 1-based for LLM readability
+            "req_id": req.requirement_id,
+            "clause_id": req.clause_id,
+            "regulation_clause": req.requirement_text,
             "matched_policy_clauses": matched_policy_clauses,
             "structural_context": structural_context,
+            # Applicability metadata carried through for report enrichment
+            "applicability_status": "UNCERTAIN" if is_uncertain else "APPLICABLE",
+            "applicability_confidence": applicability_map.get(
+                req.requirement_id, type("_", (), {"applicability_confidence": 0.9})()
+            ).applicability_confidence if req.requirement_id in applicability_map else 0.9,
+            # Structured requirement metadata for report findings
+            "requirement_topic": req.topic,
+            "requirement_actor": req.actor,
+            "requirement_action": req.action,
+            "requirement_object": req.object,
+            "obligation_type": req.obligation_type,
         })
 
     logger.info(
-        "[COMPLIANCE_ENGINE] Retrieval phase complete: %s clauses. Starting batched LLM evaluation (batch_size=%s).",
-        len(retrieval_items), llm_batch_size,
+        "[COMPLIANCE_ENGINE] Phase 3 — Retrieval complete: %s requirements queued for LLM evaluation",
+        len(retrieval_items),
     )
 
     # -----------------------------------------------------------------------
-    # Phase 2: Batched LLM Evaluation — ⌈N / B⌉ LLM calls instead of N
+    # Phase 4: Batched LLM Evaluation
     # -----------------------------------------------------------------------
     all_eval_results: list[dict[str, Any]] = []
 
     for batch_start in range(0, len(retrieval_items), llm_batch_size):
-        batch = retrieval_items[batch_start : batch_start + llm_batch_size]
+        batch = retrieval_items[batch_start: batch_start + llm_batch_size]
         batch_num = batch_start // llm_batch_size + 1
         total_batches = -(-len(retrieval_items) // llm_batch_size)  # ceiling div
 
         logger.info(
-            "[COMPLIANCE_ENGINE] LLM batch %s/%s: evaluating %s clauses",
+            "[COMPLIANCE_ENGINE] LLM batch %s/%s: evaluating %s requirements",
             batch_num, total_batches, len(batch),
         )
 
@@ -918,10 +1071,22 @@ def analyze_compliance_engine(
         all_eval_results.extend(batch_results)
 
     # -----------------------------------------------------------------------
-    # Phase 3: Aggregate results
+    # Phase 5: Aggregate results
     # -----------------------------------------------------------------------
+    evaluated_clauses: list[dict[str, Any]] = []
+    missing_clauses: list[dict[str, Any]] = []
+    weak_clauses: list[dict[str, Any]] = []
+    not_applicable_clauses: list[dict[str, Any]] = []
+    recommendations_set: list[str] = []
+
+    compliant_count = 0
+    partially_compliant_count = 0
+    non_compliant_count = 0
+    failed_count = 0
+
+    # Build evaluated_clauses for APPLICABLE + UNCERTAIN requirements
     for retrieval_item, eval_result in zip(retrieval_items, all_eval_results):
-        reg_id = retrieval_item["reg_id"]
+        req_id = retrieval_item["req_id"]
         reg_text = retrieval_item["regulation_clause"]
         matched_policy_clauses = retrieval_item["matched_policy_clauses"]
         structural_context = retrieval_item["structural_context"]
@@ -937,8 +1102,14 @@ def analyze_compliance_engine(
         best_policy_id = matched_policy_clauses[0]["clause_id"] if matched_policy_clauses else None
         best_sim_score = matched_policy_clauses[0]["score"] if matched_policy_clauses else 0.0
 
+        # Fetch applicability metadata to embed in the finding
+        app_result = applicability_map.get(req_id)
+        app_status = retrieval_item.get("applicability_status", "APPLICABLE")
+        app_confidence = retrieval_item.get("applicability_confidence", 0.9)
+
         clause_eval = {
-            "regulation_clause_id": reg_id,
+            "requirement_id": req_id,
+            "regulation_clause_id": retrieval_item.get("clause_id", req_id),
             "regulation_text": reg_text,
             "matched_policy_clause_id": best_policy_id,
             "matched_policy_text": best_policy_text,
@@ -955,16 +1126,23 @@ def analyze_compliance_engine(
             "conflicting_evidence": conflicting_evidence,
             "reasoning": reasoning,
             "recommendation": rec,
+            # Applicability fields (for gap analysis + report findings)
+            "applicability_status": app_status,
+            "applicability_confidence": app_confidence,
+            "requirement_topic": retrieval_item.get("requirement_topic"),
+            "requirement_actor": retrieval_item.get("requirement_actor"),
+            "requirement_action": retrieval_item.get("requirement_action"),
+            "requirement_object": retrieval_item.get("requirement_object"),
+            "obligation_type": retrieval_item.get("obligation_type"),
         }
         evaluated_clauses.append(clause_eval)
-
 
         if status_val == "COMPLIANT":
             compliant_count += 1
         elif status_val == "PARTIALLY_COMPLIANT":
             partially_compliant_count += 1
             weak_clauses.append({
-                "regulation_clause_id": reg_id,
+                "regulation_clause_id": retrieval_item.get("clause_id", req_id),
                 "regulation_text": reg_text,
                 "matched_policy_text": best_policy_text,
                 "similarity_score": round(best_sim_score, 4),
@@ -978,7 +1156,7 @@ def analyze_compliance_engine(
         else:  # NON_COMPLIANT
             non_compliant_count += 1
             missing_clauses.append({
-                "regulation_clause_id": reg_id,
+                "regulation_clause_id": retrieval_item.get("clause_id", req_id),
                 "regulation_text": reg_text,
                 "reasoning": reasoning,
                 "recommendation": rec,
@@ -986,15 +1164,40 @@ def analyze_compliance_engine(
             if rec and rec not in recommendations_set:
                 recommendations_set.append(rec)
 
-    # Step 6: Generate Overall Compliance Score & Summary
-    total_reg = len(reg_clauses)
-    scoreable_count = total_reg - failed_count
+    # Build not_applicable_clauses for the report (skipped requirements)
+    for req, app_result in not_applicable_reqs:
+        not_applicable_clauses.append({
+            "requirement_id": req.requirement_id,
+            "regulation_clause_id": req.clause_id,
+            "regulation_text": req.requirement_text,
+            "topic": req.topic,
+            "actor": req.actor,
+            "obligation_type": req.obligation_type,
+            "applicability_reason": app_result.applicability_reason,
+            "applicability_confidence": app_result.applicability_confidence,
+            "classified_by": app_result.classified_by,
+        })
+
+    # -----------------------------------------------------------------------
+    # Phase 5b: Corrected Score Calculation
+    # -----------------------------------------------------------------------
+    # Exclude NOT_APPLICABLE requirements from the score denominator.
+    # Old (broken): scoreable_count = total_reg - failed_count
+    # New (correct): scoreable_count = applicable + uncertain - failed
+    not_applicable_count = len(not_applicable_reqs)
+    applicable_count = len(applicable_reqs)
+    uncertain_count = len(uncertain_reqs)
+    total_atomic = len(atomic_requirements)
+
+    scoreable_count = (applicable_count + uncertain_count) - failed_count
     raw_points = (compliant_count * 1.0) + (partially_compliant_count * 0.5)
     overall_score = round((raw_points / scoreable_count) * 100.0, 2) if scoreable_count > 0 else 0.0
 
     summary = (
-        f"Evaluated {total_reg} regulation requirements against policy document "
-        f"'{policy_document.original_filename}'. Findings: {compliant_count} Compliant, "
+        f"Evaluated {applicable_count + uncertain_count} applicable regulatory requirements "
+        f"(out of {total_atomic} total; {not_applicable_count} excluded as not applicable) "
+        f"against policy '{policy_title}'. "
+        f"Findings: {compliant_count} Compliant, "
         f"{partially_compliant_count} Partially Compliant, {non_compliant_count} Non-Compliant"
     )
     if failed_count > 0:
@@ -1008,29 +1211,37 @@ def analyze_compliance_engine(
         "organization_id": str(organization.id),
         "regulation_document_id": str(regulation_document.id),
         "policy_document_id": str(policy_document.id),
-        "total_regulation_clauses": total_reg,
+        # Clause counts (for backwards compatibility, total_regulation_clauses now
+        # reports APPLICABLE+UNCERTAIN so the denominator is transparent)
+        "total_regulation_clauses": applicable_count + uncertain_count,
+        "total_atomic_requirements": total_atomic,
         "compliant_count": compliant_count,
         "partially_compliant_count": partially_compliant_count,
         "non_compliant_count": non_compliant_count,
         "failed_count": failed_count,
+        # Applicability breakdown
+        "not_applicable_count": not_applicable_count,
+        "applicable_count": applicable_count,
+        "uncertain_count": uncertain_count,
+        # Findings
         "evaluated_clauses": evaluated_clauses,
         "missing_clauses": missing_clauses,
         "weak_clauses": weak_clauses,
+        "not_applicable_clauses": not_applicable_clauses,
         "recommendations": recommendations_set,
     }
 
     logger.info(
-        "[COMPLIANCE_ENGINE] Hybrid GraphRAG analysis complete org=%s score=%.2f "
-        "compliant=%s partial=%s non_compliant=%s failed=%s",
-        organization.id,
-        overall_score,
-        compliant_count,
-        partially_compliant_count,
-        non_compliant_count,
-        failed_count,
+        "[COMPLIANCE_ENGINE] Analysis complete org=%s score=%.2f "
+        "compliant=%s partial=%s non_compliant=%s failed=%s "
+        "not_applicable=%s applicable=%s uncertain=%s",
+        organization.id, overall_score,
+        compliant_count, partially_compliant_count, non_compliant_count, failed_count,
+        not_applicable_count, applicable_count, uncertain_count,
     )
 
     return result_payload
+
 
 
 def execute_report_compliance_analysis(db: Session, report_id: uuid.UUID) -> dict[str, Any]:
@@ -1133,6 +1344,8 @@ def store_compliance_report(
     report.compliant_clauses = result.get("compliant_count", 0)
     report.partial_clauses = result.get("partially_compliant_count", 0)
     report.non_compliant_clauses = result.get("non_compliant_count", 0)
+    # Applicability Classification Layer counts
+    report.not_applicable_count = result.get("not_applicable_count", 0)
 
     report.total_matches = result.get("compliant_count", 0)
     report.total_partial_matches = result.get("partially_compliant_count", 0)
@@ -1247,6 +1460,15 @@ def store_compliance_report(
                 reasoning=c.get("reasoning"),
                 recommendation=c.get("recommendation"),
                 citation=c.get("regulation_text"),
+                # Applicability Classification Layer fields
+                applicability_status=c.get("applicability_status"),
+                applicability_reason=None,  # populated for NOT_APPLICABLE separately
+                applicability_confidence=c.get("applicability_confidence"),
+                requirement_topic=c.get("requirement_topic"),
+                requirement_actor=c.get("requirement_actor"),
+                requirement_action=c.get("requirement_action"),
+                requirement_object=c.get("requirement_object"),
+                obligation_type=c.get("obligation_type"),
             )
             db.add(rf)
 

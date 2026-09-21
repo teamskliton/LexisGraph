@@ -17,6 +17,7 @@ export interface ComplianceAnalyzeResponse {
 }
 
 export interface EvaluatedClause {
+  requirement_id?: string | null;
   regulation_clause_id: string;
   regulation_text: string;
   matched_policy_clause_id?: string | null;
@@ -125,6 +126,7 @@ export interface GapAnalysisFindingInfo {
 
 export interface GapAnalysisClauseResult {
   clause_index: number;
+  requirement_id?: string | null;
   regulation_clause_id: string;
   regulation_text: string;
   // Coverage vocabulary (Sprint 8.1 / 8.2)

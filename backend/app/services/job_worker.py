@@ -151,77 +151,169 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
                 "recommendations": ["Ensure regulation document contains readable text/clauses."],
             }
         else:
-            # Stage 3: 30% Vector retrieval
+            # ---------------------------------------------------------------
+            # Stage 3: 25% — Atomic Requirement Extraction
+            # ---------------------------------------------------------------
             job = db.get(ComplianceJob, job_id)
             if job and job.status == ComplianceJobStatus.CANCELLED:
                 logger.info("Job cancelled before Stage 3: job_id=%s", job_id)
                 return
 
-            update_job_progress(db, job_id, 30, "Vector retrieval")
+            update_job_progress(db, job_id, 25, "Extracting atomic requirements")
 
-            # Ensure regulation clause embeddings exist
-            from app.services.embedding_model import get_embedding_model
-            model = None
-            for reg_item in reg_clauses:
-                if not isinstance(reg_item.get("embedding"), list) or not reg_item["embedding"]:
-                    if model is None:
-                        try:
-                            model = get_embedding_model()
-                        except Exception as exc:  # noqa: BLE001
-                            logger.warning("Embedding model load warning: %s", exc)
-                            break
-                    try:
-                        vec = model.encode(reg_item["text"])
-                        reg_item["embedding"] = vec.tolist() if hasattr(vec, "tolist") else list(vec)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning("Clause embedding warning: %s", exc)
+            regulation_name = getattr(reg_doc, "title", None) or getattr(reg_doc, "original_filename", None) or "Regulation"
+            policy_title = getattr(policy_doc, "original_filename", None) or "Policy"
+
+            try:
+                from app.services.atomic_extractor import AtomicRequirementExtractor, _make_fallback_requirement
+                extractor = AtomicRequirementExtractor(regulation_name=regulation_name)
+                atomic_requirements = extractor.extract(reg_clauses)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[JOB_WORKER] AtomicRequirementExtractor failed (%s) — fallback to one-per-clause", exc)
+                from app.services.atomic_extractor import _make_fallback_requirement
+                atomic_requirements = [_make_fallback_requirement(c, regulation_name) for c in reg_clauses]
+
+            logger.info("[JOB_WORKER] Atomic extraction: %s clauses → %s requirements", len(reg_clauses), len(atomic_requirements))
+
+            # ---------------------------------------------------------------
+            # Stage 4: 40% — Applicability Classification
+            # ---------------------------------------------------------------
+            job = db.get(ComplianceJob, job_id)
+            if job and job.status == ComplianceJobStatus.CANCELLED:
+                logger.info("Job cancelled before Stage 4: job_id=%s", job_id)
+                return
+
+            update_job_progress(db, job_id, 40, f"Classifying applicability of {len(atomic_requirements)} requirements")
+
+            try:
+                from app.services.applicability_classifier import ApplicabilityClassifier, ApplicabilityResult
+                classifier = ApplicabilityClassifier(
+                    policy_title=policy_title,
+                    policy_scope=(
+                        f"Internal policy document '{policy_title}' for organization '{getattr(org, 'name', str(org.id))}'"
+                    ),
+                )
+                applicability_map = classifier.classify(atomic_requirements)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[JOB_WORKER] ApplicabilityClassifier failed (%s) — treating all as APPLICABLE", exc)
+                from app.services.applicability_classifier import ApplicabilityResult
+                applicability_map = {
+                    req.requirement_id: ApplicabilityResult(
+                        requirement_id=req.requirement_id,
+                        applicability_status="APPLICABLE",
+                        applicability_reason="Classifier unavailable; defaulting to APPLICABLE.",
+                        applicability_confidence=0.50,
+                        classified_by="LLM_FALLBACK",
+                    )
+                    for req in atomic_requirements
+                }
+
+            # Partition requirements
+            applicable_reqs = []
+            not_applicable_reqs = []
+            uncertain_reqs = []
+
+            for req in atomic_requirements:
+                result = applicability_map.get(req.requirement_id)
+                if result is None:
+                    uncertain_reqs.append(req)
+                elif result.applicability_status == "NOT_APPLICABLE":
+                    not_applicable_reqs.append((req, result))
+                elif result.applicability_status == "UNCERTAIN":
+                    uncertain_reqs.append(req)
+                else:
+                    applicable_reqs.append(req)
+
+            logger.info(
+                "[JOB_WORKER] Applicability: APPLICABLE=%s UNCERTAIN=%s NOT_APPLICABLE=%s",
+                len(applicable_reqs), len(uncertain_reqs), len(not_applicable_reqs),
+            )
+
+            requirements_to_evaluate = applicable_reqs + uncertain_reqs
+
+            # ---------------------------------------------------------------
+            # Stage 5: 55% — Vector Retrieval (APPLICABLE + UNCERTAIN only)
+            # ---------------------------------------------------------------
+            job = db.get(ComplianceJob, job_id)
+            if job and job.status == ComplianceJobStatus.CANCELLED:
+                logger.info("Job cancelled before Stage 5: job_id=%s", job_id)
+                return
+
+            update_job_progress(db, job_id, 55, f"Vector retrieval for {len(requirements_to_evaluate)} applicable requirements")
+
+            # Ensure embeddings exist on atomic requirements (reuse clause embeddings)
+            from app.services.embedding_model import get_embedding_model as _get_emb_model
+            emb_model = None
+            clause_emb_lookup = {
+                str(c.get("clause_id") or ""): c.get("embedding") or []
+                for c in reg_clauses
+            }
+
+            def _get_req_emb(req):
+                if req.embedding and isinstance(req.embedding, list):
+                    return req.embedding
+                emb = clause_emb_lookup.get(req.clause_id)
+                if emb and isinstance(emb, list):
+                    return emb
+                nonlocal emb_model
+                try:
+                    if emb_model is None:
+                        emb_model = _get_emb_model()
+                    vec = emb_model.encode(req.requirement_text)
+                    return vec.tolist() if hasattr(vec, "tolist") else list(vec)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[JOB_WORKER] Embedding failed for req %s: %s", req.requirement_id, exc)
+                    return None
 
             policy_doc_id_str = str(policy_doc.id)
             retrieval_items: list[dict[str, Any]] = []
 
-            for clause_idx, reg_item in enumerate(reg_clauses):
-                reg_text = reg_item["text"]
-                reg_id = reg_item["clause_id"]
-                reg_emb = reg_item.get("embedding")
+            for req_idx, req in enumerate(requirements_to_evaluate):
+                req_emb = _get_req_emb(req)
+                is_uncertain = req in uncertain_reqs
 
                 matched_policy_clauses: list[dict[str, Any]] = []
-                if reg_emb and isinstance(reg_emb, list):
+                if req_emb and isinstance(req_emb, list):
                     matched_policy_clauses = _search_policy_clauses_in_qdrant(
-                        regulation_embedding=reg_emb,
+                        regulation_embedding=req_emb,
                         policy_document_id=policy_doc_id_str,
                         top_k=_QDRANT_TOP_K,
                         all_policy_clauses=all_policy_clauses,
                     )
 
                 retrieval_items.append({
-                    "index": clause_idx + 1,
-                    "reg_id": reg_id,
-                    "regulation_clause": reg_text,
+                    "index": req_idx + 1,
+                    "req_id": req.requirement_id,
+                    "clause_id": req.clause_id,
+                    "regulation_clause": req.requirement_text,
                     "matched_policy_clauses": matched_policy_clauses,
                     "structural_context": {"parent_document": None, "sibling_clauses": [], "entities": []},
+                    "applicability_status": "UNCERTAIN" if is_uncertain else "APPLICABLE",
+                    "applicability_confidence": applicability_map.get(req.requirement_id, type("_", (), {"applicability_confidence": 0.9})()).applicability_confidence if req.requirement_id in applicability_map else 0.9,
+                    "requirement_topic": req.topic,
+                    "requirement_actor": req.actor,
+                    "requirement_action": req.action,
+                    "requirement_object": req.object,
+                    "obligation_type": req.obligation_type,
                 })
 
-            # Stage 4: 45% Knowledge graph retrieval
+            # ---------------------------------------------------------------
+            # Stage 6: 65% — Knowledge Graph Context
+            # ---------------------------------------------------------------
             job = db.get(ComplianceJob, job_id)
             if job and job.status == ComplianceJobStatus.CANCELLED:
-                logger.info("Job cancelled before Stage 4: job_id=%s", job_id)
+                logger.info("Job cancelled before Stage 6: job_id=%s", job_id)
                 return
 
-            update_job_progress(db, job_id, 45, "Knowledge graph retrieval")
+            update_job_progress(db, job_id, 65, "Knowledge graph retrieval")
 
             for item in retrieval_items:
                 if item["matched_policy_clauses"]:
                     item["structural_context"] = _get_structural_context(item["matched_policy_clauses"][0]["clause_id"])
 
-            # Stage 5: 60% Hybrid ranking
-            job = db.get(ComplianceJob, job_id)
-            if job and job.status == ComplianceJobStatus.CANCELLED:
-                logger.info("Job cancelled before Stage 5: job_id=%s", job_id)
-                return
-
-            update_job_progress(db, job_id, 60, "Hybrid ranking")
-
-            # Stage 6: 75% - 89% LLM reasoning
+            # ---------------------------------------------------------------
+            # Stage 7: 70% → 89% — Batched LLM Reasoning
+            # ---------------------------------------------------------------
             all_eval_results: list[dict[str, Any]] = []
             llm_batch_size = 10
             total_items = len(retrieval_items)
@@ -230,34 +322,32 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
             for batch_num, batch_start in enumerate(range(0, total_items, llm_batch_size), start=1):
                 job = db.get(ComplianceJob, job_id)
                 if job and job.status == ComplianceJobStatus.CANCELLED:
-                    logger.info("Job cancelled during Stage 6 batch evaluation: job_id=%s", job_id)
+                    logger.info("Job cancelled during LLM evaluation: job_id=%s", job_id)
                     return
 
-                batch = retrieval_items[batch_start : batch_start + llm_batch_size]
+                batch = retrieval_items[batch_start: batch_start + llm_batch_size]
                 processed_so_far = min(batch_start + len(batch), total_items)
-                stage_progress = 75 + int(14 * (batch_num - 1) / max(total_batches, 1))
+                stage_progress = 70 + int(19 * (batch_num - 1) / max(total_batches, 1))
                 update_job_progress(
-                    db,
-                    job_id,
-                    stage_progress,
+                    db, job_id, stage_progress,
                     f"LLM reasoning: evaluating requirements ({processed_so_far}/{total_items})",
                 )
 
                 batch_results = evaluate_batch_compliance_with_llm(batch)
                 all_eval_results.extend(batch_results)
 
-                post_stage_progress = 75 + int(14 * batch_num / max(total_batches, 1))
+                post_stage_progress = 70 + int(19 * batch_num / max(total_batches, 1))
                 update_job_progress(
-                    db,
-                    job_id,
-                    min(post_stage_progress, 89),
+                    db, job_id, min(post_stage_progress, 89),
                     f"LLM reasoning: evaluated {processed_so_far}/{total_items} requirements",
                 )
 
-            # Stage 7: 90% Generating recommendations
+            # ---------------------------------------------------------------
+            # Stage 8: 90% — Generating Recommendations & Aggregating
+            # ---------------------------------------------------------------
             job = db.get(ComplianceJob, job_id)
             if job and job.status == ComplianceJobStatus.CANCELLED:
-                logger.info("Job cancelled before Stage 7: job_id=%s", job_id)
+                logger.info("Job cancelled before Stage 8: job_id=%s", job_id)
                 return
 
             update_job_progress(db, job_id, 90, "Generating recommendations")
@@ -265,6 +355,7 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
             evaluated_clauses: list[dict[str, Any]] = []
             missing_clauses: list[dict[str, Any]] = []
             weak_clauses: list[dict[str, Any]] = []
+            not_applicable_clauses: list[dict[str, Any]] = []
             recommendations_set: list[str] = []
 
             compliant_count = 0
@@ -273,7 +364,7 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
             failed_count = 0
 
             for retrieval_item, eval_result in zip(retrieval_items, all_eval_results):
-                reg_id = retrieval_item["reg_id"]
+                req_id = retrieval_item["req_id"]
                 reg_text = retrieval_item["regulation_clause"]
                 matched_policy_clauses = retrieval_item["matched_policy_clauses"]
                 structural_context = retrieval_item["structural_context"]
@@ -281,13 +372,17 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
                 status_val = eval_result["status"]
                 reasoning = eval_result["reasoning"]
                 rec = eval_result.get("recommendation")
+                confidence = eval_result.get("confidence", "HIGH")
+                missing_aspects = eval_result.get("missing_aspects", [])
+                conflicting_evidence = eval_result.get("conflicting_evidence", False)
 
                 best_policy_text = matched_policy_clauses[0]["text"] if matched_policy_clauses else None
                 best_policy_id = matched_policy_clauses[0]["clause_id"] if matched_policy_clauses else None
                 best_sim_score = matched_policy_clauses[0]["score"] if matched_policy_clauses else 0.0
 
                 clause_eval = {
-                    "regulation_clause_id": reg_id,
+                    "requirement_id": req_id,
+                    "regulation_clause_id": retrieval_item.get("clause_id", req_id),
                     "regulation_text": reg_text,
                     "matched_policy_clause_id": best_policy_id,
                     "matched_policy_text": best_policy_text,
@@ -299,8 +394,19 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
                         or structural_context.get("entities")
                     ),
                     "status": status_val,
+                    "confidence": confidence,
+                    "missing_aspects": missing_aspects,
+                    "conflicting_evidence": conflicting_evidence,
                     "reasoning": reasoning,
                     "recommendation": rec,
+                    # Applicability fields
+                    "applicability_status": retrieval_item.get("applicability_status"),
+                    "applicability_confidence": retrieval_item.get("applicability_confidence"),
+                    "requirement_topic": retrieval_item.get("requirement_topic"),
+                    "requirement_actor": retrieval_item.get("requirement_actor"),
+                    "requirement_action": retrieval_item.get("requirement_action"),
+                    "requirement_object": retrieval_item.get("requirement_object"),
+                    "obligation_type": retrieval_item.get("obligation_type"),
                 }
                 evaluated_clauses.append(clause_eval)
 
@@ -309,7 +415,7 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
                 elif status_val == "PARTIALLY_COMPLIANT":
                     partially_compliant_count += 1
                     weak_clauses.append({
-                        "regulation_clause_id": reg_id,
+                        "regulation_clause_id": retrieval_item.get("clause_id", req_id),
                         "regulation_text": reg_text,
                         "matched_policy_text": best_policy_text,
                         "similarity_score": round(best_sim_score, 4),
@@ -323,7 +429,7 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
                 else:  # NON_COMPLIANT
                     non_compliant_count += 1
                     missing_clauses.append({
-                        "regulation_clause_id": reg_id,
+                        "regulation_clause_id": retrieval_item.get("clause_id", req_id),
                         "regulation_text": reg_text,
                         "reasoning": reasoning,
                         "recommendation": rec,
@@ -331,14 +437,35 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
                     if rec and rec not in recommendations_set:
                         recommendations_set.append(rec)
 
-            total_reg = len(reg_clauses)
-            scoreable_count = total_reg - failed_count
+            # Build not_applicable_clauses for report
+            for req, app_result in not_applicable_reqs:
+                not_applicable_clauses.append({
+                    "requirement_id": req.requirement_id,
+                    "regulation_clause_id": req.clause_id,
+                    "regulation_text": req.requirement_text,
+                    "topic": req.topic,
+                    "actor": req.actor,
+                    "obligation_type": req.obligation_type,
+                    "applicability_reason": app_result.applicability_reason,
+                    "applicability_confidence": app_result.applicability_confidence,
+                    "classified_by": app_result.classified_by,
+                })
+
+            # Corrected score: exclude NOT_APPLICABLE from denominator
+            not_applicable_count = len(not_applicable_reqs)
+            applicable_count = len(applicable_reqs)
+            uncertain_count = len(uncertain_reqs)
+            total_atomic = len(atomic_requirements)
+
+            scoreable_count = (applicable_count + uncertain_count) - failed_count
             raw_points = (compliant_count * 1.0) + (partially_compliant_count * 0.5)
             overall_score = round((raw_points / scoreable_count) * 100.0, 2) if scoreable_count > 0 else 0.0
 
             summary = (
-                f"Evaluated {total_reg} regulation requirements against policy document "
-                f"'{policy_doc.original_filename}'. Findings: {compliant_count} Compliant, "
+                f"Evaluated {applicable_count + uncertain_count} applicable regulatory requirements "
+                f"(out of {total_atomic} total; {not_applicable_count} excluded as not applicable) "
+                f"against policy '{policy_title}'. "
+                f"Findings: {compliant_count} Compliant, "
                 f"{partially_compliant_count} Partially Compliant, {non_compliant_count} Non-Compliant"
             )
             if failed_count > 0:
@@ -352,14 +479,19 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
                 "organization_id": str(org.id),
                 "regulation_document_id": str(reg_doc.id),
                 "policy_document_id": str(policy_doc.id),
-                "total_regulation_clauses": total_reg,
+                "total_regulation_clauses": applicable_count + uncertain_count,
+                "total_atomic_requirements": total_atomic,
                 "compliant_count": compliant_count,
                 "partially_compliant_count": partially_compliant_count,
                 "non_compliant_count": non_compliant_count,
                 "failed_count": failed_count,
+                "not_applicable_count": not_applicable_count,
+                "applicable_count": applicable_count,
+                "uncertain_count": uncertain_count,
                 "evaluated_clauses": evaluated_clauses,
                 "missing_clauses": missing_clauses,
                 "weak_clauses": weak_clauses,
+                "not_applicable_clauses": not_applicable_clauses,
                 "recommendations": recommendations_set,
             }
 
@@ -395,6 +527,7 @@ def execute_compliance_job(job_id: uuid.UUID, db_session: Session | None = None)
             compliant_clauses=result_payload.get("compliant_count", 0),
             partial_clauses=result_payload.get("partially_compliant_count", 0),
             non_compliant_clauses=result_payload.get("non_compliant_count", 0),
+            not_applicable_count=result_payload.get("not_applicable_count", 0),
             total_matches=result_payload.get("compliant_count", 0),
             total_partial_matches=result_payload.get("partially_compliant_count", 0),
             total_missing=result_payload.get("non_compliant_count", 0),

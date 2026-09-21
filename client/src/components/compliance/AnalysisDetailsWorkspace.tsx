@@ -738,13 +738,14 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40 font-medium">
-                  {filteredClauses.map((clause) => {
-                    const isExpanded = expandedRows.has(clause.regulation_clause_id);
+                  {filteredClauses.map((clause, idx) => {
+                    const rowKey = clause.requirement_id || `${clause.regulation_clause_id}-${idx}`;
+                    const isExpanded = expandedRows.has(rowKey);
                     return (
-                      <React.Fragment key={clause.regulation_clause_id}>
+                      <React.Fragment key={rowKey}>
                         <tr
-                          onClick={() => toggleRow(clause.regulation_clause_id)}
-                          onKeyDown={(e) => handleRowKeyDown(e, clause.regulation_clause_id)}
+                          onClick={() => toggleRow(rowKey)}
+                          onKeyDown={(e) => handleRowKeyDown(e, rowKey)}
                           role="button"
                           tabIndex={0}
                           aria-expanded={isExpanded}
@@ -848,9 +849,9 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
 
             {/* Mobile Cards (md and below) */}
             <div className="space-y-3 md:hidden">
-              {filteredClauses.map((clause) => (
+              {filteredClauses.map((clause, idx) => (
                 <div
-                  key={clause.regulation_clause_id}
+                  key={clause.requirement_id || `${clause.regulation_clause_id}-${idx}`}
                   className="p-4 rounded-xl border border-border/60 bg-background space-y-3 text-xs"
                 >
                   <div className="flex items-center justify-between gap-2">

@@ -1,0 +1,646 @@
+# 13.1 AI Pipeline Overview
+
+---
+
+# 13.1.1 Purpose
+
+The AI Pipeline defines the end-to-end workflow responsible for transforming raw legal documents and organization policies into explainable compliance reports.
+
+The pipeline shall operate as a sequence of independent processing stages connected through asynchronous jobs and well-defined interfaces.
+
+Each stage shall produce structured outputs that become inputs for the next stage.
+
+The pipeline shall support:
+
+- Incremental execution
+- Retry mechanisms
+- Parallel processing
+- Job monitoring
+- Audit logging
+- Failure recovery
+
+---
+
+# 13.1.2 Pipeline Overview
+
+LexisGraph consists of two independent pipelines.
+
+## Pipeline A
+
+Legal Knowledge Preparation
+
+Runs only when administrators add or update laws.
+
+## Pipeline B
+
+Organization Compliance Analysis
+
+Runs whenever an organization uploads a policy.
+
+Keeping these pipelines separate prevents repeatedly processing legal documents for every organization.
+
+---
+
+# 13.1.3 Pipeline A — Legal Knowledge Preparation
+
+```
+Administrator
+
+↓
+
+Upload Government PDF
+
+↓
+
+File Validation
+
+↓
+
+Virus Scan
+
+↓
+
+OCR (if needed)
+
+↓
+
+Text Extraction
+
+↓
+
+Document Parsing
+
+↓
+
+Section Detection
+
+↓
+
+Clause Extraction
+
+↓
+
+Metadata Extraction
+
+↓
+
+Legal Entity Extraction
+
+↓
+
+Relationship Extraction
+
+↓
+
+Neo4j Graph Construction
+
+↓
+
+Embedding Generation
+
+↓
+
+Store in Qdrant
+
+↓
+
+Knowledge Base Ready
+```
+
+This pipeline runs only when legal documents change.
+
+---
+
+# 13.1.4 Pipeline B — Organization Compliance Analysis
+
+```
+Organization User
+
+↓
+
+Upload Policy
+
+↓
+
+Validation
+
+↓
+
+Text Extraction
+
+↓
+
+Section Detection
+
+↓
+
+Clause Extraction
+
+↓
+
+Policy Embeddings
+
+↓
+
+Hybrid Retrieval
+
+↓
+
+Graph Context Retrieval
+
+↓
+
+Vector Retrieval
+
+↓
+
+Context Ranking
+
+↓
+
+GraphRAG Context Builder
+
+↓
+
+LLM Compliance Analysis
+
+↓
+
+Gap Detection
+
+↓
+
+Recommendation Generation
+
+↓
+
+Confidence Scoring
+
+↓
+
+Report Generation
+
+↓
+
+Store Results
+
+↓
+
+Frontend
+```
+
+---
+
+# 13.1.5 Pipeline Stages
+
+The pipeline consists of the following logical stages.
+
+Stage 1
+
+Document Acquisition
+
+Stage 2
+
+Document Processing
+
+Stage 3
+
+Knowledge Construction
+
+Stage 4
+
+Semantic Indexing
+
+Stage 5
+
+Context Retrieval
+
+Stage 6
+
+LLM Reasoning
+
+Stage 7
+
+Compliance Evaluation
+
+Stage 8
+
+Report Generation
+
+Each stage shall remain independently testable.
+
+---
+
+# 13.1.6 Stage Responsibilities
+
+## Document Acquisition
+
+Responsible for:
+
+- Receiving uploaded files
+- File validation
+- Metadata recording
+- Duplicate detection
+
+Output
+
+Validated document
+
+---
+
+## Document Processing
+
+Responsible for:
+
+- OCR
+- Text extraction
+- Cleaning
+- Section detection
+- Clause segmentation
+
+Output
+
+Structured document
+
+---
+
+## Knowledge Construction
+
+Responsible for:
+
+- Named entity recognition
+- Legal entity extraction
+- Relationship discovery
+- Graph creation
+
+Output
+
+Neo4j nodes and relationships
+
+---
+
+## Semantic Indexing
+
+Responsible for:
+
+- Embedding generation
+- Vector normalization
+- Vector storage
+
+Output
+
+Qdrant vectors
+
+---
+
+## Context Retrieval
+
+Responsible for:
+
+- Vector similarity search
+- Graph traversal
+- Ranking
+- Context assembly
+
+Output
+
+Evidence package
+
+---
+
+## LLM Reasoning
+
+Responsible for:
+
+- Compliance comparison
+- Gap detection
+- Recommendation generation
+- Explanation generation
+
+Output
+
+Structured JSON
+
+---
+
+## Report Generation
+
+Responsible for:
+
+- Formatting findings
+- Calculating scores
+- Creating visual summaries
+- Persisting results
+
+Output
+
+Compliance report
+
+---
+
+# 13.1.7 Asynchronous Processing
+
+Heavy operations shall execute asynchronously.
+
+Examples
+
+```
+PDF Parsing
+
+OCR
+
+Embedding Generation
+
+Neo4j Construction
+
+Vector Indexing
+
+Compliance Analysis
+
+PDF Report Generation
+```
+
+These jobs shall be processed using Celery workers.
+
+---
+
+# 13.1.8 Event Flow
+
+The system shall communicate using events.
+
+Examples
+
+```
+DocumentUploaded
+
+↓
+
+TextExtracted
+
+↓
+
+ClausesExtracted
+
+↓
+
+EmbeddingsGenerated
+
+↓
+
+KnowledgeUpdated
+
+↓
+
+AnalysisStarted
+
+↓
+
+AnalysisCompleted
+
+↓
+
+ReportGenerated
+```
+
+This enables loose coupling between components.
+
+---
+
+# 13.1.9 Pipeline State Machine
+
+Each processing job shall maintain a state.
+
+```
+Pending
+
+↓
+
+Queued
+
+↓
+
+Running
+
+↓
+
+Completed
+```
+
+Failure path
+
+```
+Running
+
+↓
+
+Failed
+
+↓
+
+Retrying
+
+↓
+
+Completed
+
+or
+
+Failed Permanently
+```
+
+The frontend shall display these states in real time.
+
+---
+
+# 13.1.10 Retry Strategy
+
+Retryable operations
+
+- OCR failure
+- Embedding API timeout
+- Neo4j connection error
+- Qdrant timeout
+- LLM timeout
+
+Retries shall use exponential backoff.
+
+Non-retryable failures shall be marked for administrator review.
+
+---
+
+# 13.1.11 Error Isolation
+
+Failure in one document shall never interrupt processing of unrelated documents.
+
+Every uploaded document shall have an independent processing workflow.
+
+---
+
+# 13.1.12 Parallel Processing
+
+The following stages may execute concurrently where dependencies allow:
+
+- OCR
+- Metadata extraction
+- Named Entity Recognition
+- Embedding generation
+- Graph relationship extraction
+
+Parallel execution shall reduce total processing time.
+
+---
+
+# 13.1.13 Monitoring
+
+Every stage shall expose metrics.
+
+Examples
+
+```
+Processing Time
+
+Success Rate
+
+Failure Rate
+
+Queue Length
+
+Average Retrieval Time
+
+Average LLM Latency
+
+Embedding Duration
+```
+
+These metrics shall be available through the administration dashboard.
+
+---
+
+# 13.1.14 Logging
+
+Every pipeline stage shall generate structured logs.
+
+Each log entry shall include:
+
+```
+Timestamp
+
+Document ID
+
+Organization ID
+
+Pipeline Stage
+
+Status
+
+Duration
+
+Worker ID
+
+Error Details (if applicable)
+```
+
+Logs shall exclude sensitive document content.
+
+---
+
+# 13.1.15 Audit Trail
+
+Every compliance report shall maintain complete traceability.
+
+The audit record shall include:
+
+- Source document
+- Retrieved legal clauses
+- Graph nodes used
+- Embeddings version
+- Knowledge base version
+- LLM model version
+- Prompt version
+- Report version
+
+This enables complete reproducibility of analysis results.
+
+---
+
+# 13.1.16 Scalability
+
+The pipeline shall support:
+
+Multiple workers
+
+Horizontal scaling
+
+Independent worker queues
+
+Distributed processing
+
+Container deployment
+
+Cloud-native execution
+
+---
+
+# 13.1.17 Performance Goals
+
+Knowledge ingestion
+
+```
+< 5 minutes for a typical legal PDF
+```
+
+Policy parsing
+
+```
+< 30 seconds
+```
+
+Hybrid retrieval
+
+```
+< 1 second
+```
+
+LLM reasoning
+
+```
+< 20 seconds
+```
+
+Complete compliance report
+
+```
+< 60 seconds
+```
+
+Performance targets are goals and may vary depending on document size and infrastructure.
+
+---
+
+# 13.1.18 Acceptance Criteria
+
+The AI Pipeline shall be considered complete when:
+
+✓ Legal ingestion and compliance analysis are independent.
+
+✓ Every stage produces structured outputs.
+
+✓ Heavy tasks execute asynchronously.
+
+✓ Retry and monitoring mechanisms exist.
+
+✓ Failures are isolated.
+
+✓ Reports are fully traceable.
+
+✓ Pipeline stages are independently scalable.
+
+---
+
+# 13.1.19 Summary
+
+The AI Pipeline provides the execution framework for the LexisGraph intelligence layer. By separating legal knowledge preparation from organization-specific compliance analysis and implementing asynchronous, event-driven processing with full traceability, the pipeline delivers scalable, explainable, and reliable AI-powered compliance assessments while remaining adaptable to future regulatory and technological changes.
+
+---
+
+End of Section 13.1

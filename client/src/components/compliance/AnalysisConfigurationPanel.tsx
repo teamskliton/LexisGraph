@@ -24,6 +24,7 @@ import {
   Sparkles,
   Info,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ interface AnalysisConfigurationPanelProps {
   organization: Organization | null;
   organizations: Organization[];
   onSelectOrganization: (id: string) => void;
+  onRefresh?: () => void;
   policies: DocumentResponse[];
   regulations: GlobalRegulation[];
   latestReport: ComplianceReport | null;
@@ -50,6 +52,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
   organization,
   organizations,
   onSelectOrganization,
+  onRefresh,
   policies,
   regulations,
   latestReport,
@@ -58,25 +61,17 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
   const router = useRouter();
 
   // Selected document state (users can choose specific policies & regulations for analysis)
-  const [selectedPolicyIds, setSelectedPolicyIds] = useState<string[]>(() =>
-    policies.map((p) => p.id)
-  );
+  // Default to empty arrays so no documents are pre-checked, allowing users to choose their preference.
+  const [selectedPolicyIds, setSelectedPolicyIds] = useState<string[]>([]);
+  const [selectedRegulationIds, setSelectedRegulationIds] = useState<string[]>([]);
 
-  const [selectedRegulationIds, setSelectedRegulationIds] = useState<string[]>(() =>
-    regulations.map((r) => r.id)
-  );
-
-  // Sync selected IDs when loaded policies/regulations change
+  // Prune any selections that no longer exist when policies or regulations update
   React.useEffect(() => {
-    if (policies.length > 0 && selectedPolicyIds.length === 0) {
-      setSelectedPolicyIds(policies.map((p) => p.id));
-    }
+    setSelectedPolicyIds((prev) => prev.filter((id) => policies.some((p) => p.id === id)));
   }, [policies]);
 
   React.useEffect(() => {
-    if (regulations.length > 0 && selectedRegulationIds.length === 0) {
-      setSelectedRegulationIds(regulations.map((r) => r.id));
-    }
+    setSelectedRegulationIds((prev) => prev.filter((id) => regulations.some((r) => r.id === id)));
   }, [regulations]);
 
   // Section 2 Policies Data
@@ -253,18 +248,49 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
 
       {/* SECTION 1: ORGANIZATION */}
       <Card className="border border-border/60 bg-card p-5 space-y-4 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-indigo-500" /> Section 1 — Organization
-              </span>
-            </div>
-            <h2 className="text-lg font-bold text-foreground">{organization.name}</h2>
-            <p className="text-xs text-muted-foreground">
-              Workspace ID: <code className="text-foreground font-mono">{organization.id}</code>
-            </p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Building2 className="h-4 w-4 text-indigo-500" /> Section 1 — Organization Workspace
+            </span>
+            {onRefresh && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 text-xs cursor-pointer h-8"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+                Refresh
+              </Button>
+            )}
           </div>
+
+          {/* Org Switcher */}
+          {organizations.length > 1 ? (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Select Organization</p>
+              <select
+                value={organization.id}
+                onChange={(e) => onSelectOrganization(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              <h2 className="text-lg font-bold text-foreground">{organization.name}</h2>
+              <p className="text-xs text-muted-foreground">
+                Workspace ID: <code className="text-foreground font-mono">{organization.id}</code>
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center gap-4 text-xs">
             <div className="p-3 rounded-lg border border-border/40 bg-muted/20 text-right">

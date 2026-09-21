@@ -111,6 +111,56 @@ def create_organization(
 
 
 @router.get(
+    "/invitations/token/{token}",
+    summary="Get invitation details by token (Public endpoint)",
+)
+def get_invitation_by_token(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to inspect an invitation token before accepting."""
+    from datetime import datetime, timezone
+
+    inv = db.query(OrganizationInvitation).filter(
+        OrganizationInvitation.token == token
+    ).first()
+
+    if not inv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invitation token. This link may have already been used or does not exist.",
+        )
+
+    exp = inv.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+
+    if exp < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation link has expired. Please ask the admin to send a new one.",
+        )
+
+    org = db.get(Organization, inv.organization_id)
+    inviter = db.get(User, inv.invited_by)
+
+    # Determine whether this invitation is email-bound or a shareable link
+    is_email_bound = inv.email is not None and inv.email.strip() != ""
+
+    return {
+        "token": token,
+        "organization_id": str(inv.organization_id),
+        "organization_name": org.name if org else "Organization Workspace",
+        "role": inv.role.value if hasattr(inv.role, "value") else str(inv.role),
+        "email": inv.email,
+        "is_email_bound": is_email_bound,
+        "inviter_name": inviter.full_name if inviter else "Team Administrator",
+        "expires_at": inv.expires_at,
+        "is_valid": True,
+    }
+
+
+@router.get(
     "/{organization_id}",
     response_model=OrganizationResponse,
     summary="Get an organization by ID",
@@ -238,54 +288,6 @@ class UpdateMemberRoleRequest(BaseModel):
     role: UserRole = Field(..., description="New role to assign")
 
 
-@router.get(
-    "/invitations/token/{token}",
-    summary="Get invitation details by token (Public endpoint)",
-)
-def get_invitation_by_token(
-    token: str,
-    db: Session = Depends(get_db),
-):
-    """Public endpoint to inspect an invitation token before accepting."""
-    from datetime import datetime, timezone
-
-    inv = db.query(OrganizationInvitation).filter(
-        OrganizationInvitation.token == token
-    ).first()
-
-    if not inv:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invalid invitation token. This link may have already been used or does not exist.",
-        )
-
-    exp = inv.expires_at
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-
-    if exp < datetime.now(timezone.utc):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This invitation link has expired. Please ask the admin to send a new one.",
-        )
-
-    org = db.get(Organization, inv.organization_id)
-    inviter = db.get(User, inv.invited_by)
-
-    # Determine whether this invitation is email-bound or a shareable link
-    is_email_bound = inv.email is not None and inv.email.strip() != ""
-
-    return {
-        "token": token,
-        "organization_id": str(inv.organization_id),
-        "organization_name": org.name if org else "Organization Workspace",
-        "role": inv.role.value if hasattr(inv.role, "value") else str(inv.role),
-        "email": inv.email,
-        "is_email_bound": is_email_bound,
-        "inviter_name": inviter.full_name if inviter else "Team Administrator",
-        "expires_at": inv.expires_at,
-        "is_valid": True,
-    }
 
 
 @router.get(

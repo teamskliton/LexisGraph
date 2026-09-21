@@ -67,6 +67,10 @@ function UploadPageContent() {
   const handleOrganizationChange = (value: string) => {
     setOrganizationId(value);
     setOrgError(undefined);
+    // Persist so Run Analysis page auto-selects the same org
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("lexisgraph_selected_org_id", value);
+    }
   };
 
   const handleTypeChange = (value: DocumentType) => {

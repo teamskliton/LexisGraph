@@ -593,7 +593,7 @@ export const GapAnalysisWorkspace: React.FC<GapAnalysisWorkspaceProps> = ({
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => setExpandedRows(new Set(filteredClauses.map((c) => c.regulation_clause_id)))}
+              onClick={() => setExpandedRows(new Set(filteredClauses.map((c) => c.requirement_id || `${c.regulation_clause_id}-${c.clause_index}`)))}
               className="text-[11px] text-muted-foreground cursor-pointer h-7"
             >
               Expand All
@@ -639,18 +639,21 @@ export const GapAnalysisWorkspace: React.FC<GapAnalysisWorkspaceProps> = ({
           </Card>
         ) : (
           <div className="space-y-2">
-            {filteredClauses.map((clause) => (
-              <ClauseRow
-                key={clause.regulation_clause_id || String(clause.clause_index)}
-                clause={clause}
-                isExpanded={expandedRows.has(clause.regulation_clause_id)}
-                onToggle={() => toggleRow(clause.regulation_clause_id)}
-                onViewFinding={handleViewFinding}
-                onExploreGraph={handleExploreGraph}
-                onViewDocument={handleViewDocument}
-                policyDocId={data.policy?.id}
-              />
-            ))}
+            {filteredClauses.map((clause) => {
+              const rowKey = clause.requirement_id || `${clause.regulation_clause_id}-${clause.clause_index}`;
+              return (
+                <ClauseRow
+                  key={rowKey}
+                  clause={clause}
+                  isExpanded={expandedRows.has(rowKey)}
+                  onToggle={() => toggleRow(rowKey)}
+                  onViewFinding={handleViewFinding}
+                  onExploreGraph={handleExploreGraph}
+                  onViewDocument={handleViewDocument}
+                  policyDocId={data.policy?.id}
+                />
+              );
+            })}
           </div>
         )}
       </div>

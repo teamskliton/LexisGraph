@@ -598,6 +598,61 @@ class ReportFinding(Base):
         index=True,
     )
 
+    # ── Applicability Classification Layer (Sprint: Applicability Filter) ────
+    # Records whether the regulatory requirement was applicable to the policy
+    # being audited, the classifier's reasoning, and the structured metadata
+    # extracted from the requirement.  All nullable — existing findings are
+    # unaffected; new findings receive these values from the engine.
+
+    applicability_status: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+        index=True,
+        comment="APPLICABLE | NOT_APPLICABLE | UNCERTAIN",
+    )
+
+    applicability_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Human-readable explanation of applicability classification.",
+    )
+
+    applicability_confidence: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Classifier confidence score 0.0–1.0.",
+    )
+
+    requirement_topic: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Semantic topic bucket e.g. Data Retention, Consent, Board Administration.",
+    )
+
+    requirement_actor: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Who must act e.g. Data Fiduciary, Central Government.",
+    )
+
+    requirement_action: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Verb phrase e.g. Erase, Notify, Appoint.",
+    )
+
+    requirement_object: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="What is acted upon e.g. Personal Data, Board Members.",
+    )
+
+    obligation_type: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="MANDATORY | CONDITIONAL | ADMINISTRATIVE | PROCEDURAL | INFORMATIONAL",
+    )
+
     remediation_due_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

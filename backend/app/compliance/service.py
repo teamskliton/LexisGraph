@@ -450,13 +450,16 @@ def get_gap_analysis_for_report(
     # Load evaluated clauses from stored report_json
     # -----------------------------------------------------------------------
     evaluated_clauses: list[dict[str, Any]] = []
+    not_applicable_clauses_raw: list[dict[str, Any]] = []
     if report.report_json and isinstance(report.report_json, dict):
         evaluated_clauses = report.report_json.get("evaluated_clauses", [])
+        not_applicable_clauses_raw = report.report_json.get("not_applicable_clauses", [])
     elif report.summary:
         try:
             parsed = _json.loads(report.summary)
             if isinstance(parsed, dict):
                 evaluated_clauses = parsed.get("evaluated_clauses", [])
+                not_applicable_clauses_raw = parsed.get("not_applicable_clauses", [])
         except Exception:  # noqa: BLE001
             pass
 
@@ -570,6 +573,7 @@ def get_gap_analysis_for_report(
 
         clause_results.append({
             "clause_index": idx,
+            "requirement_id": clause.get("requirement_id"),
             "regulation_clause_id": reg_clause_id,
             "regulation_text": clause.get("regulation_text") or "",
             "coverage_status": coverage_status,
@@ -590,13 +594,18 @@ def get_gap_analysis_for_report(
     # -----------------------------------------------------------------------
     # Build coverage summary with percentages
     # -----------------------------------------------------------------------
+    # total here = only the evaluated (applicable+uncertain) requirements;
+    # NOT_APPLICABLE are excluded from compliance score but shown separately.
     total = len(clause_results)
+    not_applicable_total = len(not_applicable_clauses_raw)
 
     def _pct(n: int) -> float:
         return round((n / total) * 100.0, 1) if total > 0 else 0.0
 
     coverage_summary = {
         "total_requirements": total,
+        "total_atomic_requirements": total + not_applicable_total,
+        "not_applicable": not_applicable_total,
         "covered": covered,
         "partially_covered": partially_covered,
         "gap": gap,
@@ -605,6 +614,9 @@ def get_gap_analysis_for_report(
         "partial_pct": _pct(partially_covered),
         "gap_pct": _pct(gap),
         "unable_pct": _pct(unable_to_determine),
+        "not_applicable_pct": round(
+            (not_applicable_total / (total + not_applicable_total)) * 100.0, 1
+        ) if (total + not_applicable_total) > 0 else 0.0,
     }
 
     return {
@@ -617,9 +629,11 @@ def get_gap_analysis_for_report(
         "policy": policy_info,
         "coverage_summary": coverage_summary,
         "clauses": clause_results,
+        # Applicability Classification Layer — excluded requirements
+        "not_applicable_clauses": not_applicable_clauses_raw,
         "is_stale": is_stale,
         "stale_reason": stale_reason,
-        "analysis_engine": "HYBRID_GRAPHRAG",
+        "analysis_engine": "HYBRID_GRAPHRAG_WITH_APPLICABILITY_FILTER",
         "analyzed_at": report.updated_at,
         "processing_time_seconds": report.processing_time_seconds,
     }
