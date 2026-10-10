@@ -30,8 +30,8 @@
 ```
                                   ┌─────────────────────────────────────────┐
                                   │      Client Layer (Next.js 16)          │
-                                  │  - Executive Dashboard  - Knowledge Graph│
-                                  │  - Compliance Viewer    - AI Assistant  │
+                                  │ - Executive Dashboard  - Knowledge Graph│
+                                  │ - Compliance Viewer    - AI Assistant   │
                                   └────────────────────┬────────────────────┘
                                                        │ REST / WebSocket
                                                        ▼
@@ -163,10 +163,9 @@ Copy-Item .env.example .env.local
 
 # Install dependencies
 npm install
+
 # Start the Next.js development server
 npm run dev
-# Or run on an alternative port (PowerShell):
-$env:PORT=3005; npm run dev
 ```
 
 The application is now live at [http://localhost:3000](http://localhost:3000).
@@ -227,57 +226,3 @@ npm run lint
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](./LICENSE) file for details.
-
----
-
-## Changes In This Version
-
-The following changes were added compared with the previous project version:
-
-### Backend and Data Flow
-
-- standardized the compliance API response so frontend and backend both use the `results` key
-- added the focused knowledge graph build flow through `POST /api/v1/build-knowledge-graph`
-- added graph reset support through `POST /api/v1/reset-knowledge-graph`
-- added graph history support:
-  - `GET /api/v1/graph-history`
-  - `POST /api/v1/graph-history/{build_id}/activate`
-  - `DELETE /api/v1/graph-history/{build_id}`
-- added lazy graph explorer endpoints:
-  - `GET /api/v1/graph/root`
-  - `GET /api/v1/graph/document/{id}`
-  - `GET /api/v1/graph/clause/{id}`
-  - `GET /api/v1/graph/regulation/{id}`
-- added graph document selection endpoint `GET /api/v1/graph-documents`
-- kept the older graph and similarity build endpoints for compatibility
-- improved LLM reasoning fallback so OpenRouter failures do not break compliance output
-- added or expanded backend contract tests for the newer graph and history endpoints
-
-### Graph and Neo4j
-
-- moved from a loose similarity-only graph concept to a proper document-clause-regulation-entity knowledge graph
-- graph builds are now generated from selected documents instead of all uploaded user documents
-- graph explorer now loads real graph evidence rather than fake browser-generated similarity links
-- previous graph builds can now be reopened or deleted
-- active graph can now be reset directly from the UI
-
-### Frontend
-
-- replaced the old sidebar layout with a professional top navigation bar
-- redesigned the full frontend into a cleaner light AI SaaS style
-- improved the dashboard layout and fixed the compliance overview alignment issue
-- redesigned the graph explorer to better match the intended Neo4j knowledge-graph presentation
-- moved graph actions into the graph viewport area for easier use
-- improved graph responsiveness with smaller initial graph scope and lazy expansion
-- added graph history modal and reset controls
-- improved semantic retrieval page layout and search bar behavior
-- improved upload, export, settings, compliance, and domain pipeline pages for consistency
-- fixed route issues that could leave pages stuck or blank:
-  - route error boundary resets on page change
-  - automatic scroll reset on navigation
-  - dashboard hard navigations replaced with router navigation
-
-### Project Hygiene
-
-- expanded documentation to reflect the current real implementation instead of the earlier prototype framing
-- prepared the project for GitHub push by cleaning generated local artifacts and caches before commit
