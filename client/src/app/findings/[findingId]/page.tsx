@@ -36,6 +36,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/context/auth-context";
 import { ProtectedRoute } from "@/components/layout/protected-route";
+import { AppShell } from "@/components/layout/AppShell";
 import {
   findingsService,
   FindingDetail,
@@ -139,7 +140,9 @@ export default function FindingDetailPage({ params }: FindingDetailPageProps) {
 
   return (
     <ProtectedRoute>
-      <FindingDetailContent findingId={findingId} />
+      <AppShell>
+        <FindingDetailContent findingId={findingId} />
+      </AppShell>
     </ProtectedRoute>
   );
 }

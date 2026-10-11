@@ -6,20 +6,15 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { useAuth } from "@/context/auth-context";
+import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
-import { BrandLogo } from "@/components/ui/brand-logo";
-
 import { AnalysisHistoryTable } from "@/components/compliance/AnalysisHistoryTable";
 import { organizationsService, Organization } from "@/services/api/organizations";
 
 function AnalysisHistoryContent() {
   const router = useRouter();
-  const { logout } = useAuth();
-
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
 
@@ -36,35 +31,9 @@ function AnalysisHistoryContent() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-12">
-      {/* Header Bar */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-6">
-          <div
-            className="flex items-center gap-2.5 cursor-pointer"
-            onClick={() => router.push("/dashboard")}
-          >
-            <BrandLogo size={32} priority />
-            <span className="font-bold tracking-tight text-foreground">LexisGraph</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground text-xs"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       {/* Main Container */}
-      <main className="p-6 md:p-10 space-y-6">
+      <main className="p-6 md:p-10 space-y-6 max-w-7xl mx-auto">
         {/* Workspace Title & Org Selector */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
           <div className="space-y-1">
@@ -111,7 +80,7 @@ function AnalysisHistoryContent() {
         {/* History Table */}
         <AnalysisHistoryTable organization={selectedOrg} />
       </main>
-    </div>
+    </AppShell>
   );
 }
 

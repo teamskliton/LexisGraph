@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ProtectedRoute } from "@/components/layout/protected-route";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/auth-context";
 import { reportService } from "@/services/reportService";
 import { organizationsService, Organization } from "@/services/api/organizations";
@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import {
-  LogOut,
   RefreshCw,
   AlertTriangle,
   ChevronLeft,
@@ -173,32 +172,7 @@ function ReportsPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* ── Top Navbar ── */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-6">
-          <div
-            className="flex items-center gap-2.5 cursor-pointer"
-            onClick={() => router.push("/dashboard")}
-          >
-            <BrandLogo size={32} priority />
-            <span className="font-bold tracking-tight text-foreground">LexisGraph</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       {/* ── Main Content Container ── */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
         {/* Page Header */}
@@ -372,7 +346,7 @@ function ReportsPageContent() {
           />
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

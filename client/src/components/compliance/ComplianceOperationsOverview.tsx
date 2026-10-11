@@ -54,6 +54,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { AppShell } from "@/components/layout/AppShell";
 import { cn } from "@/lib/utils";
 
 function deriveSeverityBadge(severity?: string, status?: string) {
@@ -206,38 +207,7 @@ export function ComplianceOperationsOverview() {
   const summary = overviewData?.summary;
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-16">
-      {/* ── 1. Navbar Header ── */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex items-center gap-2.5 cursor-pointer"
-              onClick={() => router.push("/dashboard")}
-            >
-              <BrandLogo size={32} priority />
-              <span className="font-bold tracking-tight text-foreground hidden sm:inline">LexisGraph</span>
-            </div>
-            <span className="text-muted-foreground/60 hidden sm:inline">•</span>
-            <OrganizationSwitcher onOrganizationChanged={handleOrgChanged} />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <NotificationBell organizationId={activeOrgId} />
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground text-xs"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
         {/* ── 2. Page Header ── */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/40 pb-4">
@@ -995,6 +965,6 @@ export function ComplianceOperationsOverview() {
         organizationId={activeOrgId}
         organizationName={overviewData?.organization_name}
       />
-    </div>
+    </AppShell>
   );
 }

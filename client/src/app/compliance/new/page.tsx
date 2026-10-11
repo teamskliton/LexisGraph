@@ -9,10 +9,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LogOut } from "lucide-react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
-import { BrandLogo } from "@/components/ui/brand-logo";
 
 import { AnalysisConfigurationPanel } from "@/components/compliance/AnalysisConfigurationPanel";
 import { organizationsService, Organization } from "@/services/api/organizations";
@@ -128,32 +127,7 @@ function AnalysisConfigurationPageContent() {
     : null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-12">
-      {/* Navbar Header */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-6">
-          <div
-            className="flex items-center gap-2.5 cursor-pointer"
-            onClick={() => router.push("/dashboard")}
-          >
-            <BrandLogo size={32} priority />
-            <span className="font-bold tracking-tight text-foreground">LexisGraph</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       {/* Main Body */}
       <main className="p-6 md:p-10">
         <AnalysisConfigurationPanel
@@ -167,7 +141,7 @@ function AnalysisConfigurationPageContent() {
           isLoading={isOrgLoading || isDataLoading}
         />
       </main>
-    </div>
+    </AppShell>
   );
 }
 
