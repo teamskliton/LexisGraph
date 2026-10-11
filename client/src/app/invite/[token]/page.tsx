@@ -22,6 +22,7 @@ import { format } from "date-fns";
 
 import { useAuth } from "@/context/auth-context";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -185,10 +186,8 @@ export default function AcceptInvitePage() {
     <div className="min-h-screen bg-background text-foreground flex flex-col justify-between p-6">
       {/* Top Navbar */}
       <header className="flex h-14 items-center justify-between px-6 max-w-4xl w-full mx-auto border-b border-border/60">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
-            <Layers className="h-4 w-4 text-white" />
-          </div>
+        <div className="flex items-center gap-2.5">
+          <BrandLogo size={32} priority />
           <span className="font-bold tracking-tight text-foreground text-sm">LexisGraph</span>
         </div>
         <ThemeToggle />

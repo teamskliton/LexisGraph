@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Layers,
   LogOut,
   ArrowLeft,
   Search,
@@ -33,6 +32,7 @@ import { format } from "date-fns";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -240,10 +240,13 @@ export function DocumentsContent() {
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
-              <Layers className="h-4 w-4 text-white" />
+            <div
+              className="flex items-center gap-2.5 cursor-pointer"
+              onClick={() => router.push("/dashboard")}
+            >
+              <BrandLogo size={32} priority />
+              <span className="font-bold tracking-tight text-foreground">LexisGraph</span>
             </div>
-            <span className="font-bold tracking-tight text-foreground">LexisGraph</span>
             <span className="text-muted-foreground">/</span>
             <OrganizationSwitcher onOrganizationChanged={loadWorkspaceData} />
           </div>

@@ -15,7 +15,6 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
-  Scale,
   Network,
   ArrowRight,
   Loader2,
@@ -23,6 +22,7 @@ import {
   CheckCircle2,
   UserCheck,
 } from "lucide-react";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { toast } from "sonner";
 
 function RegisterContent() {
@@ -114,14 +114,12 @@ function RegisterContent() {
         <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] rounded-full bg-violet-600/20 blur-[120px] pointer-events-none" />
 
         {/* Top Header */}
-        <div className="flex items-center gap-2.5 z-10">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 shadow-lg shadow-indigo-500/30">
-            <Scale className="h-5 w-5 text-white" />
-          </div>
+        <Link href="/" className="flex items-center gap-2.5 z-10 w-fit">
+          <BrandLogo size={40} className="shadow-lg shadow-indigo-500/20" priority />
           <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
             LexisGraph
           </span>
-        </div>
+        </Link>
 
         {/* Center Tech Visualization */}
         <div className="my-auto z-10 max-w-md space-y-8">
@@ -176,14 +174,12 @@ function RegisterContent() {
 
         <div className="mx-auto w-full max-w-sm lg:w-96">
           {/* Brand header for mobile */}
-          <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
-              <Scale className="h-4 w-4 text-white" />
-            </div>
+          <Link href="/" className="lg:hidden flex items-center gap-2 mb-8 justify-center">
+            <BrandLogo size={34} />
             <span className="text-lg font-bold tracking-tight text-foreground">
               LexisGraph
             </span>
-          </div>
+          </Link>
 
           {step === "REGISTER" ? (
             <>

@@ -18,6 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LexisGraph - Legal Compliance Platform",
   description: "Enterprise compliance analysis and clause extraction workspace",
+  icons: {
+    icon: "/logoL.jpg",
+    shortcut: "/logoL.jpg",
+    apple: "/logoL.jpg",
+  },
 };
 
 export default function RootLayout({

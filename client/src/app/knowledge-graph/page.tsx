@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import {
-  Layers,
   LogOut,
   Building2,
   FileText,
@@ -320,9 +320,7 @@ function KnowledgeGraphContent() {
               className="flex items-center gap-2 cursor-pointer shrink-0"
               onClick={() => router.push("/dashboard")}
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-sm shadow-indigo-600/25">
-                <Layers className="h-4 w-4 text-white" />
-              </div>
+              <BrandLogo size={32} priority />
               <span className="font-semibold tracking-tight text-foreground">LexisGraph</span>
             </div>
 

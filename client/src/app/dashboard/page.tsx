@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 // ─── Executive Summary helper ─────────────────────────────────────────────────
 
@@ -226,9 +227,7 @@ function DashboardContent() {
               className="flex items-center gap-2 cursor-pointer shrink-0"
               onClick={() => router.push("/dashboard")}
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-sm shadow-indigo-600/25">
-                <Layers className="h-4 w-4 text-white" />
-              </div>
+              <BrandLogo size={32} priority />
               <span className="font-semibold tracking-tight text-foreground">
                 LexisGraph
               </span>

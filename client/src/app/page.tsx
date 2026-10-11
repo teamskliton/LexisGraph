@@ -33,6 +33,11 @@ export const metadata: Metadata = {
     description:
       "Turn regulatory complexity into compliance clarity with LexisGraph.",
   },
+  icons: {
+    icon: "/logoL.jpg",
+    shortcut: "/logoL.jpg",
+    apple: "/logoL.jpg",
+  },
 };
 
 /**

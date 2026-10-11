@@ -6,6 +6,8 @@ import { Menu, X } from "lucide-react";
 import { NAV_LINKS, HERO } from "./landing-content";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 
+import { BrandLogo } from "@/components/ui/brand-logo";
+
 export default function LandingNavbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -36,21 +38,8 @@ export default function LandingNavbar() {
               aria-label="LexisGraph home"
               className="flex items-center gap-2.5 select-none group"
             >
-              {/* Icon mark */}
-              <div className="relative w-8 h-8 flex-shrink-0">
-                <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8">
-                  <rect width="32" height="32" rx="8" fill="var(--primary)" />
-                  <circle cx="16" cy="16" r="3" fill="white" />
-                  <circle cx="8" cy="10" r="2" fill="white" opacity="0.7" />
-                  <circle cx="24" cy="10" r="2" fill="white" opacity="0.7" />
-                  <circle cx="8" cy="22" r="2" fill="white" opacity="0.7" />
-                  <circle cx="24" cy="22" r="2" fill="white" opacity="0.7" />
-                  <line x1="16" y1="16" x2="8" y2="10" stroke="white" strokeWidth="1.5" opacity="0.5" />
-                  <line x1="16" y1="16" x2="24" y2="10" stroke="white" strokeWidth="1.5" opacity="0.5" />
-                  <line x1="16" y1="16" x2="8" y2="22" stroke="white" strokeWidth="1.5" opacity="0.5" />
-                  <line x1="16" y1="16" x2="24" y2="22" stroke="white" strokeWidth="1.5" opacity="0.5" />
-                </svg>
-              </div>
+              {/* Brand Logo mark */}
+              <BrandLogo size={34} priority />
               {/* Wordmark */}
               <span
                 className="text-lg font-bold tracking-tight text-foreground group-hover:text-primary transition-colors duration-150"

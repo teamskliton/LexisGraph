@@ -45,6 +45,7 @@ import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
 import { FindingAnalyticsDashboard } from "./FindingAnalyticsDashboard";
 import { ComplianceReportModal } from "./ComplianceReportModal";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { Organization } from "@/services/api/organizations";
 import { formatRoleLabel } from "@/utils/role-utils";
 import { Card } from "@/components/ui/card";
@@ -210,10 +211,13 @@ export function ComplianceOperationsOverview() {
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
-              <Layers className="h-4 w-4 text-white" />
+            <div
+              className="flex items-center gap-2.5 cursor-pointer"
+              onClick={() => router.push("/dashboard")}
+            >
+              <BrandLogo size={32} priority />
+              <span className="font-bold tracking-tight text-foreground hidden sm:inline">LexisGraph</span>
             </div>
-            <span className="font-bold tracking-tight text-foreground hidden sm:inline">LexisGraph</span>
             <span className="text-muted-foreground/60 hidden sm:inline">•</span>
             <OrganizationSwitcher onOrganizationChanged={handleOrgChanged} />
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -43,6 +44,7 @@ import { format } from "date-fns";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -536,12 +538,12 @@ export function AIAssistantContent() {
       {/* Top Navigation Bar */}
       <header className="flex h-14 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
-            <Sparkles className="h-4 w-4 text-white" />
-          </div>
+          <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer">
+            <BrandLogo size={32} priority />
+            <span className="font-bold tracking-tight text-foreground text-sm">LexisGraph</span>
+          </Link>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <span className="font-bold tracking-tight text-foreground text-sm">LexisGraph</span>
               <span className="text-muted-foreground text-xs">/</span>
               <span className="font-semibold text-xs text-indigo-500">AI Legal & Compliance Assistant</span>
             </div>

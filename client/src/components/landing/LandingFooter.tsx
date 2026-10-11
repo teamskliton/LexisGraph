@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FOOTER_LINKS } from "./landing-content";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 export default function LandingFooter() {
   const year = new Date().getFullYear();
@@ -18,20 +19,9 @@ export default function LandingFooter() {
           {/* Brand column */}
           <div className="col-span-2 md:col-span-1 flex flex-col gap-4">
             {/* Logo */}
-            <Link href="/" aria-label="LexisGraph home" className="flex items-center gap-2">
-              <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7">
-                <rect width="32" height="32" rx="8" fill="var(--primary)" />
-                <circle cx="16" cy="16" r="3" fill="white" />
-                <circle cx="8" cy="10" r="2" fill="white" opacity="0.7" />
-                <circle cx="24" cy="10" r="2" fill="white" opacity="0.7" />
-                <circle cx="8" cy="22" r="2" fill="white" opacity="0.7" />
-                <circle cx="24" cy="22" r="2" fill="white" opacity="0.7" />
-                <line x1="16" y1="16" x2="8" y2="10" stroke="white" strokeWidth="1.5" opacity="0.5" />
-                <line x1="16" y1="16" x2="24" y2="10" stroke="white" strokeWidth="1.5" opacity="0.5" />
-                <line x1="16" y1="16" x2="8" y2="22" stroke="white" strokeWidth="1.5" opacity="0.5" />
-                <line x1="16" y1="16" x2="24" y2="22" stroke="white" strokeWidth="1.5" opacity="0.5" />
-              </svg>
-              <span className="text-base font-bold text-foreground">LexisGraph</span>
+            <Link href="/" aria-label="LexisGraph home" className="flex items-center gap-2.5 group">
+              <BrandLogo size={32} />
+              <span className="text-base font-bold text-foreground group-hover:text-primary transition-colors">LexisGraph</span>
             </Link>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Compliance intelligence for organizations that need clarity across regulations, policies, and evidence.

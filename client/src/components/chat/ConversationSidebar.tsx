@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { Organization } from "@/services/api/organizations";
 
 export interface SidebarConversation {
@@ -259,10 +260,8 @@ export function ConversationSidebar({
     >
       {/* Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shadow-md shadow-indigo-600/20">
-            <Layers className="h-4 w-4 text-white" />
-          </div>
+        <div className="flex items-center gap-2.5">
+          <BrandLogo size={32} priority />
           <span className="font-bold tracking-tight text-foreground">LexisGraph AI</span>
         </div>
         <ThemeToggle />
