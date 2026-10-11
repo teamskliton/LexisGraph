@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { FindingDetailDrawer, FindingItem } from "@/components/compliance/FindingDetailDrawer";
 import { findingsService } from "@/services/api/findings";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 interface NotificationBellProps {
   organizationId?: string;
@@ -43,8 +44,6 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
   // Finding drawer state for quick inspection
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
-  const popoverRef = useRef<HTMLDivElement>(null);
 
   // Fetch unread count safely
   const fetchUnreadCount = useCallback(async () => {
@@ -83,19 +82,6 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
       fetchNotifications();
     }
   }, [isOpen, fetchNotifications]);
-
-  // Close popover on click outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
 
   const handleMarkAsRead = async (notification: NotificationItem) => {
     if (!notification.is_read) {
@@ -178,30 +164,31 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
   };
 
   return (
-    <div className={cn("relative inline-block", className)} ref={popoverRef}>
-      {/* Bell Trigger Button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer"
-        aria-label="Notifications"
-      >
-        <Bell className="h-4 w-4" />
-        {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white tabular-nums">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
-        )}
-      </Button>
+    <div className={cn("inline-block", className)}>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer"
+              aria-label="Notifications"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white tabular-nums">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Button>
+          }
+        />
 
-      {/* Popover Dropdown */}
-      {isOpen && (
-        <div
-          className={cn(
-            "absolute w-80 sm:w-96 rounded-xl border border-border bg-card text-card-foreground shadow-2xl z-50 overflow-hidden flex flex-col max-h-[500px]",
-            dropUp ? "left-0 bottom-full mb-2" : "right-0 mt-2"
-          )}
+        <PopoverContent
+          side={dropUp ? "top" : "bottom"}
+          align={dropUp ? "start" : "end"}
+          sideOffset={8}
+          className="w-80 sm:w-96 p-0 z-50 rounded-xl border border-border bg-card text-card-foreground shadow-2xl overflow-hidden flex flex-col max-h-[500px]"
         >
           {/* Header */}
           <div className="p-3 border-b border-border/60 bg-muted/20 space-y-2">
@@ -350,8 +337,8 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
               <ExternalLink className="h-3 w-3" />
             </Button>
           </div>
-        </div>
-      )}
+        </PopoverContent>
+      </Popover>
 
       {/* Quick inspect Finding Drawer */}
       <FindingDetailDrawer

@@ -1047,8 +1047,9 @@ export function AppSidebar({
     <>
       <aside
         style={{ width }}
+        aria-label="Sidebar navigation"
         className={cn(
-          "relative flex flex-col h-full bg-[var(--sidebar)] border-r border-[var(--sidebar-border)] transition-all duration-200 ease-out shrink-0 select-none",
+          "relative z-30 flex flex-col h-full bg-[var(--sidebar)] border-r border-[var(--sidebar-border)] transition-all duration-200 ease-out shrink-0 select-none",
           isMobile && "w-72 max-w-[85vw] border-r-0 shadow-2xl"
         )}
       >
@@ -1067,14 +1068,9 @@ export function AppSidebar({
               aria-label="LexisGraph home"
             >
               <BrandLogo size={26} priority rounded="rounded-md" />
-              <div className="flex items-baseline gap-1.5 min-w-0">
-                <span className="text-[13.5px] font-bold tracking-tight text-[var(--sidebar-foreground)] group-hover:text-[var(--sidebar-primary)] transition-colors truncate">
-                  LexisGraph
-                </span>
-                <span className="text-[9px] font-bold uppercase tracking-wider px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                  AI
-                </span>
-              </div>
+              <span className="text-[13.5px] font-bold tracking-tight text-[var(--sidebar-foreground)] group-hover:text-[var(--sidebar-primary)] transition-colors truncate">
+                LexisGraph AI
+              </span>
             </Link>
           ) : (
             <Link
@@ -1202,7 +1198,7 @@ export function AppSidebar({
         </nav>
 
         {/* ── 5. Fixed Bottom Section (Theme, Notifications & User) ──── */}
-        <div className="shrink-0 border-t border-[var(--sidebar-border)]/60 p-2 space-y-1 bg-[var(--sidebar)]/80 backdrop-blur-xs">
+        <div className="shrink-0 border-t border-[var(--sidebar-border)]/60 p-2 space-y-1 bg-[var(--sidebar)]/80 backdrop-blur-xs relative z-30">
           {!collapsed && (
             <div className="flex items-center justify-between px-1.5 pb-1 pt-0.5">
               <span className="text-[10px] font-semibold text-[var(--sidebar-muted)] uppercase tracking-wider">

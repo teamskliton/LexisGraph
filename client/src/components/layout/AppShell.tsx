@@ -71,7 +71,7 @@ export function AppShell({ children, className }: AppShellProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* ── Desktop Sidebar (Visible on md/lg screens) ───────────────── */}
-      <div className="hidden lg:flex h-full shrink-0">
+      <div className="hidden lg:flex h-full shrink-0 relative z-30">
         <AppSidebar
           collapsed={isClient ? sidebarCollapsed : false}
           onCollapsedChange={handleCollapsedChange}
@@ -99,7 +99,7 @@ export function AppShell({ children, className }: AppShellProps) {
       )}
 
       {/* ── Main Content Area ────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 min-w-0 h-screen overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 h-screen overflow-hidden relative z-0">
         {/* Mobile Top Header (Hidden on lg+ screens) */}
         <header className="lg:hidden flex items-center justify-between h-13 px-4 border-b border-border bg-background/95 backdrop-blur-md shrink-0 z-30">
           <div className="flex items-center gap-3">
@@ -114,7 +114,7 @@ export function AppShell({ children, className }: AppShellProps) {
             <div className="flex items-center gap-2">
               <BrandLogo size={24} priority rounded="rounded-md" />
               <span className="font-bold tracking-tight text-sm text-foreground">
-                LexisGraph
+                LexisGraph AI
               </span>
             </div>
           </div>
@@ -128,7 +128,7 @@ export function AppShell({ children, className }: AppShellProps) {
         {/* Scrollable Page Body */}
         <main
           className={cn(
-            "flex-1 overflow-y-auto min-w-0 transition-all duration-200 focus:outline-none",
+            "flex-1 overflow-y-auto min-w-0 transition-all duration-200 focus:outline-none relative z-0",
             className
           )}
         >
