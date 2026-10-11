@@ -27,9 +27,10 @@ import { findingsService } from "@/services/api/findings";
 interface NotificationBellProps {
   organizationId?: string;
   className?: string;
+  dropUp?: boolean;
 }
 
-export function NotificationBell({ organizationId, className }: NotificationBellProps) {
+export function NotificationBell({ organizationId, className, dropUp }: NotificationBellProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -196,7 +197,12 @@ export function NotificationBell({ organizationId, className }: NotificationBell
 
       {/* Popover Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-border bg-card text-card-foreground shadow-xl z-50 overflow-hidden flex flex-col max-h-[500px]">
+        <div
+          className={cn(
+            "absolute w-80 sm:w-96 rounded-xl border border-border bg-card text-card-foreground shadow-2xl z-50 overflow-hidden flex flex-col max-h-[500px]",
+            dropUp ? "left-0 bottom-full mb-2" : "right-0 mt-2"
+          )}
+        >
           {/* Header */}
           <div className="p-3 border-b border-border/60 bg-muted/20 space-y-2">
             <div className="flex items-center justify-between">
