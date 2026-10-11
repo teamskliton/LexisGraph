@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { ProtectedRoute } from "@/components/layout/protected-route";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { AppShell } from "@/components/layout/AppShell";
 import { dashboardService } from "@/services/dashboard-service";
 import { DashboardStatsResponse } from "@/types/dashboard";
 import { OrganizationDialog } from "@/components/features/organizations/OrganizationDialog";
@@ -39,26 +39,23 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  LogOut,
   ShieldCheck,
   ShieldAlert,
   UserCheck,
-  Layers,
   RefreshCw,
   AlertTriangle,
   Building2,
   FileText,
-  FileCheck,
   Zap,
   Plus,
   BarChart3,
   Users,
   Network,
   ArrowRight,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { BrandLogo } from "@/components/ui/brand-logo";
 
 // ─── Executive Summary helper ─────────────────────────────────────────────────
 
@@ -217,99 +214,7 @@ function DashboardContent() {
       .toUpperCase() ?? "?";
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* ── Top Navbar ── */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-6">
-          {/* Logo + Nav */}
-          <div className="flex items-center gap-6">
-            <div
-              className="flex items-center gap-2 cursor-pointer shrink-0"
-              onClick={() => router.push("/dashboard")}
-            >
-              <BrandLogo size={32} priority />
-              <span className="font-semibold tracking-tight text-foreground">
-                LexisGraph
-              </span>
-            </div>
-
-            <div className="hidden md:block h-5 w-px bg-border" />
-
-            <nav className="hidden md:flex items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs font-semibold text-foreground"
-                onClick={() => router.push("/dashboard")}
-              >
-                Dashboard
-              </Button>
-              {(isAdmin || (user?.memberships && user.memberships.length > 1)) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => router.push("/organizations")}
-                >
-                  <Building2 className="h-3.5 w-3.5" />
-                  Organizations
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => router.push("/compliance/my-work?view=all")}
-              >
-                <ShieldAlert className="h-3.5 w-3.5" />
-                Findings
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => router.push("/documents")}
-              >
-                <FileText className="h-3.5 w-3.5" />
-                Documents
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => router.push("/reports")}
-              >
-                <FileCheck className="h-3.5 w-3.5" />
-                Reports
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => router.push("/knowledge-graph")}
-              >
-                <Network className="h-3.5 w-3.5" />
-                Knowledge Graph
-              </Button>
-            </nav>
-          </div>
-
-          {/* Right actions */}
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span>Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       {/* ── Main ── */}
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
 
@@ -793,7 +698,7 @@ function DashboardContent() {
         onSubmit={handleCreateOrgSubmit}
         isLoading={isSubmittingOrg}
       />
-    </div>
+    </AppShell>
   );
 }
 

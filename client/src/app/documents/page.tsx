@@ -30,9 +30,7 @@ import {
 import { format } from "date-fns";
 
 import { ProtectedRoute } from "@/components/layout/protected-route";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
-import { BrandLogo } from "@/components/ui/brand-logo";
+import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -235,37 +233,7 @@ export function DocumentsContent() {
   const showRegulations = activeTab === "ALL" || activeTab === "REGULATIONS";
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-16">
-      {/* Navbar */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex items-center gap-2.5 cursor-pointer"
-              onClick={() => router.push("/dashboard")}
-            >
-              <BrandLogo size={32} priority />
-              <span className="font-bold tracking-tight text-foreground">LexisGraph</span>
-            </div>
-            <span className="text-muted-foreground">/</span>
-            <OrganizationSwitcher onOrganizationChanged={loadWorkspaceData} />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="bg-card border-border text-foreground hover:bg-muted text-xs gap-1.5 cursor-pointer"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
@@ -630,7 +598,7 @@ export function DocumentsContent() {
           </div>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

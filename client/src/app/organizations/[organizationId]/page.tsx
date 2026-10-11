@@ -8,6 +8,7 @@ import React, { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/layout/protected-route";
+import { AppShell } from "@/components/layout/AppShell";
 import {
   Organization,
   organizationsService,
@@ -134,7 +135,9 @@ export default function OrganizationWorkspacePage({ params }: PageProps) {
   const resolvedParams = use(params);
   return (
     <ProtectedRoute>
-      <OrganizationWorkspaceContent organizationId={resolvedParams.organizationId} />
+      <AppShell>
+        <OrganizationWorkspaceContent organizationId={resolvedParams.organizationId} />
+      </AppShell>
     </ProtectedRoute>
   );
 }

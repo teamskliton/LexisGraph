@@ -42,6 +42,7 @@ import {
 import { format } from "date-fns";
 
 import { ProtectedRoute } from "@/components/layout/protected-route";
+import { AppShell } from "@/components/layout/AppShell";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
 import { BrandLogo } from "@/components/ui/brand-logo";
@@ -534,44 +535,7 @@ export function AIAssistantContent() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground overflow-hidden">
-      {/* Top Navigation Bar */}
-      <header className="flex h-14 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-md shrink-0">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer">
-            <BrandLogo size={32} priority />
-            <span className="font-bold tracking-tight text-foreground text-sm">LexisGraph</span>
-          </Link>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground text-xs">/</span>
-              <span className="font-semibold text-xs text-indigo-500">AI Legal & Compliance Assistant</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <OrganizationSwitcher onOrganizationChanged={loadWorkspaceContext} />
-          <ThemeToggle />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/dashboard")}
-            className="bg-card border-border text-foreground hover:bg-muted text-xs gap-1.5 cursor-pointer"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={logout}
-            className="text-xs text-muted-foreground hover:text-foreground gap-1.5 cursor-pointer"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Sign out
-          </Button>
-        </div>
-      </header>
-
+    <div className="flex h-full flex-col bg-background text-foreground overflow-hidden">
       {/* Main Grid Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar (Desktop): Context Filters & History Sessions */}
@@ -1020,7 +984,9 @@ export function AIAssistantContent() {
 export default function AIAssistantPage() {
   return (
     <ProtectedRoute>
-      <AIAssistantContent />
+      <AppShell>
+        <AIAssistantContent />
+      </AppShell>
     </ProtectedRoute>
   );
 }

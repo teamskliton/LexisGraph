@@ -35,6 +35,7 @@ import {
 import { documentService } from "@/services/document-service";
 import { reportService } from "@/services/reportService";
 import { ProtectedRoute } from "@/components/layout/protected-route";
+import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -356,7 +357,7 @@ function OrganizationsContent() {
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background text-foreground pb-12">
+    <AppShell>
       {/* ── 1. PAGE HEADER ─────────────────────────────────────────────────── */}
       <div className="border-b border-border/40 bg-background/90 backdrop-blur-md sticky top-0 z-20 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -766,7 +767,7 @@ function OrganizationsContent() {
         onSubmit={handleSubmit}
         isLoading={isSubmitting}
       />
-    </div>
+    </AppShell>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { ProtectedRoute } from '@/components/layout/protected-route';
+import { AppShell } from '@/components/layout/AppShell';
 import { OrganizationSwitcher } from '@/components/layout/OrganizationSwitcher';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { useAuth } from '@/context/auth-context';
@@ -724,7 +725,9 @@ export function UserManagementContent() {
 export default function UserManagementPage() {
   return (
     <ProtectedRoute>
-      <UserManagementContent />
+      <AppShell>
+        <UserManagementContent />
+      </AppShell>
     </ProtectedRoute>
   );
 }

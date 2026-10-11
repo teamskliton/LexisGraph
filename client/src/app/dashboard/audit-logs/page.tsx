@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { ProtectedRoute } from '@/components/layout/protected-route';
+import { AppShell } from '@/components/layout/AppShell';
 import { OrganizationSwitcher } from '@/components/layout/OrganizationSwitcher';
 import { ShieldAlert, Activity, User, Clock, Loader2, Search } from 'lucide-react';
 import { api } from '@/services/api';
@@ -139,7 +140,9 @@ export function AuditLogsContent() {
 export default function AuditLogsPage() {
   return (
     <ProtectedRoute>
-      <AuditLogsContent />
+      <AppShell>
+        <AuditLogsContent />
+      </AppShell>
     </ProtectedRoute>
   );
 }

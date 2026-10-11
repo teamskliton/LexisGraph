@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/layout/protected-route';
+import { AppShell } from '@/components/layout/AppShell';
 import { OrganizationSwitcher } from '@/components/layout/OrganizationSwitcher';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { useAuth } from '@/context/auth-context';
@@ -328,7 +329,9 @@ export function OrganizationSettingsContent() {
 export default function OrganizationSettingsPage() {
   return (
     <ProtectedRoute>
-      <OrganizationSettingsContent />
+      <AppShell>
+        <OrganizationSettingsContent />
+      </AppShell>
     </ProtectedRoute>
   );
 }

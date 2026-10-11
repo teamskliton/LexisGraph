@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ProtectedRoute } from "@/components/layout/protected-route";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -311,98 +311,7 @@ function KnowledgeGraphContent() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background">
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-6">
-          <div className="flex items-center gap-6">
-            <div
-              className="flex items-center gap-2 cursor-pointer shrink-0"
-              onClick={() => router.push("/dashboard")}
-            >
-              <BrandLogo size={32} priority />
-              <span className="font-semibold tracking-tight text-foreground">LexisGraph</span>
-            </div>
-
-            <div className="hidden md:block h-5 w-px bg-border" />
-
-            <nav className="hidden md:flex items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                onClick={() => router.push("/dashboard")}
-              >
-                Dashboard
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                onClick={() => router.push("/organizations")}
-              >
-                <Building2 className="h-3.5 w-3.5" />
-                Organizations
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                onClick={() => router.push("/documents")}
-              >
-                <FileText className="h-3.5 w-3.5" />
-                Documents
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                onClick={() => router.push("/compliance")}
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Compliance
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs font-semibold text-foreground bg-muted/60"
-                onClick={() => router.push(`/knowledge-graph${activeOrgId ? `?organization_id=${activeOrgId}` : ""}`)}
-              >
-                <Network className="h-3.5 w-3.5 text-indigo-500" />
-                Knowledge Graph
-              </Button>
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {organizations.length > 1 && (
-              <select
-                aria-label="Select Organization"
-                value={activeOrgId}
-                onChange={(e) => handleOrganizationChange(e.target.value)}
-                className="bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground font-medium focus:outline-none cursor-pointer"
-              >
-                {organizations.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            )}
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span>Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       {/* Main Content Area */}
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-6">
         {/* Page Header */}
@@ -957,7 +866,7 @@ function KnowledgeGraphContent() {
           </div>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 
