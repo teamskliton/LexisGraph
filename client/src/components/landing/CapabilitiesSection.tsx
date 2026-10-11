@@ -18,12 +18,12 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 const COLOR_STYLES: Record<string, { bg: string; color: string }> = {
-  primary: { bg: "var(--primary-subtle)",  color: "var(--primary)" },
-  accent:  { bg: "var(--accent-subtle)",   color: "var(--accent)"  },
-  info:    { bg: "var(--info-subtle)",     color: "var(--info)"    },
-  warning: { bg: "var(--warning-subtle)",  color: "var(--warning)" },
-  success: { bg: "var(--accent-subtle)",   color: "var(--accent)"  },
-  danger:  { bg: "var(--danger-subtle)",   color: "var(--danger)"  },
+  primary: { bg: "var(--primary-subtle)", color: "var(--primary)" },
+  accent: { bg: "var(--accent-subtle)", color: "var(--accent)" },
+  info: { bg: "var(--info-subtle)", color: "var(--info)" },
+  warning: { bg: "var(--warning-subtle)", color: "var(--warning)" },
+  success: { bg: "var(--accent-subtle)", color: "var(--accent)" },
+  danger: { bg: "var(--danger-subtle)", color: "var(--danger)" },
 };
 
 export default function CapabilitiesSection() {

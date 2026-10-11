@@ -1,25 +1,10 @@
 import type { Metadata } from "next";
-import LandingNavbar from "@/components/landing/LandingNavbar";
-import HeroSection from "@/components/landing/HeroSection";
-import ValueStrip from "@/components/landing/ValueStrip";
-import ProblemSection from "@/components/landing/ProblemSection";
-import SolutionFlow from "@/components/landing/SolutionFlow";
-import HowItWorks from "@/components/landing/HowItWorks";
-import CapabilitiesSection from "@/components/landing/CapabilitiesSection";
-import KnowledgeGraphShowcase from "@/components/landing/KnowledgeGraphShowcase";
-import FindingLifecycle from "@/components/landing/FindingLifecycle";
-import RolesSection from "@/components/landing/RolesSection";
-import SecuritySection from "@/components/landing/SecuritySection";
-import UseCasesSection from "@/components/landing/UseCasesSection";
-import DifferentiationSection from "@/components/landing/DifferentiationSection";
-import ProductPreview from "@/components/landing/ProductPreview";
-import FinalCTA from "@/components/landing/FinalCTA";
-import LandingFooter from "@/components/landing/LandingFooter";
+import LandingPage from "@/components/landing/LandingPage";
 
 export const metadata: Metadata = {
   title: "LexisGraph — Compliance Intelligence for Modern Organizations",
   description:
-    "LexisGraph connects regulations, policies, evidence, findings, and remediation to help organizations understand and manage compliance with full traceability.",
+    "LexisGraph connects regulations, requirements, policies, evidence, findings, and remediation — so your compliance team works from a single source of truth instead of scattered documents.",
   openGraph: {
     title: "LexisGraph — Compliance Intelligence for Modern Organizations",
     description:
@@ -41,37 +26,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Public landing page — Server Component.
- * No auth check; unauthenticated users see this page.
- * Authenticated users can navigate to /dashboard from the navbar after login.
+ * Public landing page — Server Component with metadata.
+ * Renders the clean, high-performance 6-section B2B SaaS landing page.
  */
-export default function LandingPage() {
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Navigation */}
-      <LandingNavbar />
-
-      {/* Main content */}
-      <main id="main-content">
-        {/* Skip link target */}
-        <HeroSection />
-        <ValueStrip />
-        <ProblemSection />
-        <SolutionFlow />
-        <HowItWorks />
-        <CapabilitiesSection />
-        <KnowledgeGraphShowcase />
-        <FindingLifecycle />
-        <ProductPreview />
-        <RolesSection />
-        <UseCasesSection />
-        <DifferentiationSection />
-        <SecuritySection />
-        <FinalCTA />
-      </main>
-
-      {/* Footer */}
-      <LandingFooter />
-    </div>
-  );
+export default function Page() {
+  return <LandingPage />;
 }

@@ -6,11 +6,11 @@
 // ---- Navigation ----------------------------------------------------------
 
 export const NAV_LINKS = [
-  { label: "Product",        href: "#product" },
-  { label: "How It Works",  href: "#how-it-works" },
-  { label: "Capabilities",  href: "#capabilities" },
-  { label: "Security",      href: "#security" },
-  { label: "About",         href: "#about" },
+  { label: "Product", href: "#product" },
+  { label: "How It Works", href: "#how-it-works" },
+  { label: "Capabilities", href: "#capabilities" },
+  { label: "Security", href: "#security" },
+  { label: "About", href: "#about" },
 ] as const;
 
 // ---- Hero ----------------------------------------------------------------
@@ -19,18 +19,18 @@ export const HERO = {
   headline: "Turn Regulatory Complexity Into Compliance Clarity.",
   subheadline:
     "LexisGraph connects regulations, requirements, policies, evidence, findings, and remediation — so your compliance team works from a single source of truth instead of scattered documents.",
-  ctaPrimary:   { label: "Get Started",      href: "/register" },
+  ctaPrimary: { label: "Get Started", href: "/register" },
   ctaSecondary: { label: "See How It Works", href: "#how-it-works" },
 } as const;
 
 // ---- Value Strip ---------------------------------------------------------
 
 export const VALUE_STRIP = [
-  { label: "Regulations",   description: "Import and version control regulatory frameworks" },
-  { label: "Policies",      description: "Map internal policies to regulatory requirements" },
-  { label: "Evidence",      description: "Attach and track supporting evidence artifacts" },
-  { label: "Findings",      description: "Identify and classify compliance gaps systematically" },
-  { label: "Remediation",   description: "Assign and resolve findings with full audit trails" },
+  { label: "Regulations", description: "Import and version control regulatory frameworks" },
+  { label: "Policies", description: "Map internal policies to regulatory requirements" },
+  { label: "Evidence", description: "Attach and track supporting evidence artifacts" },
+  { label: "Findings", description: "Identify and classify compliance gaps systematically" },
+  { label: "Remediation", description: "Assign and resolve findings with full audit trails" },
 ] as const;
 
 // ---- Problem Cards -------------------------------------------------------
@@ -65,14 +65,14 @@ export const PROBLEMS = [
 // ---- Solution Flow -------------------------------------------------------
 
 export const SOLUTION_STAGES = [
-  { label: "Regulations",    description: "Import regulatory frameworks and requirements", color: "primary" },
-  { label: "Requirements",   description: "Break regulations into trackable requirements",  color: "primary" },
-  { label: "Policies",       description: "Map internal policies to requirements",           color: "accent" },
-  { label: "Evidence",       description: "Attach supporting evidence to each policy",       color: "accent" },
-  { label: "Analysis",       description: "Analyze coverage, gaps, and risk posture",        color: "warning" },
-  { label: "Findings",       description: "Surface and classify compliance findings",        color: "warning" },
-  { label: "Remediation",    description: "Assign and track remediation tasks",             color: "danger" },
-  { label: "Resolution",     description: "Close the loop with verified evidence",           color: "info" },
+  { label: "Regulations", description: "Import regulatory frameworks and requirements", color: "primary" },
+  { label: "Requirements", description: "Break regulations into trackable requirements", color: "primary" },
+  { label: "Policies", description: "Map internal policies to requirements", color: "accent" },
+  { label: "Evidence", description: "Attach supporting evidence to each policy", color: "accent" },
+  { label: "Analysis", description: "Analyze coverage, gaps, and risk posture", color: "warning" },
+  { label: "Findings", description: "Surface and classify compliance findings", color: "warning" },
+  { label: "Remediation", description: "Assign and track remediation tasks", color: "danger" },
+  { label: "Resolution", description: "Close the loop with verified evidence", color: "info" },
 ] as const;
 
 // ---- How It Works --------------------------------------------------------
@@ -154,10 +154,10 @@ export const CAPABILITIES = [
 // ---- Finding Lifecycle ---------------------------------------------------
 
 export const FINDING_STAGES = [
-  { label: "Identified",  description: "Gap or issue found during compliance analysis",               color: "danger" },
-  { label: "Review",      description: "Assigned reviewer examines the finding for validity",         color: "warning" },
-  { label: "Remediation", description: "Corrective action assigned and tracked to completion",        color: "primary" },
-  { label: "Resolution",  description: "Resolution verified with evidence and finding closed",        color: "accent" },
+  { label: "Identified", description: "Gap or issue found during compliance analysis", color: "danger" },
+  { label: "Review", description: "Assigned reviewer examines the finding for validity", color: "warning" },
+  { label: "Remediation", description: "Corrective action assigned and tracked to completion", color: "primary" },
+  { label: "Resolution", description: "Resolution verified with evidence and finding closed", color: "accent" },
 ] as const;
 
 // ---- Roles ---------------------------------------------------------------
@@ -285,30 +285,30 @@ export const FOOTER_LINKS = [
     heading: "Product",
     links: [
       { label: "Compliance Analysis", href: "#capabilities" },
-      { label: "Knowledge Graph",     href: "#capabilities" },
-      { label: "Findings Workflow",   href: "#how-it-works" },
-      { label: "AI Features",         href: "#capabilities" },
+      { label: "Knowledge Graph", href: "#capabilities" },
+      { label: "Findings Workflow", href: "#how-it-works" },
+      { label: "AI Features", href: "#capabilities" },
     ],
   },
   {
     heading: "Company",
     links: [
-      { label: "About",   href: "#about" },
+      { label: "About", href: "#about" },
       { label: "Security", href: "#security" },
     ],
   },
   {
     heading: "Resources",
     links: [
-      { label: "How It Works",  href: "#how-it-works" },
+      { label: "How It Works", href: "#how-it-works" },
       { label: "Roles & Teams", href: "#roles" },
     ],
   },
   {
     heading: "Legal",
     links: [
-      { label: "Privacy Policy",    href: "#" },
-      { label: "Terms of Service",  href: "#" },
+      { label: "Privacy Policy", href: "#" },
+      { label: "Terms of Service", href: "#" },
     ],
   },
 ] as const;

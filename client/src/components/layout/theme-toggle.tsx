@@ -12,29 +12,46 @@ interface ThemeToggleProps {
 
 export function ThemeToggle({ className }: ThemeToggleProps = {}) {
   const { setTheme, resolvedTheme } = useTheme();
+  const [hasMounted, setHasMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const toggle = () => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
   };
+
+  if (!hasMounted) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className={cn("relative rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors opacity-70", className)}
+        aria-label="Toggle theme"
+        disabled
+      >
+        <span className="h-[1.125rem] w-[1.125rem] block" />
+      </Button>
+    );
+  }
+
+  const isDark = resolvedTheme === "dark";
 
   return (
     <Button
       variant="ghost"
       size="icon-sm"
       onClick={toggle}
-      className={cn("relative rounded-lg hover:bg-muted dark:hover:bg-zinc-800 transition-colors", className)}
-      aria-label="Toggle theme"
+      className={cn("relative rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors", className)}
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
-      {/* Render both icons; visibility is driven by the resolved theme via CSS.
-          suppressHydrationWarning avoids mismatch between server (no theme) and client. */}
-      <Sun
-        className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
-        suppressHydrationWarning
-      />
-      <Moon
-        className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
-        suppressHydrationWarning
-      />
+      {isDark ? (
+        <Sun className="h-[1.15rem] w-[1.15rem] text-amber-400 transition-transform duration-200 hover:rotate-45" />
+      ) : (
+        <Moon className="h-[1.15rem] w-[1.15rem] text-slate-700 transition-transform duration-200 hover:-rotate-12" />
+      )}
     </Button>
   );
 }

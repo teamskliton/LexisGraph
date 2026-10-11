@@ -19,7 +19,7 @@
 @import "shadcn/tailwind.css";
 
 /* 4. Custom Variants */
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark, .dark *));
 
 /* 5. Tailwind v4 @theme inline Mapping */
 @theme inline {
