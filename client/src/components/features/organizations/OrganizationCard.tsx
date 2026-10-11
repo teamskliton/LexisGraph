@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { NaturalAvatar } from "@/components/ui/NaturalAvatar";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -106,57 +107,14 @@ export function getStatusConfig(status: ComplianceStatus) {
 // ─── Polished Logo Avatar with Fallback ──────────────────────────────────────
 
 function OrgAvatar({ name, logoUrl }: { name: string; logoUrl?: string }) {
-  const [imgError, setImgError] = useState(false);
-
-  // Validate if logoUrl is a plausibly valid URL
-  const isValidUrl =
-    logoUrl &&
-    typeof logoUrl === "string" &&
-    logoUrl.trim().length > 0 &&
-    (logoUrl.startsWith("http://") ||
-      logoUrl.startsWith("https://") ||
-      logoUrl.startsWith("data:") ||
-      logoUrl.startsWith("/"));
-
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
-
-  const displayInitials = initials || name.slice(0, 2).toUpperCase() || "OG";
-
-  // Deterministic hue based on org name string
-  const hue =
-    name.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
-
-  if (isValidUrl && !imgError) {
-    return (
-      <div className="relative h-10 w-10 shrink-0 rounded-lg border border-border/50 bg-background overflow-hidden flex items-center justify-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={logoUrl}
-          alt={name}
-          onError={() => setImgError(true)}
-          className="h-full w-full object-cover"
-        />
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/40 text-xs font-extrabold select-none shadow-xs"
-      style={{
-        background: `hsl(${hue} 45% 93%)`,
-        color: `hsl(${hue} 60% 30%)`,
-        borderColor: `hsl(${hue} 40% 80%)`,
-      }}
-      aria-label={`${name} logo avatar`}
-    >
-      {displayInitials}
-    </div>
+    <NaturalAvatar
+      name={name}
+      src={logoUrl}
+      shape="rounded"
+      maxInitials={2}
+      className="h-10 w-10 rounded-lg text-xs shadow-xs ring-1 ring-black/5 dark:ring-white/10"
+    />
   );
 }
 

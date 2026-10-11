@@ -16,6 +16,9 @@ export interface User {
   created_at: string;
   updated_at: string;
   memberships?: UserMembership[];
+  avatar_url?: string;
+  photo_url?: string;
+  image?: string;
 }
 
 export interface TokenResponse {

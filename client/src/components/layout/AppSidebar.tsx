@@ -7,6 +7,7 @@ import { useAuth } from "@/context/auth-context";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { NaturalAvatar } from "@/components/ui/NaturalAvatar";
 import { cn } from "@/lib/utils";
 import {
   organizationsService,
@@ -188,9 +189,13 @@ function WorkspaceSwitcher({
           aria-expanded={isOpen}
           id="workspace-switcher-trigger"
         >
-          <div className="relative shrink-0 flex items-center justify-center w-6 h-6 rounded-md bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 text-white font-bold text-[10px] shadow-xs select-none ring-1 ring-white/10">
-            {initials}
-          </div>
+          <NaturalAvatar
+            name={currentOrg?.name ?? "LexisGraph"}
+            src={currentOrg?.logo_url}
+            shape="rounded"
+            maxInitials={2}
+            className="w-6 h-6 rounded-md text-[10px] shrink-0 shadow-2xs ring-1 ring-black/5 dark:ring-white/10"
+          />
 
           {!collapsed && (
             <>
@@ -238,9 +243,13 @@ function WorkspaceSwitcher({
                         : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/40"
                     )}
                   >
-                    <div className="w-5 h-5 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
-                      {org.name.slice(0, 2).toUpperCase()}
-                    </div>
+                    <NaturalAvatar
+                      name={org.name}
+                      src={org.logo_url}
+                      shape="rounded"
+                      maxInitials={2}
+                      className="w-5 h-5 rounded-md text-[9px] shrink-0"
+                    />
                     <span className="flex-1 truncate">{org.name}</span>
                     {active && <Check className="w-3.5 h-3.5 shrink-0 text-[var(--sidebar-primary)]" />}
                   </button>
@@ -1219,9 +1228,13 @@ export function AppSidebar({
               id="sidebar-user-logout-btn"
             >
               <div className="relative shrink-0">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-600 flex items-center justify-center text-white text-[9px] font-bold select-none shadow-xs ring-1 ring-white/10">
-                  {initials}
-                </div>
+                <NaturalAvatar
+                  name={user?.full_name || user?.email || "User"}
+                  src={user?.avatar_url || user?.photo_url || user?.image}
+                  shape="circle"
+                  maxInitials={1}
+                  className="w-6 h-6 rounded-full text-[10px] shrink-0 shadow-2xs ring-1 ring-black/5 dark:ring-white/10"
+                />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-[var(--sidebar)]" />
               </div>
 

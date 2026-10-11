@@ -107,3 +107,5 @@ export {
   AvatarGroupCount,
   AvatarBadge,
 }
+
+export { NaturalAvatar } from "./NaturalAvatar"

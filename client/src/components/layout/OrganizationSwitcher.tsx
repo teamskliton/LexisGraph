@@ -5,6 +5,7 @@ import { Building2, ChevronDown, Check, Plus, Shield } from 'lucide-react';
 import { organizationsService, Organization, OrganizationCreate, OrganizationUpdate } from '@/services/api/organizations';
 import { OrganizationDialog } from '@/components/features/organizations/OrganizationDialog';
 import { useAuth } from '@/context/auth-context';
+import { NaturalAvatar } from '@/components/ui/NaturalAvatar';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -103,7 +104,13 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
           className="h-9 px-3 gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 text-xs rounded-xl shadow-sm transition-all flex items-center justify-between"
         >
           <div className="flex items-center gap-2 truncate">
-            <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <NaturalAvatar
+              name={currentOrg.name}
+              src={currentOrg.logo_url}
+              shape="rounded"
+              maxInitials={2}
+              className="w-5 h-5 rounded-md text-[9px] shrink-0"
+            />
             <span className="font-semibold truncate max-w-[140px] sm:max-w-[180px]">
               {currentOrg.name}
             </span>
@@ -130,7 +137,13 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2 truncate">
-                  <Building2 className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-indigo-400' : 'text-slate-500'}`} />
+                  <NaturalAvatar
+                    name={org.name}
+                    src={org.logo_url}
+                    shape="rounded"
+                    maxInitials={2}
+                    className="w-4 h-4 rounded-sm text-[8px] shrink-0"
+                  />
                   <span className="truncate">{org.name}</span>
                 </div>
                 {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}

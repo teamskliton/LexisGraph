@@ -26,6 +26,7 @@ import { useAuth } from "@/context/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { NaturalAvatar } from "@/components/ui/NaturalAvatar";
 import type { Organization } from "@/services/api/organizations";
 
 interface OrganizationWorkspaceHeaderProps {
@@ -44,58 +45,14 @@ function deriveStatus(score: number | null | undefined) {
 }
 
 function OrgHeaderAvatar({ name, logoUrl }: { name: string; logoUrl?: string }) {
-  const [imgError, setImgError] = React.useState(false);
-
-  React.useEffect(() => {
-    setImgError(false);
-  }, [logoUrl]);
-
-  const isValidUrl =
-    logoUrl &&
-    typeof logoUrl === "string" &&
-    logoUrl.trim().length > 0 &&
-    (logoUrl.startsWith("http://") ||
-      logoUrl.startsWith("https://") ||
-      logoUrl.startsWith("data:") ||
-      logoUrl.startsWith("/"));
-
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
-
-  const displayInitials = initials || name.slice(0, 2).toUpperCase() || "OG";
-
-  const hue =
-    name.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
-
-  if (isValidUrl && !imgError) {
-    return (
-      <div className="relative h-12 w-12 shrink-0 rounded-xl border border-border/60 bg-background overflow-hidden flex items-center justify-center shadow-2xs">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={logoUrl}
-          alt={name}
-          onError={() => setImgError(true)}
-          className="h-full w-full object-cover"
-        />
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border/40 text-base font-extrabold select-none shadow-2xs"
-      style={{
-        background: `hsl(${hue} 45% 93%)`,
-        color: `hsl(${hue} 60% 30%)`,
-        borderColor: `hsl(${hue} 40% 80%)`,
-      }}
-    >
-      {displayInitials}
-    </div>
+    <NaturalAvatar
+      name={name}
+      src={logoUrl}
+      shape="rounded"
+      maxInitials={2}
+      className="h-12 w-12 rounded-xl text-base shadow-2xs ring-1 ring-black/5 dark:ring-white/10"
+    />
   );
 }
 

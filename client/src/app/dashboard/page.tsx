@@ -14,6 +14,7 @@ import {
   OrganizationUpdate,
 } from "@/services/api/organizations";
 import { formatRoleLabel, getRoleBadgeClass } from "@/utils/role-utils";
+import { NaturalAvatar } from "@/components/ui/NaturalAvatar";
 
 // Dashboard Components
 import { DashboardKpiCards } from "@/components/dashboard/DashboardKpiCards";
@@ -493,10 +494,14 @@ function DashboardContent() {
             {/* Identity header */}
             <CardHeader className="border-b border-border/40 px-5 pt-5 pb-4">
               <div className="flex items-center gap-3">
-                {/* Initials avatar */}
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-sm select-none">
-                  {initials}
-                </div>
+                {/* Natural Gmail-style avatar */}
+                <NaturalAvatar
+                  name={user?.full_name || user?.email || "User"}
+                  src={user?.avatar_url || user?.photo_url || user?.image}
+                  shape="circle"
+                  maxInitials={1}
+                  className="h-10 w-10 text-base shadow-xs ring-1 ring-black/5 dark:ring-white/10"
+                />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate leading-tight">
                     {user?.full_name ?? "—"}

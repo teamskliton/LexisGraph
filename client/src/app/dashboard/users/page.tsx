@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { formatRoleLabel, getRoleBadgeClass, isRoleAdmin } from '@/utils/role-utils';
+import { NaturalAvatar } from '@/components/ui/NaturalAvatar';
 
 interface Member {
   id: string;
@@ -337,9 +338,12 @@ export function UserManagementContent() {
                         <tr key={member.id} className="hover:bg-muted/40 transition-colors">
                           <td className="p-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-500 flex items-center justify-center font-bold text-xs shrink-0">
-                                {member.full_name ? member.full_name[0].toUpperCase() : 'U'}
-                              </div>
+                              <NaturalAvatar
+                                name={member.full_name || member.email || 'Member'}
+                                shape="circle"
+                                maxInitials={1}
+                                className="w-8 h-8 text-xs shrink-0 shadow-2xs"
+                              />
                               <div className="min-w-0">
                                 <div className="font-semibold text-foreground truncate">{member.full_name || 'Team Member'}</div>
                                 <div className="text-[11px] text-muted-foreground font-mono truncate max-w-[240px]">{member.email}</div>
@@ -402,9 +406,12 @@ export function UserManagementContent() {
                     <div key={member.id} className="p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-500 flex items-center justify-center font-bold text-xs shrink-0">
-                            {member.full_name ? member.full_name[0].toUpperCase() : 'U'}
-                          </div>
+                          <NaturalAvatar
+                            name={member.full_name || member.email || 'Member'}
+                            shape="circle"
+                            maxInitials={1}
+                            className="w-8 h-8 text-xs shrink-0 shadow-2xs"
+                          />
                           <div className="min-w-0">
                             <div className="font-semibold text-foreground text-xs truncate">{member.full_name || 'Team Member'}</div>
                             <div className="text-[11px] text-muted-foreground font-mono truncate">{member.email}</div>
