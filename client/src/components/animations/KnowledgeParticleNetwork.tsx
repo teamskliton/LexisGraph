@@ -78,21 +78,21 @@ interface RGB {
 
 // Dark Mode Palette:
 // - Slate-gray particles: #94A3B8
-// - Blue accents: #60A5FA
-// - Subtle blue connections: #64748B (normal) / #60A5FA (accent)
+// - Cyan accents: #38BDF8
+// - Subtle connections: #263247 (normal) / #38BDF8 (accent)
 const DEFAULT_DARK_PARTICLE: RGB = { r: 148, g: 163, b: 184 };
-const DEFAULT_DARK_ACCENT: RGB = { r: 96, g: 165, b: 250 };
-const DEFAULT_DARK_LINE_NORMAL: RGB = { r: 100, g: 116, b: 139 };
-const DEFAULT_DARK_LINE_ACCENT: RGB = { r: 96, g: 165, b: 250 };
+const DEFAULT_DARK_ACCENT: RGB = { r: 56, g: 189, b: 248 };
+const DEFAULT_DARK_LINE_NORMAL: RGB = { r: 38, g: 50, b: 71 };
+const DEFAULT_DARK_LINE_ACCENT: RGB = { r: 56, g: 189, b: 248 };
 
 // Light Mode Palette:
 // - Slate-gray particles: #475569
-// - Royal-blue accents: #2563EB
-// - Muted blue-gray connections: #94A3B8 (normal) / #2563EB (accent)
+// - Sky-blue accents: #0284C7
+// - Muted borders/connections: #CBD5E1 (normal) / #0284C7 (accent)
 const DEFAULT_LIGHT_PARTICLE: RGB = { r: 71, g: 85, b: 105 };
-const DEFAULT_LIGHT_ACCENT: RGB = { r: 37, g: 99, b: 235 };
-const DEFAULT_LIGHT_LINE_NORMAL: RGB = { r: 148, g: 163, b: 184 };
-const DEFAULT_LIGHT_LINE_ACCENT: RGB = { r: 37, g: 99, b: 235 };
+const DEFAULT_LIGHT_ACCENT: RGB = { r: 2, g: 132, b: 199 };
+const DEFAULT_LIGHT_LINE_NORMAL: RGB = { r: 203, g: 213, b: 225 };
+const DEFAULT_LIGHT_LINE_ACCENT: RGB = { r: 2, g: 132, b: 199 };
 
 const parseColorToRGB = (colorStr?: string, defaultRGB: RGB = { r: 0, g: 0, b: 0 }): RGB => {
   if (!colorStr) return defaultRGB;
@@ -738,7 +738,7 @@ export default function KnowledgeParticleNetwork({
       />
       {/* Theme-aware soft bottom dissolve where the Connected Knowledge Graph section begins */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-40 pointer-events-none bg-gradient-to-b from-transparent via-slate-50/70 to-slate-50 dark:via-[#09090B]/70 dark:to-[#09090B] transition-colors duration-300"
+        className="absolute bottom-0 left-0 right-0 h-40 pointer-events-none bg-gradient-to-b from-transparent via-background/70 to-background transition-colors duration-300"
         aria-hidden="true"
       />
     </div>

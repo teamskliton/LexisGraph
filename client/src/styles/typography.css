@@ -295,29 +295,15 @@ pre code {
   color: var(--subtle-foreground);
 }
 
-/* Gradient text utility */
+/* Typography utilities — solid enterprise text */
 .gradient-text {
-  background: linear-gradient(
-    90deg,
-    var(--gradient-hero-from),
-    var(--gradient-hero-via),
-    var(--gradient-hero-to)
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
 }
 
 .gradient-text-ai {
-  background: linear-gradient(90deg, var(--gradient-ai-from), var(--gradient-ai-to));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--primary);
 }
 
 .gradient-text-compliance {
-  background: linear-gradient(90deg, var(--gradient-compliance-from), var(--gradient-compliance-to));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--primary);
 }

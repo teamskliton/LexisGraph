@@ -80,6 +80,20 @@
   --color-chart-7: var(--chart-7);
   --color-chart-8: var(--chart-8);
 
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-muted: var(--primary-muted);
+
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-muted: var(--accent-muted);
+
+  --color-border-strong: var(--border-strong);
+  --color-border-muted: var(--border-muted);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+
   /* Border Radii */
   --radius-none: var(--radius-none);
   --radius-xs: var(--radius-xs);
@@ -111,3 +125,73 @@
   --spacing-12: var(--spacing-12);
   --spacing-16: var(--spacing-16);
 }
+
+/* 6. Enterprise Button Utilities */
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+.btn-primary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn-secondary {
+  background-color: var(--surface-elevated);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.btn-secondary:hover {
+  background-color: var(--surface-muted);
+  border-color: var(--border-strong);
+}
+.btn-secondary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn-tertiary {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.btn-tertiary:hover {
+  background-color: var(--surface-elevated);
+  color: var(--text-primary);
+}
+.btn-tertiary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn-destructive {
+  background-color: var(--destructive);
+  color: var(--destructive-foreground);
+  border: 1px solid var(--destructive);
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.btn-destructive:hover {
+  background-color: #ef4444;
+  border-color: #ef4444;
+}
+.btn-destructive:focus-visible {
+  outline: 2px solid var(--destructive);
+  outline-offset: 2px;
+}
+

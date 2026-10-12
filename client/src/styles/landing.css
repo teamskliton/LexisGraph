@@ -66,8 +66,8 @@
   left: 50%;
   transform: translateX(-50%);
   width: 2px;
-  background: linear-gradient(to bottom, var(--primary), var(--accent));
-  opacity: 0.35;
+  background: var(--border);
+  opacity: 0.6;
 }
 
 .flow-connector-h {
@@ -75,8 +75,8 @@
   top: 50%;
   transform: translateY(-50%);
   height: 2px;
-  background: linear-gradient(to right, var(--primary), var(--accent));
-  opacity: 0.35;
+  background: var(--border);
+  opacity: 0.6;
 }
 
 .flow-node {
@@ -195,18 +195,12 @@
 .hero-mesh {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 80% 50% at 20% 40%, rgba(37,99,235,0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 70%, rgba(16,185,129,0.08) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 40% at 50% 10%, rgba(79,70,229,0.07) 0%, transparent 50%);
+  background: transparent;
   pointer-events: none;
 }
 
 .dark .hero-mesh {
-  background:
-    radial-gradient(ellipse 80% 50% at 20% 40%, rgba(37,99,235,0.20) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 70%, rgba(16,185,129,0.14) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 40% at 50% 10%, rgba(79,70,229,0.12) 0%, transparent 50%);
+  background: transparent;
 }
 
 /* -------------------------------------------------------------------------
@@ -344,22 +338,14 @@
    ------------------------------------------------------------------------- */
 
 .cta-gradient {
-  background: linear-gradient(
-    135deg,
-    var(--gradient-hero-from) 0%,
-    var(--gradient-hero-via) 50%,
-    var(--gradient-hero-to) 100%
-  );
+  background: var(--surface);
+  border: 1px solid var(--border);
   position: relative;
   overflow: hidden;
 }
 
 .cta-gradient::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 70% 60% at 30% 50%, rgba(255,255,255,0.08) 0%, transparent 70%);
-  pointer-events: none;
+  display: none;
 }
 
 /* -------------------------------------------------------------------------
