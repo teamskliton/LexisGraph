@@ -141,7 +141,7 @@ export function NotificationsWorkspace() {
       case "FINDING_REJECTED":
         return <ShieldAlert className="h-5 w-5 text-rose-500 shrink-0" />;
       case "FINDING_ASSIGNED":
-        return <UserCheck className="h-5 w-5 text-indigo-500 shrink-0" />;
+        return <UserCheck className="h-5 w-5 text-primary shrink-0" />;
       case "FINDING_STATUS_CHANGED":
         return <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0" />;
       case "FINDING_COMMENTED":
@@ -178,10 +178,10 @@ export function NotificationsWorkspace() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <Bell className="h-5 w-5 text-indigo-500" /> Notifications & Alerts
+                  <Bell className="h-5 w-5 text-primary" /> Notifications & Alerts
                 </h1>
                 {unreadCount > 0 && (
-                  <Badge variant="outline" className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20 text-xs font-semibold">
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold">
                     {unreadCount} Unread
                   </Badge>
                 )}
@@ -284,7 +284,7 @@ export function NotificationsWorkspace() {
                 onClick={() => handleMarkAsRead(item)}
                 className={cn(
                   "border border-border/60 bg-card hover:border-border transition-all cursor-pointer p-4 space-y-2 group shadow-xs",
-                  !item.is_read && "border-indigo-500/40 bg-indigo-500/5 dark:bg-indigo-500/10"
+                  !item.is_read && "border-primary/40 bg-primary/5 dark:bg-primary/10"
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -292,7 +292,7 @@ export function NotificationsWorkspace() {
                     {/* Unread indicator */}
                     <div className="mt-2 shrink-0">
                       {!item.is_read ? (
-                        <span className="h-2.5 w-2.5 rounded-full bg-indigo-600 dark:bg-indigo-400 block" title="Unread" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-primary block" title="Unread" />
                       ) : (
                         <span className="h-2.5 w-2.5 rounded-full border border-muted-foreground/30 block" title="Read" />
                       )}
@@ -308,7 +308,7 @@ export function NotificationsWorkspace() {
                           {item.title}
                         </h4>
                         {!item.is_read && (
-                          <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 text-[10px] font-bold">
+                          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold">
                             Unread
                           </Badge>
                         )}
@@ -320,7 +320,7 @@ export function NotificationsWorkspace() {
                           {format(new Date(item.created_at), "MMM d, yyyy · HH:mm")}
                         </span>
                         {item.finding_id && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono text-indigo-600 dark:text-indigo-400 border-indigo-500/20 bg-indigo-500/5">
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono text-primary border-primary/20 bg-primary/5">
                             Finding #{item.finding_id.slice(0, 8)}
                           </Badge>
                         )}
@@ -334,7 +334,7 @@ export function NotificationsWorkspace() {
                   </div>
 
                   {item.finding_id && (
-                    <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-indigo-500 gap-1 group-hover:translate-x-0.5 transition-transform shrink-0">
+                    <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-primary gap-1 group-hover:translate-x-0.5 transition-transform shrink-0">
                       <span>Inspect Finding</span>
                       <ExternalLink className="h-3 w-3" />
                     </Button>

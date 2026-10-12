@@ -147,7 +147,7 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
       case "FINDING_REJECTED":
         return <ShieldAlert className="h-4 w-4 text-rose-500 shrink-0" />;
       case "FINDING_ASSIGNED":
-        return <UserCheck className="h-4 w-4 text-indigo-500 shrink-0" />;
+        return <UserCheck className="h-4 w-4 text-primary shrink-0" />;
       case "FINDING_STATUS_CHANGED":
         return <ShieldAlert className="h-4 w-4 text-amber-500 shrink-0" />;
       case "FINDING_COMMENTED":
@@ -196,7 +196,7 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-foreground">Notifications</span>
                 {unreadCount > 0 && (
-                  <Badge variant="outline" className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20 text-[10px] font-semibold">
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px] font-semibold">
                     {unreadCount} unread
                   </Badge>
                 )}
@@ -235,7 +235,7 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
                 className={cn(
                   "flex-1 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer text-center",
                   filterTab === "UNREAD"
-                    ? "bg-background text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                    ? "bg-background text-primary shadow-xs font-bold"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -277,13 +277,13 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
                   onClick={() => handleMarkAsRead(n)}
                   className={cn(
                     "p-3 flex items-start gap-2.5 transition-colors cursor-pointer hover:bg-muted/40",
-                    !n.is_read ? "bg-indigo-500/5 dark:bg-indigo-500/10" : "opacity-85"
+                    !n.is_read ? "bg-primary/5 dark:bg-primary/10" : "opacity-85"
                   )}
                 >
                   {/* Read / Unread bullet indicator */}
                   <div className="mt-1 flex items-center justify-center shrink-0">
                     {!n.is_read ? (
-                      <span className="h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400" title="Unread notification" />
+                      <span className="h-2 w-2 rounded-full bg-primary" title="Unread notification" />
                     ) : (
                       <span className="h-2 w-2 rounded-full border border-muted-foreground/40" title="Read notification" />
                     )}
@@ -306,7 +306,7 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
                     {/* Structured context badges */}
                     <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                       {n.finding_id && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono text-indigo-600 dark:text-indigo-400 border-indigo-500/20 bg-indigo-500/5">
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono text-primary border-primary/20 bg-primary/5">
                           Finding #{n.finding_id.slice(0, 8)}
                         </Badge>
                       )}
@@ -331,7 +331,7 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
                 setIsOpen(false);
                 router.push("/notifications");
               }}
-              className="w-full text-xs font-semibold text-indigo-500 hover:text-indigo-600 gap-1 cursor-pointer"
+              className="w-full text-xs font-semibold text-primary hover:text-primary-hover gap-1 cursor-pointer"
             >
               <span>View Notification Center</span>
               <ExternalLink className="h-3 w-3" />

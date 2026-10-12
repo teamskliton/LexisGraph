@@ -43,14 +43,14 @@ export function ThemeToggle({ className }: ThemeToggleProps = {}) {
       variant="ghost"
       size="icon-sm"
       onClick={toggle}
-      className={cn("relative rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors", className)}
+      className={cn("relative rounded-lg hover:bg-surface-elevated text-foreground transition-colors", className)}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
       {isDark ? (
-        <Sun className="h-[1.15rem] w-[1.15rem] text-amber-400 transition-transform duration-200 hover:rotate-45" />
+        <Sun className="h-[1.15rem] w-[1.15rem] text-warning transition-transform duration-200 hover:rotate-45" />
       ) : (
-        <Moon className="h-[1.15rem] w-[1.15rem] text-slate-700 transition-transform duration-200 hover:-rotate-12" />
+        <Moon className="h-[1.15rem] w-[1.15rem] text-foreground transition-transform duration-200 hover:-rotate-12" />
       )}
     </Button>
   );

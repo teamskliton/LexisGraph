@@ -396,7 +396,7 @@ function QuickActions({
               onClick={() => handleAction("/ai-assistant")}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/50 transition-colors text-left"
             >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
               <div className="flex-1 truncate">
                 <p className="font-medium">AI Legal Assistant</p>
                 <p className="text-[10px] text-[var(--sidebar-muted)]">Query regulatory graph</p>
@@ -413,7 +413,7 @@ function QuickActions({
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/50 transition-colors text-left"
                 >
-                  <Building2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
                   <span className="font-medium truncate">Create Organization</span>
                 </button>
               </>

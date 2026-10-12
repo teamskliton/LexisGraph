@@ -91,7 +91,7 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
   if (isLoading || !currentOrg) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-400 text-xs">
-        <Building2 className="w-4 h-4 text-indigo-400 animate-pulse" />
+        <Building2 className="w-4 h-4 text-primary animate-pulse" />
         <span>Loading Workspaces...</span>
       </div>
     );
@@ -132,7 +132,7 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
                 onClick={() => handleSelectOrg(org)}
                 className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs cursor-pointer ${
                   isSelected
-                    ? 'bg-indigo-600/10 text-indigo-400 font-semibold'
+                    ? 'bg-primary/10 text-primary font-semibold'
                     : 'hover:bg-slate-800/80 text-slate-300'
                 }`}
               >
@@ -146,7 +146,7 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
                   />
                   <span className="truncate">{org.name}</span>
                 </div>
-                {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
               </DropdownMenuItem>
             );
           })}
@@ -156,9 +156,9 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
               <DropdownMenuSeparator className="bg-slate-800 my-1" />
               <DropdownMenuItem
                 onClick={() => setIsCreateOpen(true)}
-                className="flex items-center gap-2 px-2.5 py-2 text-indigo-400 hover:bg-indigo-950/40 font-semibold text-xs cursor-pointer rounded-lg"
+                className="flex items-center gap-2 px-2.5 py-2 text-primary hover:bg-primary/10 font-semibold text-xs cursor-pointer rounded-lg"
               >
-                <Plus className="w-4 h-4 shrink-0 text-indigo-400" />
+                <Plus className="w-4 h-4 shrink-0 text-primary" />
                 <span>Create Organization</span>
               </DropdownMenuItem>
             </>

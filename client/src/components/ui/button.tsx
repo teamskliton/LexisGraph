@@ -7,58 +7,52 @@ const buttonVariants = cva(
   // Base — shared across all variants
   [
     "group/button inline-flex shrink-0 items-center justify-center",
-    "rounded-lg border border-transparent bg-clip-padding",
+    "rounded-md border border-transparent bg-clip-padding",
     "text-sm font-medium whitespace-nowrap",
     "outline-none select-none",
-    // Transitions — only properties we animate
-    "transition-[background-color,border-color,box-shadow,opacity,transform] duration-150 ease-out",
-    // Focus ring — WCAG AA visible
-    "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-    // Press feedback
-    "active:not-aria-[haspopup]:translate-y-px",
+    // Transitions — clean 150ms ease without bouncy scaling
+    "transition-[background-color,border-color,opacity] duration-150 ease-out",
+    // Focus ring — WCAG AA visible outline
+    "focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2",
     // Disabled
     "disabled:pointer-events-none disabled:opacity-50",
     // Validation
-    "aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
-    "dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+    "aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/30",
     // Icon sizing
     "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   ],
   {
     variants: {
       variant: {
-        // Primary — attracts attention, uses explicit color tokens not opacity
+        // Primary — solid primary background with contrast text
         default: [
-          "bg-primary text-primary-foreground shadow-xs",
-          "hover:bg-(--primary-hover,#1D4ED8) hover:shadow-sm",
-          "active:bg-(--primary-active,#1E40AF)",
+          "bg-primary text-primary-foreground font-semibold border border-primary",
+          "hover:bg-primary-hover hover:border-primary-hover",
+          "active:bg-primary-active",
         ],
-        // Outline — subtle, secondary actions
+        // Outline — clean border with card surface
         outline: [
-          "border-border bg-background text-foreground",
-          "hover:bg-muted hover:border-border-strong hover:text-foreground",
-          "aria-expanded:bg-muted aria-expanded:text-foreground",
-          "dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border border-border bg-card text-foreground",
+          "hover:bg-surface-elevated hover:border-border-strong hover:text-foreground",
+          "aria-expanded:bg-surface-elevated aria-expanded:text-foreground",
         ],
-        // Secondary — muted surface
+        // Secondary — solid secondary surface with contrast text and border
         secondary: [
-          "bg-secondary text-secondary-foreground",
-          "hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]",
-          "aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "bg-secondary text-secondary-foreground border border-border",
+          "hover:bg-surface-muted hover:border-border-strong",
+          "aria-expanded:bg-surface-muted aria-expanded:text-secondary-foreground",
         ],
-        // Ghost — minimal, for nav/icon actions
+        // Tertiary / Ghost — transparent background with neutral text and subtle hover
         ghost: [
-          "hover:bg-muted hover:text-foreground",
-          "aria-expanded:bg-muted aria-expanded:text-foreground",
-          "dark:hover:bg-muted/50",
+          "bg-transparent text-muted-foreground",
+          "hover:bg-surface-elevated hover:text-foreground",
+          "aria-expanded:bg-surface-elevated aria-expanded:text-foreground",
         ],
-        // Destructive — danger zone
+        // Destructive — solid accessible error treatment without gradients
         destructive: [
-          "bg-destructive/10 text-destructive",
-          "hover:bg-destructive/20",
-          "focus-visible:border-destructive/40 focus-visible:ring-destructive/20",
-          "dark:bg-destructive/20 dark:hover:bg-destructive/30",
-          "dark:focus-visible:ring-destructive/40",
+          "bg-destructive text-destructive-foreground font-semibold border border-destructive",
+          "hover:bg-destructive/90 hover:border-destructive/90",
+          "active:bg-destructive/80",
         ],
         // Link — inline text action
         link: "text-primary underline-offset-4 hover:underline",
