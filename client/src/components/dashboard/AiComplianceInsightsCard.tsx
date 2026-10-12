@@ -108,7 +108,7 @@ export const AiComplianceInsightsCard: React.FC<AiComplianceInsightsCardProps> =
                 </span>
               </CardTitle>
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-accent bg-accent/10 border border-accent/20 px-2.5 py-0.5 rounded-full">
               <Sparkles className="h-3 w-3" />
               <span>Powered by LexisGraph AI</span>
             </div>
@@ -153,14 +153,14 @@ export const AiComplianceInsightsCard: React.FC<AiComplianceInsightsCardProps> =
         <CardHeader className="py-2.5 px-4 border-b border-border/40">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent shrink-0">
                 <Sparkles className="h-3.5 w-3.5" />
               </div>
               <CardTitle className="text-xs font-semibold text-foreground">
                 AI Compliance Insights
               </CardTitle>
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-accent bg-accent/10 border border-accent/20 px-2.5 py-0.5 rounded-full">
               <Sparkles className="h-3 w-3" />
               <span>Powered by LexisGraph AI</span>
             </div>
@@ -281,10 +281,10 @@ export const AiComplianceInsightsCard: React.FC<AiComplianceInsightsCardProps> =
   structuredInsights.push({
     id: "i3",
     category: "Knowledge Graph",
-    categoryStyle: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
+    categoryStyle: "bg-accent/10 text-accent border-accent/20",
     title: "No recent regulation conflicts found.",
     detail: "Knowledge Graph rules fully synchronized.",
-    icon: <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />,
+    icon: <CheckCircle2 className="h-3.5 w-3.5 text-accent shrink-0" />,
   });
 
   const displayInsights = structuredInsights.slice(0, 3);
@@ -302,7 +302,7 @@ export const AiComplianceInsightsCard: React.FC<AiComplianceInsightsCardProps> =
       <CardHeader className="py-2.5 px-4 border-b border-border/40">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent shrink-0">
               <Sparkles className="h-3.5 w-3.5" />
             </div>
             <CardTitle className="text-xs font-semibold text-foreground">
@@ -312,7 +312,7 @@ export const AiComplianceInsightsCard: React.FC<AiComplianceInsightsCardProps> =
 
           <div className="flex items-center gap-2">
             {/* Powered by LexisGraph AI badge */}
-            <div className="hidden sm:flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">
+            <div className="hidden sm:flex items-center gap-1 text-xs font-medium text-accent bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-full">
               <Sparkles className="h-3 w-3" />
               <span>Powered by LexisGraph AI</span>
             </div>
@@ -398,7 +398,7 @@ export const AiComplianceInsightsCard: React.FC<AiComplianceInsightsCardProps> =
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-border/40 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5 font-medium">
             <span className="flex items-center gap-1 text-foreground font-semibold">
-              <Shield className="h-3.5 w-3.5 text-indigo-500" />
+              <Shield className="h-3.5 w-3.5 text-accent" />
               AI Confidence: 94%
             </span>
             <span>•</span>

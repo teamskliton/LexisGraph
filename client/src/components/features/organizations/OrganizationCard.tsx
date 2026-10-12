@@ -231,7 +231,7 @@ export const OrganizationCard = memo(function OrganizationCard({
             <Button
               size="sm"
               onClick={handleRunAnalysis}
-              className="h-8 px-3 text-xs gap-1 font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs"
+              className="h-8 px-3 text-xs gap-1 font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground shadow-2xs"
             >
               <Zap className="h-3 w-3 text-amber-300" />
               <span>Analyze</span>
@@ -429,7 +429,7 @@ export const OrganizationCard = memo(function OrganizationCard({
         <Button
           size="sm"
           onClick={handleRunAnalysis}
-          className="flex-1 h-8 text-xs font-semibold gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs"
+          className="flex-1 h-8 text-xs font-semibold gap-1.5 cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground shadow-2xs"
         >
           <Zap className="h-3.5 w-3.5 text-amber-300" />
           <span>Run Analysis</span>

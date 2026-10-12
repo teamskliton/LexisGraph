@@ -66,7 +66,7 @@ export const ReportMetadata: React.FC<ReportMetadataProps> = ({ report }) => {
           {/* Created At */}
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+              <Calendar className="h-3.5 w-3.5 text-primary" />
               Created At
             </span>
             <p className="text-xs font-medium text-foreground">
@@ -77,7 +77,7 @@ export const ReportMetadata: React.FC<ReportMetadataProps> = ({ report }) => {
           {/* Updated At */}
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+              <Calendar className="h-3.5 w-3.5 text-primary" />
               Last Updated At
             </span>
             <p className="text-xs font-medium text-foreground">

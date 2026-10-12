@@ -32,7 +32,7 @@ export function SourceCard({ sources, onSelectSource }: SourceCardProps) {
         className="flex items-center justify-between cursor-pointer group py-1"
       >
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-          <BookOpen className="h-3.5 w-3.5 text-indigo-500" />
+          <BookOpen className="h-3.5 w-3.5 text-primary" />
           <span>Legal Evidence & Citations ({sources.length})</span>
         </div>
         <button className="text-muted-foreground group-hover:text-foreground">
@@ -50,11 +50,11 @@ export function SourceCard({ sources, onSelectSource }: SourceCardProps) {
             >
               <CardContent className="p-3 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-foreground truncate flex items-center gap-1.5 group-hover/card:text-indigo-600 dark:group-hover/card:text-indigo-400 transition-colors">
-                    <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                  <span className="font-semibold text-foreground truncate flex items-center gap-1.5 group-hover/card:text-primary transition-colors">
+                    <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
                     <span className="truncate">{src.document}</span>
                   </span>
-                  <span className="px-1.5 py-0.5 text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded font-medium border border-indigo-500/20 shrink-0">
+                  <span className="px-1.5 py-0.5 text-[10px] bg-primary/10 text-primary rounded font-medium border border-primary/20 shrink-0">
                     {src.search_source}
                   </span>
                 </div>
@@ -69,7 +69,7 @@ export function SourceCard({ sources, onSelectSource }: SourceCardProps) {
                     <span>•</span>
                     <span>Page {src.page || 1}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
+                  <div className="flex items-center gap-1 text-primary font-medium">
                     <span>{((src.similarity || src.confidence_score || 0.9) * 100).toFixed(0)}% match</span>
                     <ExternalLink className="h-3 w-3 ml-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity" />
                   </div>

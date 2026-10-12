@@ -54,7 +54,7 @@ export const ReportComparisonModal: React.FC<ReportComparisonModalProps> = ({
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-400 mx-auto" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
           <p className="text-sm font-medium text-slate-300">Comparing report versions...</p>
         </div>
       </div>
@@ -72,7 +72,7 @@ export const ReportComparisonModal: React.FC<ReportComparisonModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2">
-            <GitCompare className="w-5 h-5 text-indigo-400" />
+            <GitCompare className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-bold text-slate-100">Compliance Report Comparison</h2>
           </div>
           <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8 text-slate-400 hover:text-white">
@@ -149,10 +149,10 @@ export const ReportComparisonModal: React.FC<ReportComparisonModalProps> = ({
             size="sm"
             variant={activeTab === 'new' ? 'default' : 'ghost'}
             onClick={() => setActiveTab('new')}
-            className={`text-xs h-8 px-3 rounded-lg ${activeTab === 'new' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+            className={`text-xs h-8 px-3 rounded-lg ${activeTab === 'new' ? 'bg-primary text-primary-foreground' : 'text-slate-400'
               }`}
           >
-            <FileCheck className="w-3.5 h-3.5 mr-1 text-indigo-400" />
+            <FileCheck className="w-3.5 h-3.5 mr-1 text-primary" />
             New Items ({data.new_findings?.length || 0})
           </Button>
         </div>

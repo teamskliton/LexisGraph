@@ -89,7 +89,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
         <div className="space-y-1.5 text-xs text-muted-foreground">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-muted-foreground">
-              <FileText className="h-3.5 w-3.5 text-indigo-500" />
+              <FileText className="h-3.5 w-3.5 text-primary" />
               Regulation:
             </span>
             <span className="font-mono text-foreground truncate max-w-[150px]" title={regId}>
@@ -126,9 +126,9 @@ export const ReportCard: React.FC<ReportCardProps> = ({
             variant="outline"
             size="xs"
             onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
-            className="flex-1 text-xs gap-1 cursor-pointer text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+            className="flex-1 text-xs gap-1 cursor-pointer text-primary border-primary/30"
           >
-            <ShieldAlert className="h-3.5 w-3.5 text-indigo-500" />
+            <ShieldAlert className="h-3.5 w-3.5 text-primary" />
             <span>Findings</span>
           </Button>
 
@@ -160,7 +160,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
 
         <Button
           onClick={() => onViewReport(reportId)}
-          className="w-full gap-2 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+          className="w-full gap-2 cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground font-semibold"
           size="sm"
         >
           <Eye className="h-4 w-4" />

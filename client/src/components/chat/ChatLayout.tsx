@@ -143,12 +143,12 @@ export function ChatLayout({
               <h1 className="font-semibold text-sm text-foreground flex items-center gap-2">
                 <span>{activeConversationTitle || "AI Legal Assistant"}</span>
                 {isStreaming ? (
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full font-medium border border-indigo-500/20 animate-pulse">
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] bg-accent/10 text-accent rounded-full font-medium border border-accent/20 animate-pulse">
                     <Sparkles className="h-3 w-3" />
                     Streaming...
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full font-medium border border-indigo-500/20">
+                  <span className="px-2 py-0.5 text-[10px] bg-accent/10 text-accent rounded-full font-medium border border-accent/20">
                     Hybrid GraphRAG
                   </span>
                 )}
@@ -171,7 +171,7 @@ export function ChatLayout({
               onClick={onNavigateCompliance}
               className="text-xs gap-1.5 hidden sm:flex"
             >
-              <BookOpen className="h-3.5 w-3.5 text-indigo-500" />
+              <BookOpen className="h-3.5 w-3.5 text-primary" />
               Compliance Engine
             </Button>
           </div>

@@ -43,7 +43,7 @@ export const TopOrganizationsChart: React.FC<TopOrganizationsChartProps> = ({
       <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
               <Building2 className="h-4 w-4" />
             </div>
             <CardTitle className="text-sm font-semibold text-foreground">

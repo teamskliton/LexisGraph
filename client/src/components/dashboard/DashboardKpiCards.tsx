@@ -66,7 +66,7 @@ function buildCards(kpis: KpiStats): KpiCardData[] {
       value: kpis.total_organizations,
       description: "Active compliance workspaces under management",
       icon: <Building2 className="h-4 w-4" />,
-      iconBg: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+      iconBg: "bg-primary/10 text-primary",
       status: activeStatus(kpis.total_organizations, "Active"),
     },
     {
@@ -74,7 +74,7 @@ function buildCards(kpis: KpiStats): KpiCardData[] {
       value: kpis.total_regulations,
       description: "Global regulations indexed in the knowledge graph",
       icon: <FileText className="h-4 w-4" />,
-      iconBg: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+      iconBg: "bg-accent/10 text-accent",
       status: activeStatus(kpis.total_regulations, "Indexed"),
     },
     {
@@ -90,7 +90,7 @@ function buildCards(kpis: KpiStats): KpiCardData[] {
       value: kpis.total_compliance_reports,
       description: "AI-generated audit analyses completed",
       icon: <BarChart3 className="h-4 w-4" />,
-      iconBg: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+      iconBg: "bg-primary/10 text-primary",
       status: activeStatus(kpis.total_compliance_reports, "Analyzed"),
     },
     {

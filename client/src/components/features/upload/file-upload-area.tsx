@@ -101,8 +101,8 @@ export function FileUploadArea({
         className={cn(
           "relative flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 transition-all duration-200",
           isDragOver && !disabled
-            ? "border-indigo-500 bg-indigo-500/5"
-            : "border-border hover:border-indigo-500/30 hover:bg-muted/50",
+            ? "border-primary bg-primary/5"
+            : "border-border hover:border-primary/30 hover:bg-muted/50",
           disabled && "cursor-not-allowed opacity-50",
           error && !file && "border-destructive/50 bg-destructive/5",
           file && !isUploading && "border-emerald-500/30 bg-emerald-500/5"
@@ -134,8 +134,8 @@ export function FileUploadArea({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-500/10">
-              <UploadIcon className="h-6 w-6 text-indigo-500" aria-hidden="true" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <UploadIcon className="h-6 w-6 text-primary" aria-hidden="true" />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">

@@ -131,12 +131,12 @@ export function ConversationSidebar({
         }}
         className={`group relative flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors text-xs ${
           isActive
-            ? "bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 font-medium border border-indigo-500/20"
+            ? "bg-primary/10 text-primary font-medium border border-primary/20"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
         }`}
       >
         <div className="flex items-center gap-2.5 truncate flex-1 min-w-0">
-          <MessageSquare className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+          <MessageSquare className="h-3.5 w-3.5 shrink-0 text-primary" />
 
           {isEditing ? (
             <form onSubmit={(e) => saveRename(conv.id, e)} className="flex items-center gap-1 flex-1">
@@ -144,7 +144,7 @@ export function ConversationSidebar({
                 type="text"
                 value={editingTitle}
                 onChange={(e) => setEditingTitle(e.target.value)}
-                className="w-full px-1.5 py-0.5 text-xs bg-background border border-indigo-500 rounded text-foreground focus:outline-none"
+                className="w-full px-1.5 py-0.5 text-xs bg-background border border-primary rounded text-foreground focus:outline-none"
                 autoFocus
               />
               <button type="submit" className="text-emerald-500 hover:text-emerald-600 p-0.5">
@@ -205,7 +205,7 @@ export function ConversationSidebar({
                   onClick={(e) => startRename(conv, e)}
                   className="w-full text-left px-2.5 py-1.5 hover:bg-muted rounded-lg flex items-center gap-2"
                 >
-                  <Edit2 className="h-3.5 w-3.5 text-indigo-500" />
+                  <Edit2 className="h-3.5 w-3.5 text-primary" />
                   <span>Rename</span>
                 </button>
 
@@ -271,7 +271,7 @@ export function ConversationSidebar({
       <div className="p-3 space-y-2">
         <Button
           onClick={onNewChat}
-          className="w-full flex items-center justify-between bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm text-xs font-semibold py-2"
+          className="w-full flex items-center justify-between bg-primary hover:bg-primary-hover text-primary-foreground shadow-sm text-xs font-semibold py-2"
         >
           <div className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
@@ -289,7 +289,7 @@ export function ConversationSidebar({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search queries... (Ctrl+K)"
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/50 rounded-md border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-muted-foreground"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/50 rounded-md border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
           />
         </div>
       </div>
@@ -305,7 +305,7 @@ export function ConversationSidebar({
             value={selectedOrgId}
             onChange={(e) => setSelectedOrgId(e.target.value)}
             disabled={isLoadingOrgs}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/50 rounded-md border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/50 rounded-md border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           >
             {organizations.map((org) => (
               <option key={org.id} value={org.id}>

@@ -13,7 +13,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({ summary }) => {
     <Card className="border-border/60 shadow-sm flex flex-col justify-between">
       <CardHeader className="pb-3 border-b border-border/40">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
             <Sparkles className="h-4 w-4" />
           </div>
           <CardTitle className="text-base font-bold text-foreground">

@@ -42,7 +42,7 @@ export const ReportsOverTimeChart: React.FC<ReportsOverTimeChartProps> = ({
       <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
               <TrendingUp className="h-4 w-4" />
             </div>
             <CardTitle className="text-sm font-semibold text-foreground">
@@ -66,12 +66,12 @@ export const ReportsOverTimeChart: React.FC<ReportsOverTimeChartProps> = ({
               return (
                 <div key={idx} className="flex flex-col items-center gap-1 flex-1 group/bar">
                   {/* Count label — appears above bar */}
-                  <span className="text-[10px] font-semibold font-mono tabular-nums text-muted-foreground/60 group-hover/bar:text-indigo-500 transition-colors duration-150">
+                  <span className="text-[10px] font-semibold font-mono tabular-nums text-muted-foreground/60 group-hover/bar:text-primary transition-colors duration-150">
                     {item.count}
                   </span>
                   {/* Bar */}
                   <div
-                    className="w-full max-w-[22px] rounded-t-[3px] bg-indigo-500/70 group-hover/bar:bg-indigo-500 dark:bg-indigo-500/60 dark:group-hover/bar:bg-indigo-400 transition-all duration-300 ease-out"
+                    className="w-full max-w-[22px] rounded-t-[3px] bg-primary/70 group-hover/bar:bg-primary transition-all duration-300 ease-out"
                     style={{ height: `${heightPct}%` }}
                   />
                   {/* X-axis label */}

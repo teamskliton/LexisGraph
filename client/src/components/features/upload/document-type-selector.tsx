@@ -57,7 +57,7 @@ export function DocumentTypeSelector({
           <SelectGroup>
             <SelectItem value="REGULATION">
               <div className="flex items-center gap-2">
-                <span className="flex h-2 w-2 rounded-full bg-indigo-500" />
+                <span className="flex h-2 w-2 rounded-full bg-primary" />
                 <span>Regulation</span>
               </div>
             </SelectItem>

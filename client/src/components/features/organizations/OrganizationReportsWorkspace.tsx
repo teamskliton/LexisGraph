@@ -248,7 +248,7 @@ export function OrganizationReportsWorkspace({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/40 pb-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
               <FileCheck className="h-5 w-5" />
             </div>
             <div>
@@ -266,7 +266,7 @@ export function OrganizationReportsWorkspace({
           <Button
             size="sm"
             onClick={() => router.push("/compliance")}
-            className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+            className="gap-1.5 text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
           >
             <Zap className="h-3.5 w-3.5" />
             <span>Run New Analysis</span>
@@ -283,7 +283,7 @@ export function OrganizationReportsWorkspace({
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Total Reports
               </span>
-              <FileCheck className="h-4 w-4 text-indigo-500" />
+              <FileCheck className="h-4 w-4 text-primary" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-bold tabular-nums text-foreground">
@@ -461,7 +461,7 @@ export function OrganizationReportsWorkspace({
       {/* ── 6. Empty State ── */}
       {!isLoading && !error && filteredReports.length === 0 && (
         <Card className="border border-dashed border-border/60 bg-muted/10 py-12 px-6 text-center space-y-4">
-          <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 flex items-center justify-center mx-auto">
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center mx-auto">
             <FileCheck className="h-6 w-6" />
           </div>
           <div className="space-y-1 max-w-sm mx-auto">
@@ -478,7 +478,7 @@ export function OrganizationReportsWorkspace({
             <Button
               size="sm"
               onClick={() => router.push("/compliance")}
-              className="text-xs font-semibold cursor-pointer gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="text-xs font-semibold cursor-pointer gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground"
             >
               <Zap className="h-3.5 w-3.5" />
               <span>Run Analysis</span>
@@ -531,7 +531,7 @@ export function OrganizationReportsWorkspace({
                         {/* Report Name */}
                         <td className="px-4 py-3.5 font-semibold text-foreground">
                           <div className="flex items-center gap-2">
-                            <FileCheck className="h-4 w-4 text-indigo-500 shrink-0" />
+                            <FileCheck className="h-4 w-4 text-primary shrink-0" />
                             <span className="truncate max-w-[220px]">
                               Compliance Report #{report.id.substring(0, 8)}
                             </span>
@@ -598,10 +598,10 @@ export function OrganizationReportsWorkspace({
                               variant="outline"
                               size="xs"
                               onClick={() => router.push(`/compliance/reports/${report.id}/findings`)}
-                              className="h-7 text-xs gap-1 cursor-pointer text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+                              className="h-7 text-xs gap-1 cursor-pointer text-primary border-primary/30 hover:bg-primary/10"
                               title="View Findings Workspace"
                             >
-                              <ShieldAlert className="h-3 w-3 text-indigo-500" />
+                              <ShieldAlert className="h-3 w-3 text-primary" />
                               <span>Findings</span>
                             </Button>
 
@@ -669,7 +669,7 @@ export function OrganizationReportsWorkspace({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <FileCheck className="h-4 w-4 text-indigo-500 shrink-0" />
+                      <FileCheck className="h-4 w-4 text-primary shrink-0" />
                       <span className="font-semibold text-xs text-foreground truncate">
                         Report #{report.id.substring(0, 8)}
                       </span>
@@ -722,7 +722,7 @@ export function OrganizationReportsWorkspace({
                     <Button
                       size="sm"
                       onClick={() => router.push(`/compliance/reports/${report.id}`)}
-                      className="h-8 text-xs font-semibold cursor-pointer gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                      className="h-8 text-xs font-semibold cursor-pointer gap-1 bg-primary hover:bg-primary-hover text-primary-foreground"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       <span>View Report</span>

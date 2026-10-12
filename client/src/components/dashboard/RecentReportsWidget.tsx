@@ -159,7 +159,7 @@ export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
       <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
               <FileText className="h-4 w-4" />
             </div>
             <CardTitle className="text-sm font-semibold text-foreground">
@@ -168,7 +168,7 @@ export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
           </div>
           <Link
             href="/reports"
-            className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
           >
             View All
             <ArrowRight className="h-3 w-3" />
@@ -204,7 +204,7 @@ export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
                   // Hover: left accent bar + background
                   "before:absolute before:left-0 before:inset-y-0 before:w-[3px] before:rounded-l-lg",
                   "before:bg-transparent before:transition-colors before:duration-150",
-                  "hover:bg-muted/30 hover:border-border hover:before:bg-indigo-500/60"
+                  "hover:bg-muted/30 hover:border-border hover:before:bg-primary"
                 )}
               >
                 {/* Score ring */}
@@ -213,7 +213,7 @@ export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
                 {/* Report info */}
                 <div className="flex-1 min-w-0">
                   <p
-                    className="text-sm font-semibold text-foreground truncate leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"
+                    className="text-sm font-semibold text-foreground truncate leading-snug group-hover:text-primary transition-colors"
                     title={report.name}
                   >
                     {report.name}

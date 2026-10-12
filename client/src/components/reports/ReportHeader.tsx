@@ -92,9 +92,9 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
-                className="gap-1.5 text-xs font-semibold cursor-pointer text-indigo-600 dark:text-indigo-400 border-indigo-500/30 shadow-2xs"
+                className="gap-1.5 text-xs font-semibold cursor-pointer text-primary border-primary/30 shadow-2xs"
               >
-                <FileCheck className="h-4 w-4 text-indigo-500" />
+                <FileCheck className="h-4 w-4 text-primary" />
                 <span>View Findings</span>
               </Button>
 
@@ -115,7 +115,7 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
               onClick={onDownloadPdf}
               disabled={isDownloadingPdf}
               size="sm"
-              className="gap-2 cursor-pointer shadow-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+              className="gap-2 cursor-pointer shadow-sm bg-primary hover:bg-primary-hover text-primary-foreground font-semibold"
             >
               {isDownloadingPdf ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -180,7 +180,7 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
         {/* Regulation vs Policy */}
         <div className="space-y-1">
           <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-            <FileText className="h-3.5 w-3.5 text-indigo-500" />
+            <FileText className="h-3.5 w-3.5 text-primary" />
             Regulation / Policy
           </span>
           <p className="text-xs font-mono text-foreground truncate" title={`Reg: ${regId || "N/A"} | Policy: ${polId || "N/A"}`}>

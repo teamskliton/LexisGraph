@@ -45,7 +45,7 @@ export const OrgScoresChart: React.FC<OrgScoresChartProps> = ({
       <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
               <Building2 className="h-4 w-4" />
             </div>
             <CardTitle className="text-sm font-semibold text-foreground">
@@ -58,7 +58,7 @@ export const OrgScoresChart: React.FC<OrgScoresChartProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={onAddOrg}
-                className="h-7 px-2.5 text-[11px] gap-1 cursor-pointer border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/50"
+                className="h-7 px-2.5 text-[11px] gap-1 cursor-pointer border-primary/20 text-primary hover:bg-primary/10"
               >
                 <Plus className="h-3 w-3" />
                 <span>Add Org</span>
@@ -80,7 +80,7 @@ export const OrgScoresChart: React.FC<OrgScoresChartProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={onAddOrg}
-                className="gap-1.5 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/50 cursor-pointer"
+                className="gap-1.5 text-xs border-primary/20 text-primary hover:bg-primary/10 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Create Organization</span>

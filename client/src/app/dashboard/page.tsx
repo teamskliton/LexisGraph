@@ -280,7 +280,7 @@ function DashboardContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsOrgDialogOpen(true)}
-                className="gap-1.5 cursor-pointer text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/50"
+                className="gap-1.5 cursor-pointer text-xs border-primary/20 text-primary hover:bg-primary/10"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>New Organization</span>
@@ -292,7 +292,7 @@ function DashboardContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => router.push("/compliance/my-work?view=all")}
-                className="gap-1.5 cursor-pointer text-xs border-purple-500/30 text-purple-600 hover:bg-purple-500/10 dark:text-purple-400 dark:hover:bg-purple-950/50 font-semibold"
+                className="gap-1.5 cursor-pointer text-xs border-primary/30 text-primary hover:bg-primary/10 font-semibold"
               >
                 <Layers className="h-3.5 w-3.5" />
                 <span>All Findings</span>

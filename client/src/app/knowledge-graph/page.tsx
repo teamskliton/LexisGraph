@@ -328,13 +328,13 @@ function KnowledgeGraphContent() {
                 Dashboard
               </Button>
               <span className="text-xs text-muted-foreground">/</span>
-              <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+              <span className="text-xs font-semibold text-accent">
                 Knowledge Graph Explorer
               </span>
             </div>
 
             <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl flex items-center gap-2">
-              <Network className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
+              <Network className="h-7 w-7 text-accent" />
               Compliance Knowledge Graph Explorer
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -368,7 +368,7 @@ function KnowledgeGraphContent() {
         {/* Top Summary Metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <Card className="p-3 border-border/60 flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
               <Scale className="h-4 w-4" />
             </div>
             <div>
@@ -388,7 +388,7 @@ function KnowledgeGraphContent() {
           </Card>
 
           <Card className="p-3 border-border/60 flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
               <FileText className="h-4 w-4" />
             </div>
             <div>
@@ -432,7 +432,7 @@ function KnowledgeGraphContent() {
         {traceabilityPath.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border/60 bg-muted/20 text-xs overflow-x-auto">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground shrink-0 flex items-center gap-1">
-              <Sparkles className="h-3 w-3 text-indigo-500" />
+              <Sparkles className="h-3 w-3 text-accent" />
               Trace:
             </span>
             <div className="flex items-center gap-1.5 flex-nowrap">
@@ -445,7 +445,7 @@ function KnowledgeGraphContent() {
                     className={cn(
                       "px-2 py-0.5 rounded font-medium transition-colors shrink-0 cursor-pointer",
                       selectedNode?.id === item.node.id
-                        ? "bg-indigo-600 text-white font-bold"
+                        ? "bg-primary text-primary-foreground font-bold"
                         : "bg-background border border-border text-foreground hover:bg-muted"
                     )}
                   >
@@ -555,7 +555,7 @@ function KnowledgeGraphContent() {
             <Card className="lg:col-span-2 flex flex-col shadow-xs">
               <CardHeader className="py-3 px-5 border-b border-border/40 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Network className="h-4 w-4 text-indigo-500" />
+                  <Network className="h-4 w-4 text-accent" />
                   Knowledge Graph Canvas
                   <span className="text-xs font-normal text-muted-foreground">
                     ({filteredNodes.length} Nodes, {filteredEdges.length} Edges)
@@ -594,7 +594,7 @@ function KnowledgeGraphContent() {
             <Card className="lg:col-span-1 flex flex-col justify-between shadow-xs">
               <CardHeader className="py-3 px-5 border-b border-border/40">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-indigo-500" />
+                  <Activity className="h-4 w-4 text-accent" />
                   Node Inspector
                 </CardTitle>
               </CardHeader>
@@ -680,7 +680,7 @@ function KnowledgeGraphContent() {
                           <Button
                             variant="default"
                             size="sm"
-                            className="w-full text-xs font-semibold gap-1 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+                            className="w-full text-xs font-semibold gap-1 cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
                             onClick={() => handleOpenAnalysis(selectedNode)}
                           >
                             <ExternalLink className="h-3 w-3" />
@@ -736,7 +736,7 @@ function KnowledgeGraphContent() {
                         <Button
                           variant="default"
                           size="sm"
-                          className="w-full text-xs font-semibold gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white mt-1"
+                          className="w-full text-xs font-semibold gap-1.5 cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground mt-1"
                           onClick={() => handleOpenFinding(selectedNode)}
                         >
                           <ExternalLink className="h-3 w-3" />
@@ -761,7 +761,7 @@ function KnowledgeGraphContent() {
                           <Button
                             variant="default"
                             size="sm"
-                            className="w-full text-xs font-semibold gap-1 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+                            className="w-full text-xs font-semibold gap-1 cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
                             onClick={() => handleOpenDocument(selectedNode)}
                           >
                             <FileText className="h-3 w-3" />
@@ -795,7 +795,7 @@ function KnowledgeGraphContent() {
                         <Button
                           variant="default"
                           size="sm"
-                          className="w-full text-xs font-semibold gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+                          className="w-full text-xs font-semibold gap-1.5 cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
                           onClick={() => router.push("/compliance")}
                         >
                           <Scale className="h-3.5 w-3.5" />

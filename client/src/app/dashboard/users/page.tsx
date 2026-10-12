@@ -252,7 +252,7 @@ export function UserManagementContent() {
         <div className="space-y-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-bold flex items-center gap-2 text-foreground">
-              <Users className="w-6 h-6 text-indigo-500" />
+              <Users className="w-6 h-6 text-primary" />
               Team & Member Management
             </h1>
             <OrganizationSwitcher onOrganizationChanged={fetchTeamData} />
@@ -271,7 +271,7 @@ export function UserManagementContent() {
                 setGeneratedInviteUrl('');
                 setInviteEmail('');
               }}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 h-9 rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer shrink-0"
+              className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs px-4 h-9 rounded-xl shadow-lg shadow-primary/20 cursor-pointer shrink-0"
             >
               <UserPlus className="w-4 h-4 mr-1.5" /> Invite Member
             </Button>
@@ -294,7 +294,7 @@ export function UserManagementContent() {
       {/* Main Content Area */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
           <span className="text-xs">Loading team members and invitations...</span>
         </div>
       ) : (
@@ -378,7 +378,7 @@ export function UserManagementContent() {
                                     setEditingMember(member);
                                     setNewRole(member.role);
                                   }}
-                                  className="h-7 w-7 text-muted-foreground hover:text-indigo-500 hover:bg-muted cursor-pointer"
+                                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-muted cursor-pointer"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -431,7 +431,7 @@ export function UserManagementContent() {
                               setEditingMember(member);
                               setNewRole(member.role);
                             }}
-                            className="h-7 text-xs text-indigo-500 hover:bg-indigo-500/10"
+                            className="h-7 text-xs text-primary hover:bg-primary/10"
                           >
                             <Edit2 className="w-3 h-3 mr-1" /> Edit Role
                           </Button>
@@ -455,7 +455,7 @@ export function UserManagementContent() {
           {/* Pending Invitations Section */}
           <div className="space-y-3 pt-2">
             <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-              <Mail className="w-4 h-4 text-indigo-500" /> Pending Invitations ({invitations.length})
+              <Mail className="w-4 h-4 text-primary" /> Pending Invitations ({invitations.length})
             </h2>
 
             {invitations.length === 0 ? (
@@ -532,7 +532,7 @@ export function UserManagementContent() {
           <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-indigo-500" /> Invite Team Member
+                <UserPlus className="w-4 h-4 text-primary" /> Invite Team Member
               </h3>
               <button
                 onClick={() => setShowInviteModal(false)}
@@ -552,7 +552,7 @@ export function UserManagementContent() {
                 }}
                 className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   inviteMethod === 'EMAIL'
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -567,7 +567,7 @@ export function UserManagementContent() {
                 }}
                 className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   inviteMethod === 'LINK'
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -589,7 +589,7 @@ export function UserManagementContent() {
                   />
                 </div>
               ) : (
-                <div className="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-xs text-muted-foreground leading-relaxed">
+                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-xs text-muted-foreground leading-relaxed">
                   Generates a secure, time-limited single-use link. Recipient can sign up or log in to join your organization workspace.
                 </div>
               )}
@@ -623,7 +623,7 @@ export function UserManagementContent() {
                       type="button"
                       size="xs"
                       onClick={() => handleShareLink(generatedInviteUrl)}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-3 cursor-pointer shrink-0 gap-1"
+                      className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-8 px-3 cursor-pointer shrink-0 gap-1"
                     >
                       {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       {copiedLink ? 'Copied' : 'Copy'}
@@ -648,7 +648,7 @@ export function UserManagementContent() {
                 <Button type="button" variant="ghost" onClick={() => setShowInviteModal(false)} className="text-xs h-8 text-muted-foreground">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSendingInvite} className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 cursor-pointer">
+                <Button type="submit" disabled={isSendingInvite} className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-8 px-4 cursor-pointer">
                   {isSendingInvite ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : inviteMethod === 'EMAIL' ? (
@@ -668,7 +668,7 @@ export function UserManagementContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-              <Shield className="w-4 h-4 text-indigo-500" /> Change Role for {editingMember.full_name}
+              <Shield className="w-4 h-4 text-primary" /> Change Role for {editingMember.full_name}
             </h3>
 
             <div className="space-y-3">
@@ -689,7 +689,7 @@ export function UserManagementContent() {
                 <Button variant="ghost" onClick={() => setEditingMember(null)} className="text-xs h-8 text-muted-foreground">
                   Cancel
                 </Button>
-                <Button onClick={handleUpdateRole} className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 cursor-pointer">
+                <Button onClick={handleUpdateRole} className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-8 px-4 cursor-pointer">
                   Save Role
                 </Button>
               </div>

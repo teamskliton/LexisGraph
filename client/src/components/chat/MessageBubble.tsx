@@ -67,7 +67,7 @@ function SimpleMarkdown({ content, isStreaming }: { content: string; isStreaming
           const itemText = trimmed.replace(/^[-*]\s+/, "");
           return (
             <div key={lineIdx} className="flex items-start gap-2 pl-2 my-1">
-              <span className="text-indigo-500 font-bold">•</span>
+              <span className="text-primary font-bold">•</span>
               <span>{renderFormattedText(itemText)}</span>
             </div>
           );
@@ -76,7 +76,7 @@ function SimpleMarkdown({ content, isStreaming }: { content: string; isStreaming
         return <p key={lineIdx}>{renderFormattedText(line)}</p>;
       })}
       {isStreaming && (
-        <span className="inline-block w-2 h-4 ml-1 bg-indigo-500 animate-pulse align-middle" />
+        <span className="inline-block w-2 h-4 ml-1 bg-accent animate-pulse align-middle" />
       )}
     </div>
   );
@@ -113,12 +113,12 @@ export const MessageBubble = React.memo(function MessageBubble({
   if (message.sender === "user") {
     return (
       <div className="flex gap-3 max-w-3xl ml-auto flex-row-reverse group">
-        <div className="h-8 w-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs shrink-0 shadow-sm">
+        <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs shrink-0 shadow-sm">
           <UserIcon className="h-4 w-4" />
         </div>
 
         <div className="space-y-1 max-w-full">
-          <div className="p-4 rounded-2xl bg-indigo-600 text-white text-sm rounded-tr-none shadow-sm">
+          <div className="p-4 rounded-2xl bg-primary text-primary-foreground text-sm rounded-tr-none shadow-sm">
             <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
           </div>
           <span className="text-[10px] text-muted-foreground px-1 block text-right">
@@ -131,7 +131,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 
   return (
     <div className="flex gap-3 max-w-3xl mr-auto group">
-      <div className="h-8 w-8 rounded-full bg-card border border-border text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs shrink-0 shadow-sm">
+      <div className="h-8 w-8 rounded-full bg-card border border-border text-accent flex items-center justify-center text-xs shrink-0 shadow-sm">
         <Bot className="h-4 w-4" />
       </div>
 
@@ -145,7 +145,7 @@ export const MessageBubble = React.memo(function MessageBubble({
               {isLong && (
                 <button
                   onClick={() => setIsCollapsed(!isCollapsed)}
-                  className="mt-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                  className="mt-2 text-xs font-semibold text-primary hover:underline flex items-center gap-1"
                 >
                   {isCollapsed ? (
                     <>
@@ -173,7 +173,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                 <button
                   onClick={() => setFeedback(feedback === "up" ? null : "up")}
                   className={`p-1 rounded hover:bg-muted transition-colors ${
-                    feedback === "up" ? "text-indigo-600 dark:text-indigo-400" : ""
+                    feedback === "up" ? "text-primary" : ""
                   }`}
                   title="Helpful response"
                 >

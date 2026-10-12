@@ -86,7 +86,7 @@ export function RecommendedActions({
   return (
     <div className="pt-3 space-y-2">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-        <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+        <Sparkles className="h-3.5 w-3.5 text-accent" />
         <span>Recommended Next Steps:</span>
       </div>
 
@@ -96,15 +96,15 @@ export function RecommendedActions({
           return (
             <Card
               key={idx}
-              className="bg-card/70 hover:bg-muted/50 border-border/80 text-xs transition-all shadow-sm group hover:border-indigo-500/30"
+              className="bg-card/70 hover:bg-muted/50 border-border/80 text-xs transition-all shadow-sm group hover:border-primary/30"
             >
               <CardContent className="p-3 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
                     <IconComp className="h-3.5 w-3.5" />
                   </div>
                   <div className="space-y-0.5">
-                    <h4 className="font-semibold text-foreground text-xs group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    <h4 className="font-semibold text-foreground text-xs group-hover:text-primary transition-colors">
                       {act.title}
                     </h4>
                     <p className="text-[11px] text-muted-foreground line-clamp-2">
@@ -117,7 +117,7 @@ export function RecommendedActions({
                   size="sm"
                   variant="ghost"
                   onClick={() => handleActionClick(act)}
-                  className="h-7 px-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 text-xs shrink-0 self-center"
+                  className="h-7 px-2 text-primary hover:underline text-xs shrink-0 self-center"
                 >
                   <span>Act</span>
                   <ArrowRight className="h-3 w-3 ml-1" />

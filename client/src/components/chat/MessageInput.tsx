@@ -54,7 +54,7 @@ export function MessageInput({
   return (
     <div className="p-4 border-t border-border bg-card/40 backdrop-blur shrink-0 relative">
       <form onSubmit={onSendMessage} className="max-w-3xl mx-auto space-y-1.5">
-        <div className="relative flex items-end gap-2 bg-muted/50 border border-border focus-within:border-indigo-500/50 rounded-2xl p-2 transition-all shadow-sm">
+        <div className="relative flex items-end gap-2 bg-muted/50 border border-border focus-within:border-primary/50 rounded-2xl p-2 transition-all shadow-sm">
           {/* File attachment button */}
           <Button
             type="button"
@@ -100,7 +100,7 @@ export function MessageInput({
             <Button
               type="submit"
               disabled={!inputQuery.trim()}
-              className="h-9 w-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shrink-0 p-0 shadow-md shadow-indigo-600/20 mb-0.5"
+              className="h-9 w-9 rounded-xl bg-primary hover:bg-primary-hover text-primary-foreground shrink-0 p-0 shadow-md shadow-primary/20 mb-0.5"
             >
               <Send className="h-4 w-4" />
             </Button>

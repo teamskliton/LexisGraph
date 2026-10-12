@@ -22,7 +22,7 @@ export function RelatedDocuments({ documents, onOpenDocument }: RelatedDocuments
   return (
     <div className="pt-3 space-y-2">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-        <BookOpen className="h-3.5 w-3.5 text-indigo-500" />
+        <BookOpen className="h-3.5 w-3.5 text-primary" />
         <span>Related Corpus Documents ({documents.length}):</span>
       </div>
 
@@ -35,7 +35,7 @@ export function RelatedDocuments({ documents, onOpenDocument }: RelatedDocuments
             <CardContent className="p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-foreground truncate flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
                   <span className="truncate">{doc.title}</span>
                 </span>
                 <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded font-medium border border-emerald-500/20 shrink-0">
@@ -49,7 +49,7 @@ export function RelatedDocuments({ documents, onOpenDocument }: RelatedDocuments
                   size="sm"
                   variant="outline"
                   onClick={() => onOpenDocument && onOpenDocument(doc.id)}
-                  className="h-6 px-2 text-[11px] gap-1 text-indigo-600 dark:text-indigo-400"
+                  className="h-6 px-2 text-[11px] gap-1 text-primary hover:text-primary/80"
                 >
                   <span>Open</span>
                   <ExternalLink className="h-3 w-3" />

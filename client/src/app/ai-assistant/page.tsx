@@ -543,7 +543,7 @@ export function AIAssistantContent() {
           {/* Header Action */}
           <Button
             onClick={handleNewConversation}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 rounded-xl shadow-md cursor-pointer gap-1.5 font-semibold"
+            className="w-full bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 rounded-xl shadow-md cursor-pointer gap-1.5 font-semibold"
           >
             <Plus className="h-4 w-4" /> New Conversation
           </Button>
@@ -552,7 +552,7 @@ export function AIAssistantContent() {
           <div className="space-y-3 p-3 rounded-2xl bg-card border border-border/80 shadow-xs">
             <div className="flex items-center justify-between border-b border-border pb-2">
               <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <SlidersHorizontal className="h-3.5 w-3.5 text-indigo-500" /> Active Context Scope
+                <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Active Context Scope
               </span>
               {(selectedPolicyId || selectedRegulationId || selectedReportId) && (
                 <button
@@ -561,7 +561,7 @@ export function AIAssistantContent() {
                     setSelectedRegulationId("");
                     setSelectedReportId("");
                   }}
-                  className="text-[10px] text-indigo-500 hover:underline cursor-pointer"
+                  className="text-[10px] text-primary hover:underline cursor-pointer"
                 >
                   Clear Scope
                 </button>
@@ -574,7 +574,7 @@ export function AIAssistantContent() {
                 Organization
               </label>
               <div className="p-2 rounded-xl bg-muted/30 border border-border/60 text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Shield className="h-3.5 w-3.5 text-indigo-500" />
+                <Shield className="h-3.5 w-3.5 text-primary" />
                 <span className="truncate">{orgName || "Active Workspace"}</span>
               </div>
             </div>
@@ -655,7 +655,7 @@ export function AIAssistantContent() {
                     onClick={() => setActiveConvId(c.id)}
                     className={`group p-2.5 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between gap-2 ${
                       activeConvId === c.id
-                        ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-semibold"
+                        ? "bg-primary/10 border-primary/30 text-primary font-semibold"
                         : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
@@ -678,7 +678,7 @@ export function AIAssistantContent() {
           <div className="border-b border-border/80 px-6 py-3 bg-card/30 flex items-center justify-between shrink-0">
             <div className="space-y-0.5">
               <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-indigo-500" />
+                <Sparkles className="h-4 w-4 text-accent" />
                 {activeSession ? activeSession.title : "New Compliance Query"}
               </h2>
               <p className="text-[11px] text-muted-foreground">
@@ -691,7 +691,7 @@ export function AIAssistantContent() {
                 onClick={() => setShowMobileFilterDrawer(true)}
                 className="lg:hidden p-2 rounded-xl bg-card border border-border text-xs text-foreground cursor-pointer flex items-center gap-1"
               >
-                <SlidersHorizontal className="h-3.5 w-3.5 text-indigo-500" /> Context
+                <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Context
               </button>
 
               {activeConvId && (
@@ -711,7 +711,7 @@ export function AIAssistantContent() {
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {activeMessages.length === 0 ? (
               <div className="max-w-2xl mx-auto py-12 text-center space-y-6">
-                <div className="h-16 w-16 mx-auto rounded-3xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center shadow-xl">
+                <div className="h-16 w-16 mx-auto rounded-3xl bg-accent/10 border border-accent/20 text-accent flex items-center justify-center shadow-xl">
                   <Bot className="h-8 w-8" />
                 </div>
 
@@ -727,17 +727,17 @@ export function AIAssistantContent() {
                 {/* Suggested Questions Grid */}
                 <div className="space-y-3 pt-4 text-left">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <HelpCircle className="h-3.5 w-3.5 text-indigo-500" /> Suggested Compliance Questions
+                    <HelpCircle className="h-3.5 w-3.5 text-accent" /> Suggested Compliance Questions
                   </h4>
                   <div className="grid grid-cols-1 gap-2.5">
                     {suggestedQuestions.map((q, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleSendMessage(undefined, q)}
-                        className="p-3 rounded-2xl bg-card border border-border/80 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-xs text-foreground font-medium flex items-center justify-between group cursor-pointer shadow-2xs"
+                        className="p-3 rounded-2xl bg-card border border-border/80 hover:border-primary/50 hover:bg-primary/5 transition-all text-xs text-foreground font-medium flex items-center justify-between group cursor-pointer shadow-2xs"
                       >
                         <span>{q}</span>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-transform" />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-transform" />
                       </button>
                     ))}
                   </div>
@@ -756,7 +756,7 @@ export function AIAssistantContent() {
                     <div
                       className={`p-4 rounded-2xl text-xs max-w-2xl space-y-2 shadow-sm ${
                         msg.sender === "user"
-                          ? "bg-indigo-600 text-white rounded-br-none"
+                          ? "bg-primary text-primary-foreground rounded-br-none"
                           : "bg-card border border-border/80 text-foreground rounded-bl-none"
                       }`}
                     >
@@ -768,7 +768,7 @@ export function AIAssistantContent() {
                             </>
                           ) : (
                             <>
-                              <Bot className="h-3 w-3 text-indigo-500" /> LexisGraph Assistant
+                              <Bot className="h-3 w-3 text-accent" /> LexisGraph Assistant
                             </>
                           )}
                         </span>
@@ -778,7 +778,7 @@ export function AIAssistantContent() {
                       <div className="leading-relaxed whitespace-pre-wrap font-medium">
                         {msg.text}
                         {msg.isStreaming && (
-                          <span className="inline-block w-1.5 h-3 ml-1 bg-indigo-500 animate-pulse" />
+                          <span className="inline-block w-1.5 h-3 ml-1 bg-accent animate-pulse" />
                         )}
                       </div>
                     </div>
@@ -787,20 +787,20 @@ export function AIAssistantContent() {
                     {msg.sender === "assistant" && msg.sources && msg.sources.length > 0 && (
                       <div className="w-full max-w-2xl space-y-2 p-3 rounded-2xl bg-card border border-border/60">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <BookOpen className="h-3.5 w-3.5 text-indigo-500" /> Verified Legal Citations & Sources ({msg.sources.length})
+                          <BookOpen className="h-3.5 w-3.5 text-primary" /> Verified Legal Citations & Sources ({msg.sources.length})
                         </span>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {msg.sources.map((src, sIdx) => (
                             <div
                               key={sIdx}
                               onClick={() => handleOpenSourceViewer(src.document_id, src.clause_id)}
-                              className="p-2.5 rounded-xl border border-border/60 bg-muted/20 hover:border-indigo-500/40 cursor-pointer transition-all space-y-1"
+                              className="p-2.5 rounded-xl border border-border/60 bg-muted/20 hover:border-primary/40 cursor-pointer transition-all space-y-1"
                             >
                               <div className="flex items-center justify-between text-[10px]">
                                 <Badge variant="outline" className="text-[9px] px-1 py-0 border-border/60">
                                   {src.type || "Source"}
                                 </Badge>
-                                <span className="font-mono text-indigo-500 font-semibold">
+                                <span className="font-mono text-primary font-semibold">
                                   {src.confidence_score ? `${(src.confidence_score * 100).toFixed(0)}% Match` : ""}
                                 </span>
                               </div>
@@ -826,7 +826,7 @@ export function AIAssistantContent() {
                               <button
                                 key={fIdx}
                                 onClick={() => handleSendMessage(undefined, fq)}
-                                className="px-3 py-1 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold hover:bg-indigo-500/20 transition-all cursor-pointer"
+                                className="px-3 py-1 rounded-xl bg-accent/10 border border-accent/20 text-accent text-[11px] font-semibold hover:bg-accent/20 transition-all cursor-pointer"
                               >
                                 ↳ {fq}
                               </button>
@@ -845,7 +845,7 @@ export function AIAssistantContent() {
                                 onClick={() => handleExecuteRecommendedAction(act)}
                                 className="text-xs h-7 gap-1.5 cursor-pointer bg-background border-border text-foreground hover:bg-muted"
                               >
-                                <ExternalLink className="h-3 w-3 text-indigo-500" /> {act.title}
+                                <ExternalLink className="h-3 w-3 text-primary" /> {act.title}
                               </Button>
                             ))}
                           </div>
@@ -877,7 +877,7 @@ export function AIAssistantContent() {
                 onChange={(e) => setInputQuery(e.target.value)}
                 placeholder="Ask about your organization's compliance, policies, or statutory acts…"
                 disabled={isSending}
-                className="bg-background border-border text-xs h-10 text-foreground rounded-xl flex-1 focus:ring-2 focus:ring-indigo-500"
+                className="bg-background border-border text-xs h-10 text-foreground rounded-xl flex-1 focus:ring-2 focus:ring-primary"
               />
 
               {isSending ? (
@@ -892,7 +892,7 @@ export function AIAssistantContent() {
                 <Button
                   type="submit"
                   disabled={!inputQuery.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-10 px-5 rounded-xl shadow-md cursor-pointer gap-1.5 font-semibold"
+                  className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-10 px-5 rounded-xl shadow-md cursor-pointer gap-1.5 font-semibold"
                 >
                   <Send className="h-3.5 w-3.5" /> Send
                 </Button>
@@ -916,7 +916,7 @@ export function AIAssistantContent() {
           <div className="bg-background border border-border rounded-2xl w-full max-w-xs p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <SlidersHorizontal className="h-4 w-4 text-indigo-500" /> Mobile Context Scope
+                <SlidersHorizontal className="h-4 w-4 text-primary" /> Mobile Context Scope
               </h3>
               <Button
                 variant="ghost"
@@ -969,7 +969,7 @@ export function AIAssistantContent() {
             <div className="pt-2">
               <Button
                 onClick={() => setShowMobileFilterDrawer(false)}
-                className="w-full bg-indigo-600 text-white text-xs h-9 rounded-xl"
+                className="w-full bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 rounded-xl"
               >
                 Apply Context
               </Button>

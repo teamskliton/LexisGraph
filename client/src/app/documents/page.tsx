@@ -247,7 +247,7 @@ export function DocumentsContent() {
               <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
             </Button>
             <h1 className="text-2xl font-bold flex items-center gap-2 text-foreground">
-              <Shield className="h-6 w-6 text-indigo-500" />
+              <Shield className="h-6 w-6 text-primary" />
               Documents Workspace
             </h1>
             <p className="text-xs text-muted-foreground max-w-xl">
@@ -259,7 +259,7 @@ export function DocumentsContent() {
             {permissions.canUploadDocuments && (
               <Button
                 onClick={() => setIsUploadOpen(true)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 px-4 rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer gap-1.5 font-semibold"
+                className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 px-4 rounded-xl shadow-sm cursor-pointer gap-1.5 font-semibold"
               >
                 <Upload className="h-4 w-4" /> Upload Policy
               </Button>
@@ -277,7 +277,7 @@ export function DocumentsContent() {
                 onClick={() => setActiveTab(tab)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === tab
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                    ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
@@ -331,7 +331,7 @@ export function DocumentsContent() {
                       <Button
                         size="sm"
                         onClick={() => setIsUploadOpen(true)}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-4 cursor-pointer gap-1.5"
+                        className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-8 px-4 cursor-pointer gap-1.5"
                       >
                         <Upload className="h-3.5 w-3.5" /> Upload First Policy
                       </Button>
@@ -342,7 +342,7 @@ export function DocumentsContent() {
                     {filteredPolicies.map((p) => (
                       <Card
                         key={p.id}
-                        className="p-5 bg-card border-border rounded-2xl hover:border-indigo-500/50 transition-all flex flex-col justify-between space-y-4 shadow-sm dark:shadow-xl"
+                        className="p-5 bg-card border-border rounded-2xl hover:border-primary/50 transition-all flex flex-col justify-between space-y-4 shadow-sm dark:shadow-xl"
                       >
                         <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
@@ -388,7 +388,7 @@ export function DocumentsContent() {
                                 tags: ["Internal Policy"],
                               })
                             }
-                            className="text-xs text-foreground hover:text-indigo-500 cursor-pointer h-7 px-2.5"
+                            className="text-xs text-foreground hover:text-primary cursor-pointer h-7 px-2.5"
                           >
                             <Eye className="h-3.5 w-3.5 mr-1 text-muted-foreground" /> Open
                           </Button>
@@ -398,7 +398,7 @@ export function DocumentsContent() {
                               variant="outline"
                               size="xs"
                               onClick={() => router.push(`/ai-assistant?policyId=${p.id}&question=${encodeURIComponent(`What are the major compliance gaps in ${p.original_filename}?`)}`)}
-                              className="bg-background border-border text-xs text-indigo-600 dark:text-indigo-400 hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
+                              className="bg-background border-border text-xs text-accent hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
                               title="Ask AI about this policy"
                             >
                               <Sparkles className="h-3 w-3" /> Ask AI
@@ -408,7 +408,7 @@ export function DocumentsContent() {
                                 variant="outline"
                                 size="xs"
                                 onClick={() => router.push("/compliance")}
-                                className="bg-background border-border text-xs text-indigo-600 dark:text-indigo-400 hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
+                                className="bg-background border-border text-xs text-primary hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
                               >
                                 <Zap className="h-3 w-3" /> Analyze
                               </Button>
@@ -417,7 +417,7 @@ export function DocumentsContent() {
                               variant="ghost"
                               size="icon-xs"
                               onClick={() => router.push(`/knowledge-graph?focus=${encodeURIComponent(p.original_filename)}`)}
-                              className="text-muted-foreground hover:text-purple-500 h-7 w-7 cursor-pointer"
+                              className="text-muted-foreground hover:text-accent h-7 w-7 cursor-pointer"
                               title="Explore in Knowledge Graph"
                             >
                               <Network className="h-3.5 w-3.5" />
@@ -447,7 +447,7 @@ export function DocumentsContent() {
               <div className="space-y-4 pt-4 border-t border-border">
                 <div className="flex items-center justify-between border-b border-border pb-2">
                   <h2 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                    <BookOpen className="h-4 w-4 text-indigo-500" /> Applicable Regulations ({filteredRegulations.length})
+                    <BookOpen className="h-4 w-4 text-primary" /> Applicable Regulations ({filteredRegulations.length})
                   </h2>
                   <span className="text-[11px] text-muted-foreground">Global statutory acts linked to this workspace</span>
                 </div>
@@ -465,11 +465,11 @@ export function DocumentsContent() {
                     {filteredRegulations.map((r) => (
                       <Card
                         key={r.id}
-                        className="p-5 bg-card border-border rounded-2xl hover:border-indigo-500/50 transition-all flex flex-col justify-between space-y-4 shadow-sm dark:shadow-xl"
+                        className="p-5 bg-card border-border rounded-2xl hover:border-primary/50 transition-all flex flex-col justify-between space-y-4 shadow-sm dark:shadow-xl"
                       >
                         <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
-                            <Badge className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 text-[10px] uppercase font-mono">
+                            <Badge className="bg-primary/10 text-primary border-primary/30 text-[10px] uppercase font-mono">
                               Statutory Act
                             </Badge>
                             <span className="text-[10px] text-muted-foreground font-mono">
@@ -513,7 +513,7 @@ export function DocumentsContent() {
                                 tags: ["Statutory Act", r.jurisdiction || "Global"],
                               })
                             }
-                            className="text-xs text-foreground hover:text-indigo-500 cursor-pointer h-7 px-2.5"
+                            className="text-xs text-foreground hover:text-primary cursor-pointer h-7 px-2.5"
                           >
                             <Eye className="h-3.5 w-3.5 mr-1 text-muted-foreground" /> Open
                           </Button>
@@ -523,7 +523,7 @@ export function DocumentsContent() {
                               variant="outline"
                               size="xs"
                               onClick={() => router.push(`/ai-assistant?regulationId=${r.id}&question=${encodeURIComponent(`Which company policies are affected by ${r.title || r.act_name}?`)}`)}
-                              className="bg-background border-border text-xs text-indigo-600 dark:text-indigo-400 hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
+                              className="bg-background border-border text-xs text-accent hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
                               title="Ask AI about this regulation"
                             >
                               <Sparkles className="h-3 w-3" /> Ask AI
@@ -532,7 +532,7 @@ export function DocumentsContent() {
                               variant="outline"
                               size="xs"
                               onClick={() => router.push(`/knowledge-graph?focus=${encodeURIComponent(r.title || r.act_name || "")}`)}
-                              className="bg-background border-border text-xs text-purple-600 dark:text-purple-400 hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
+                              className="bg-background border-border text-xs text-accent hover:bg-muted h-7 px-2 gap-1 cursor-pointer"
                             >
                               <Network className="h-3 w-3" /> Explore Graph
                             </Button>

@@ -39,16 +39,16 @@ export function SuggestedQuestions({ onSelectQuestion }: SuggestedQuestionsProps
           <button
             key={idx}
             onClick={() => onSelectQuestion(item.text)}
-            className="p-3.5 text-left bg-card hover:bg-muted/80 border border-border rounded-xl transition-all shadow-sm flex items-start gap-3 group hover:border-indigo-500/30"
+            className="p-3.5 text-left bg-card hover:bg-muted/80 border border-border rounded-xl transition-all shadow-sm flex items-start gap-3 group hover:border-primary/30"
           >
-            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
               <IconComponent className="h-4 w-4" />
             </div>
             <div className="flex-1 min-w-0">
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-0.5">
                 {item.title}
               </span>
-              <p className="text-xs text-foreground font-medium group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2">
+              <p className="text-xs text-foreground font-medium group-hover:text-primary transition-colors line-clamp-2">
                 {item.text}
               </p>
             </div>

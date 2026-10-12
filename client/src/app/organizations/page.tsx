@@ -406,7 +406,7 @@ function OrganizationsContent() {
               <Button
                 size="sm"
                 onClick={handleCreateNew}
-                className="gap-1.5 text-xs font-semibold cursor-pointer h-9 px-4 bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                className="gap-1.5 text-xs font-semibold cursor-pointer h-9 px-4 bg-primary hover:bg-primary-hover text-primary-foreground shadow-xs"
               >
                 <Plus className="h-4 w-4" />
                 <span>New Organization</span>
@@ -433,7 +433,7 @@ function OrganizationsContent() {
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold">
                 <span>Total Organizations</span>
-                <Building2 className="h-4 w-4 text-indigo-500" />
+                <Building2 className="h-4 w-4 text-primary" />
               </div>
               <div className="text-2xl font-extrabold text-foreground tabular-nums mt-2">
                 {metrics.total}
@@ -528,7 +528,7 @@ function OrganizationsContent() {
               placeholder="Search organizations by name or industry..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-9 pr-9 text-xs rounded-lg border border-border/70 bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors"
+              className="w-full h-9 pl-9 pr-9 text-xs rounded-lg border border-border/70 bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
             />
             {hasSearch && (
               <button
@@ -550,7 +550,7 @@ function OrganizationsContent() {
                 className={cn(
                   "h-8 px-3 rounded-lg text-xs font-semibold transition-all border cursor-pointer",
                   statusFilter === f.value
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                    ? "bg-primary text-primary-foreground border-primary shadow-2xs"
                     : "bg-background text-muted-foreground border-border/60 hover:text-foreground hover:border-border"
                 )}
               >
@@ -573,7 +573,7 @@ function OrganizationsContent() {
                   <DropdownMenuItem
                     key={opt.value}
                     onClick={() => setSortKey(opt.value)}
-                    className={cn("text-xs cursor-pointer", sortKey === opt.value && "font-bold text-indigo-600")}
+                    className={cn("text-xs cursor-pointer", sortKey === opt.value && "font-bold text-primary")}
                   >
                     {opt.label}
                   </DropdownMenuItem>
@@ -588,7 +588,7 @@ function OrganizationsContent() {
                 className={cn(
                   "px-2.5 h-full rounded-md flex items-center transition-all cursor-pointer",
                   viewMode === "grid"
-                    ? "bg-indigo-600 text-white shadow-2xs"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
                     : "text-muted-foreground hover:text-foreground"
                 )}
                 title="Grid view"
@@ -601,7 +601,7 @@ function OrganizationsContent() {
                 className={cn(
                   "px-2.5 h-full rounded-md flex items-center transition-all cursor-pointer",
                   viewMode === "list"
-                    ? "bg-indigo-600 text-white shadow-2xs"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
                     : "text-muted-foreground hover:text-foreground"
                 )}
                 title="List view"
@@ -666,7 +666,7 @@ function OrganizationsContent() {
         {/* ── 9. EMPTY STATE (Zero Organizations) ─────────────────────────── */}
         {!isLoading && !hasError && enrichedOrgs.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center rounded-xl border border-dashed border-border/70 bg-muted/10 p-8 space-y-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-400">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Building2 className="h-7 w-7" />
             </div>
             <div className="space-y-1 max-w-md">
@@ -680,7 +680,7 @@ function OrganizationsContent() {
                 <Button
                   size="sm"
                   onClick={handleCreateNew}
-                  className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs px-4"
+                  className="gap-1.5 text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground shadow-xs px-4"
                 >
                   <Plus className="h-4 w-4" />
                   <span>New Organization</span>

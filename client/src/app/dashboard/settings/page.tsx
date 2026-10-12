@@ -117,7 +117,7 @@ export function OrganizationSettingsContent() {
   if (isLoading || !org) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-muted-foreground gap-2">
-        <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
         <span className="text-xs">Loading organization settings...</span>
       </div>
     );
@@ -130,7 +130,7 @@ export function OrganizationSettingsContent() {
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold flex items-center gap-2 text-foreground">
-              <Settings className="w-6 h-6 text-indigo-500" />
+              <Settings className="w-6 h-6 text-primary" />
               Organization Settings
             </h1>
             <OrganizationSwitcher onOrganizationChanged={fetchOrgDetails} />
@@ -148,7 +148,7 @@ export function OrganizationSettingsContent() {
             onClick={() => router.push('/team')}
             className="bg-card border-border text-foreground hover:bg-muted text-xs h-9 gap-1.5 cursor-pointer"
           >
-            <Users className="w-4 h-4 text-indigo-500" />
+            <Users className="w-4 h-4 text-primary" />
             Manage Team
           </Button>
         </div>
@@ -158,7 +158,7 @@ export function OrganizationSettingsContent() {
         {/* Profile Card */}
         <Card className="p-6 bg-card border-border rounded-2xl space-y-4 shadow-sm dark:shadow-xl">
           <h2 className="text-sm font-bold text-foreground flex items-center gap-2 border-b border-border pb-3">
-            <Building className="w-4 h-4 text-indigo-500" /> General Workspace Profile
+            <Building className="w-4 h-4 text-primary" /> General Workspace Profile
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -211,7 +211,7 @@ export function OrganizationSettingsContent() {
         {/* Security & Authentication Info */}
         <Card className="p-6 bg-card border-border rounded-2xl space-y-4 shadow-sm dark:shadow-xl">
           <h2 className="text-sm font-bold text-foreground flex items-center gap-2 border-b border-border pb-3">
-            <Key className="w-4 h-4 text-indigo-500" /> Active Session & Authentication
+            <Key className="w-4 h-4 text-primary" /> Active Session & Authentication
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -237,7 +237,7 @@ export function OrganizationSettingsContent() {
         {/* AI & Compliance Engine Preferences */}
         <Card className="p-6 bg-card border-border rounded-2xl space-y-4 shadow-sm dark:shadow-xl">
           <h2 className="text-sm font-bold text-foreground flex items-center gap-2 border-b border-border pb-3">
-            <Sliders className="w-4 h-4 text-indigo-500" /> Compliance Engine & AI Model Preferences
+            <Sliders className="w-4 h-4 text-primary" /> Compliance Engine & AI Model Preferences
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -261,7 +261,7 @@ export function OrganizationSettingsContent() {
           <Button
             type="submit"
             disabled={isSaving}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 px-6 rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer"
+            className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 px-6 rounded-xl shadow-lg shadow-primary/20 cursor-pointer"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-1.5" /> Save Changes</>}
           </Button>

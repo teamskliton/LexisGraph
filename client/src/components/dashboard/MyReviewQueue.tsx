@@ -221,7 +221,7 @@ export function MyReviewQueue({ organizationId, organizationName }: MyReviewQueu
               { key: "MEDIUM" as FilterOption, label: "Medium", count: counts.medium, color: "text-amber-500" },
               { key: "LOW" as FilterOption, label: "Low", count: counts.low, color: "text-slate-400" },
               { key: "OPEN" as FilterOption, label: "Open", count: counts.open },
-              { key: "IN_REVIEW" as FilterOption, label: "In Review", count: counts.inReview, color: "text-indigo-400" },
+              { key: "IN_REVIEW" as FilterOption, label: "In Review", count: counts.inReview, color: "text-primary" },
               { key: "OVERDUE" as FilterOption, label: "Overdue", count: counts.overdue, color: "text-red-500 font-bold" },
             ].map((tab) => {
               const isSelected = activeFilter === tab.key;
@@ -304,7 +304,7 @@ export function MyReviewQueue({ organizationId, organizationName }: MyReviewQueu
                           lifecycle === "RESOLVED"
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                             : lifecycle === "IN_REVIEW"
-                            ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+                            ? "bg-primary/10 text-primary border-primary/30"
                             : lifecycle === "REMEDIATION"
                             ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
                             : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
@@ -326,7 +326,7 @@ export function MyReviewQueue({ organizationId, organizationName }: MyReviewQueu
                     <div className="flex items-center gap-2">
                       {f.remediation_due_date && (
                         <span className="text-[11px] text-muted-foreground flex items-center gap-1 font-medium">
-                          <Calendar className="h-3 w-3 text-indigo-400" />
+                          <Calendar className="h-3 w-3 text-primary" />
                           {format(new Date(f.remediation_due_date), "MMM d, yyyy")}
                         </span>
                       )}
@@ -355,7 +355,7 @@ export function MyReviewQueue({ organizationId, organizationName }: MyReviewQueu
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-1 border-t border-border/30 flex-wrap">
                     {f.policy_clause_id && (
                       <span className="flex items-center gap-1">
-                        <FileText className="h-3 w-3 text-indigo-400" />
+                        <FileText className="h-3 w-3 text-primary" />
                         <span className="font-mono text-foreground font-semibold">{f.policy_clause_id}</span>
                       </span>
                     )}

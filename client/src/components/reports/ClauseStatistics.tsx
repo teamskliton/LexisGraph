@@ -47,7 +47,7 @@ export const ClauseStatistics: React.FC<ClauseStatisticsProps> = ({
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Total Evaluated
               </span>
-              <FileCode className="h-4 w-4 text-indigo-500" />
+              <FileCode className="h-4 w-4 text-primary" />
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-extrabold font-mono text-foreground">
@@ -55,7 +55,7 @@ export const ClauseStatistics: React.FC<ClauseStatisticsProps> = ({
               </span>
               <span className="text-xs text-muted-foreground">100%</span>
             </div>
-            <Progress value={100} className="h-1.5" indicatorClassName="bg-indigo-500" />
+            <Progress value={100} className="h-1.5" indicatorClassName="bg-primary" />
           </CardContent>
         </Card>
 

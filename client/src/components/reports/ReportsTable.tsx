@@ -266,9 +266,9 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
-                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-primary border-primary/30"
                       >
-                        <ShieldAlert className="h-3.5 w-3.5 text-indigo-500" />
+                        <ShieldAlert className="h-3.5 w-3.5 text-primary" />
                         <span>Findings</span>
                       </Button>
                       <Button

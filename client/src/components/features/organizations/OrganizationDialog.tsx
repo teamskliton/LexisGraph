@@ -219,7 +219,7 @@ export function OrganizationDialog({
           {/* Logo Upload Section */}
           <div className="space-y-2 p-3.5 rounded-xl border border-border/60 bg-muted/20">
             <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-              <ImageIcon className="h-3.5 w-3.5 text-indigo-500" />
+              <ImageIcon className="h-3.5 w-3.5 text-primary" />
               <span>Organization Logo</span>
             </Label>
 
@@ -258,7 +258,7 @@ export function OrganizationDialog({
                     onClick={() => fileInputRef.current?.click()}
                     className="h-8 text-xs font-semibold gap-1.5 cursor-pointer"
                   >
-                    <Upload className="h-3.5 w-3.5 text-indigo-500" />
+                    <Upload className="h-3.5 w-3.5 text-primary" />
                     <span>Upload Logo Image</span>
                   </Button>
 
@@ -337,7 +337,7 @@ export function OrganizationDialog({
               size="sm"
               disabled={isLoading}
               onClick={handleSubmit(onFormSubmit, onFormError)}
-              className="text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
             >
               {isLoading && <Building2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               {isEditing ? "Save Changes" : "Create Organization"}

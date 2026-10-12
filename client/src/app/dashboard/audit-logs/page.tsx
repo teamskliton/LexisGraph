@@ -59,7 +59,7 @@ export function AuditLogsContent() {
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold flex items-center gap-2">
-              <ShieldAlert className="w-6 h-6 text-indigo-400" />
+              <ShieldAlert className="w-6 h-6 text-primary" />
               Security Audit Stream
             </h1>
             <OrganizationSwitcher onOrganizationChanged={fetchAuditLogs} />
@@ -85,7 +85,7 @@ export function AuditLogsContent() {
       {/* Audit Log Stream Table */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
           <span className="text-xs">Fetching audit stream...</span>
         </div>
       ) : filteredLogs.length === 0 ? (
@@ -110,7 +110,7 @@ export function AuditLogsContent() {
                 {filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="p-4">
-                      <Badge className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 text-[10px]">
+                      <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
                         {log.action}
                       </Badge>
                     </td>

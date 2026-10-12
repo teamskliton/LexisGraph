@@ -30,13 +30,13 @@ interface ActivityGroup {
 const iconMap: Record<string, { icon: React.ReactNode; bg: string; color: string }> = {
   building: {
     icon: <Building2 className="h-3.5 w-3.5" />,
-    bg: "bg-indigo-500/10",
-    color: "text-indigo-600 dark:text-indigo-400",
+    bg: "bg-primary/10",
+    color: "text-primary",
   },
   file: {
     icon: <FileText className="h-3.5 w-3.5" />,
-    bg: "bg-violet-500/10",
-    color: "text-violet-600 dark:text-violet-400",
+    bg: "bg-primary/10",
+    color: "text-primary",
   },
   report: {
     icon: <FileCheck className="h-3.5 w-3.5" />,

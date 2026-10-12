@@ -66,7 +66,7 @@ export function OrganizationSelector({
               organizations.map((org) => (
                 <SelectItem key={org.id} value={org.id}>
                   <div className="flex items-center gap-2">
-                    <span className="flex h-2 w-2 rounded-full bg-indigo-500" />
+                    <span className="flex h-2 w-2 rounded-full bg-primary" />
                     <span>{org.name}</span>
                   </div>
                 </SelectItem>

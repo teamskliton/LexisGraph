@@ -73,9 +73,9 @@ const TABS: TabDef[] = [
   { id: "policies", label: "Policies", icon: <Shield className="h-4 w-4 text-info" /> },
   { id: "regulations", label: "Regulations", icon: <BookOpen className="h-4 w-4 text-success" /> },
   { id: "analyses", label: "Analyses", icon: <Zap className="h-4 w-4 text-warning" /> },
-  { id: "knowledge-graph", label: "Knowledge Graph", icon: <Network className="h-4 w-4 text-purple-400" /> },
+  { id: "knowledge-graph", label: "Knowledge Graph", icon: <Network className="h-4 w-4 text-accent" /> },
   { id: "reports", label: "Reports", icon: <BarChart3 className="h-4 w-4 text-primary" /> },
-  { id: "team", label: "Team", icon: <Users className="h-4 w-4 text-indigo-400" /> },
+  { id: "team", label: "Team", icon: <Users className="h-4 w-4 text-primary" /> },
   { id: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4 text-slate-400" /> },
 ];
 
@@ -187,7 +187,7 @@ function KnowledgeGraphTabSection({ organizationId }: { organizationId: string }
     <Card className="border border-border/50 bg-card p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+          <div className="p-2 rounded-lg bg-accent/10 text-accent">
             <Network className="h-5 w-5" />
           </div>
           <div>
@@ -202,8 +202,8 @@ function KnowledgeGraphTabSection({ organizationId }: { organizationId: string }
         </Button>
       </div>
 
-      <div className="p-8 rounded-xl border border-dashed border-purple-500/20 bg-purple-500/5 text-center space-y-2">
-        <Network className="h-10 w-10 text-purple-400 mx-auto animate-pulse" />
+      <div className="p-8 rounded-xl border border-dashed border-accent/20 bg-accent/5 text-center space-y-2">
+        <Network className="h-10 w-10 text-accent mx-auto animate-pulse" />
         <h4 className="text-sm font-semibold text-foreground">GraphRAG Index Active</h4>
         <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
           Knowledge Graph nodes and clause embeddings are synchronized. Click above to interactively explore entity connections.

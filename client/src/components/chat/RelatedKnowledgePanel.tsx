@@ -47,10 +47,10 @@ export function RelatedKnowledgePanel({ clauseId }: RelatedKnowledgePanelProps) 
     <div className="space-y-4 bg-card/60 border border-border rounded-2xl p-4 text-xs">
       <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
         <div className="flex items-center gap-2 font-semibold text-foreground">
-          <Network className="h-4 w-4 text-indigo-500" />
+          <Network className="h-4 w-4 text-accent" />
           <span>Knowledge Graph Relationships</span>
         </div>
-        <span className="px-2 py-0.5 text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full font-medium border border-indigo-500/20">
+        <span className="px-2 py-0.5 text-[10px] bg-accent/10 text-accent rounded-full font-medium border border-accent/20">
           Neo4j 2-Hop
         </span>
       </div>
@@ -61,14 +61,14 @@ export function RelatedKnowledgePanel({ clauseId }: RelatedKnowledgePanelProps) 
           Relationship Path Flow
         </span>
         <div className="p-3 bg-muted/50 rounded-xl border border-border/70 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="px-2 py-1 bg-indigo-600 text-white rounded font-medium shadow-xs">
+          <span className="px-2 py-1 bg-accent text-accent-foreground rounded font-medium shadow-xs">
             Target Clause
           </span>
           {neighbors.length > 0 ? (
             neighbors.slice(0, 3).map((n, idx) => (
               <React.Fragment key={idx}>
                 <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="px-2 py-1 bg-card border border-border text-indigo-600 dark:text-indigo-400 rounded font-medium truncate max-w-[150px]">
+                <span className="px-2 py-1 bg-card border border-border text-accent rounded font-medium truncate max-w-[150px]">
                   {n.label || n.text || "Neighbor"}
                 </span>
               </React.Fragment>
@@ -94,7 +94,7 @@ export function RelatedKnowledgePanel({ clauseId }: RelatedKnowledgePanelProps) 
                 className="p-2 bg-muted/40 hover:bg-muted/80 rounded-lg border border-border/60 flex items-center justify-between transition-colors"
               >
                 <div className="flex items-center gap-2 truncate">
-                  <GitMerge className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                  <GitMerge className="h-3.5 w-3.5 text-accent shrink-0" />
                   <span className="font-medium text-foreground truncate">{node.label || node.text || "Connected Node"}</span>
                 </div>
                 <span className="px-1.5 py-0.5 text-[9px] bg-background border border-border text-muted-foreground rounded font-mono">
@@ -118,7 +118,7 @@ export function RelatedKnowledgePanel({ clauseId }: RelatedKnowledgePanelProps) 
             {entities.map((ent, i) => (
               <span
                 key={i}
-                className="px-2 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-md font-medium text-[11px] flex items-center gap-1"
+                className="px-2 py-1 bg-accent/10 text-accent border border-accent/20 rounded-md font-medium text-[11px] flex items-center gap-1"
               >
                 <Tag className="h-3 w-3" />
                 {ent.name}

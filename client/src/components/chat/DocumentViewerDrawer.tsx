@@ -127,7 +127,7 @@ export function DocumentViewerDrawer({
         {/* Header */}
         <div className="p-4 border-b border-border flex items-center justify-between bg-card/60 shrink-0">
           <div className="flex items-center gap-3 truncate">
-            <div className="p-2 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
               <FileText className="h-5 w-5" />
             </div>
             <div className="truncate">
@@ -135,7 +135,7 @@ export function DocumentViewerDrawer({
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{displaySource.section || "Section"}</span>
                 <span>•</span>
-                <span className="px-1.5 py-0.5 text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded font-medium border border-indigo-500/20">
+                <span className="px-1.5 py-0.5 text-[10px] bg-primary/10 text-primary rounded font-medium border border-primary/20">
                   {displaySource.type || "Regulation"}
                 </span>
                 <span>•</span>
@@ -226,7 +226,7 @@ export function DocumentViewerDrawer({
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold text-foreground">
               <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                <ShieldCheck className="h-4 w-4 text-primary" />
                 <span>Target Clause & Citation Text (Page {currentPage})</span>
               </span>
               <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded text-[10px]">
@@ -235,17 +235,17 @@ export function DocumentViewerDrawer({
             </div>
 
             <div
-              className="p-5 bg-card border-2 border-indigo-500/40 rounded-2xl shadow-sm space-y-3 relative transition-all"
+              className="p-5 bg-card border-2 border-primary/40 rounded-2xl shadow-sm space-y-3 relative transition-all"
               style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top left" }}
             >
               <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                <span className="font-bold text-xs text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                <span className="font-bold text-xs text-primary uppercase tracking-wider">
                   {displaySource.section || "Clause Content"}
                 </span>
                 <span className="text-[10px] text-muted-foreground">ID: {displaySource.clause_id || "clause-101"}</span>
               </div>
 
-              <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap font-serif bg-indigo-500/5 p-3 rounded-xl border border-indigo-500/20">
+              <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap font-serif bg-primary/5 p-3 rounded-xl border border-primary/20">
                 &quot;{displaySource.clause}&quot;
               </p>
 
