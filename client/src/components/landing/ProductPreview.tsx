@@ -39,7 +39,7 @@ export default function ProductPreview() {
             <div className="preview-card-body flex flex-col gap-5">
               {/* Coverage bars */}
               {[
-                { label: "Covered",  count: 72, color: "var(--accent)",  bg: "var(--accent-subtle)"  },
+                { label: "Covered",  count: 72, color: "var(--success)", bg: "var(--success-subtle)" },
                 { label: "Partial",  count: 18, color: "var(--warning)", bg: "var(--warning-subtle)" },
                 { label: "Gaps",     count: 7,  color: "var(--danger)",  bg: "var(--danger-subtle)"  },
               ].map(({ label, count, color, bg }) => (

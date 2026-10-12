@@ -4,7 +4,7 @@ export default function ValueStrip() {
   return (
     <section
       aria-label="Platform workflow summary"
-      className="border-y border-border bg-surface-muted/40"
+      className="border-y border-border bg-card"
       style={{ paddingBlock: "2.25rem" }}
     >
       <div className="landing-container">
@@ -17,7 +17,7 @@ export default function ValueStrip() {
               {/* Step number + connector */}
               <div className="flex items-center gap-2.5">
                 <span
-                  className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center flex-shrink-0"
+                  className="w-6 h-6 rounded-md bg-surface-elevated border border-border text-primary text-xs font-bold flex items-center justify-center flex-shrink-0"
                   aria-hidden="true"
                 >
                   {i + 1}
@@ -26,7 +26,7 @@ export default function ValueStrip() {
                 {i < VALUE_STRIP.length - 1 && (
                   <div
                     aria-hidden="true"
-                    className="hidden lg:block flex-1 h-px bg-gradient-to-r from-primary/30 to-transparent"
+                    className="hidden lg:block flex-1 h-px bg-border"
                   />
                 )}
               </div>

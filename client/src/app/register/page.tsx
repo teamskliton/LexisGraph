@@ -108,15 +108,11 @@ function RegisterContent() {
   return (
     <div className="flex min-h-screen w-full flex-col lg:flex-row bg-background">
       {/* Left side brand banner (Hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-zinc-950 p-12 text-white relative overflow-hidden border-r border-zinc-800">
-        {/* Glow Effects */}
-        <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] rounded-full bg-violet-600/20 blur-[120px] pointer-events-none" />
-
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-card p-12 text-foreground relative overflow-hidden border-r border-border">
         {/* Top Header */}
         <Link href="/" className="flex items-center gap-2.5 z-10 w-fit">
-          <BrandLogo size={40} className="shadow-lg shadow-indigo-500/20" priority />
-          <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+          <BrandLogo size={40} priority />
+          <span className="text-xl font-bold tracking-tight text-foreground">
             LexisGraph
           </span>
         </Link>
@@ -124,49 +120,49 @@ function RegisterContent() {
         {/* Center Tech Visualization */}
         <div className="my-auto z-10 max-w-md space-y-8">
           <div className="space-y-4">
-            <h1 className="text-4xl font-extrabold tracking-tight leading-none bg-gradient-to-br from-white via-zinc-100 to-zinc-500 bg-clip-text text-transparent">
+            <h1 className="text-4xl font-extrabold tracking-tight leading-tight text-foreground">
               Start Regulatory Analytics
             </h1>
-            <p className="text-lg text-zinc-400 leading-relaxed">
+            <p className="text-lg text-muted-foreground leading-relaxed">
               Create an account to upload policy documents, extract key clauses, and check compliance rules.
             </p>
           </div>
 
           {/* Features Checklist */}
-          <div className="space-y-4 pt-4 border-t border-zinc-800/80">
+          <div className="space-y-4 pt-4 border-t border-border">
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-md bg-indigo-500/10 p-1 text-indigo-400 border border-indigo-500/25">
+              <div className="mt-1 rounded-md bg-surface-elevated p-1.5 text-primary border border-border">
                 <ShieldCheck className="h-4 w-4" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-zinc-200">Continuous Assessment</h4>
-                <p className="text-xs text-zinc-400">Track and score policy version changes in real-time.</p>
+                <h4 className="text-sm font-semibold text-foreground">Continuous Assessment</h4>
+                <p className="text-xs text-muted-foreground">Track and score policy version changes in real-time.</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-md bg-violet-500/10 p-1 text-violet-400 border border-violet-500/25">
+              <div className="mt-1 rounded-md bg-surface-elevated p-1.5 text-accent border border-border">
                 <Network className="h-4 w-4" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-zinc-200">Knowledge Integration</h4>
-                <p className="text-xs text-zinc-400">Store compliance metrics natively inside a scalable graph database.</p>
+                <h4 className="text-sm font-semibold text-foreground">Knowledge Integration</h4>
+                <p className="text-xs text-muted-foreground">Store compliance metrics natively inside a scalable graph database.</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="z-10 text-xs text-zinc-500 flex items-center justify-between">
+        <div className="z-10 text-xs text-muted-foreground flex items-center justify-between">
           <span>© {new Date().getFullYear()} LexisGraph Inc.</span>
-          <span className="flex items-center gap-1 hover:text-zinc-300 cursor-pointer transition-colors">
+          <span className="flex items-center gap-1 hover:text-foreground cursor-pointer transition-colors">
             Documentation <ArrowRight className="h-3 w-3" />
           </span>
         </div>
       </div>
 
       {/* Right side form card */}
-      <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:px-20 xl:px-24 relative">
+      <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:px-20 xl:px-24 relative bg-background">
         {/* Top-Right Theme Toggle */}
         <div className="absolute top-6 right-6">
           <ThemeToggle />
@@ -192,7 +188,7 @@ function RegisterContent() {
                 </p>
               </div>
 
-              <Card className="border-border bg-card/50 backdrop-blur-sm shadow-xl p-6 rounded-2xl">
+              <Card className="border-border bg-card shadow-xl p-6 rounded-xl">
                 <CardContent className="p-0">
                   <form onSubmit={handleSubmit(onSubmit)} className="space-y-3.5">
                     {/* Full Name field */}
@@ -204,7 +200,7 @@ function RegisterContent() {
                         id="full_name"
                         type="text"
                         placeholder="Jane Doe"
-                        className="h-10 text-sm focus-visible:ring-indigo-500/20"
+                        className="h-10 text-sm bg-surface-elevated border-border text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
                         aria-invalid={errors.full_name ? "true" : "false"}
                         {...register("full_name")}
                       />
@@ -222,7 +218,7 @@ function RegisterContent() {
                         id="username"
                         type="text"
                         placeholder="janedoe"
-                        className="h-10 text-sm focus-visible:ring-indigo-500/20"
+                        className="h-10 text-sm bg-surface-elevated border-border text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
                         aria-invalid={errors.username ? "true" : "false"}
                         {...register("username")}
                       />
@@ -240,7 +236,7 @@ function RegisterContent() {
                         id="email"
                         type="email"
                         placeholder="name@company.com"
-                        className="h-10 text-sm focus-visible:ring-indigo-500/20"
+                        className="h-10 text-sm bg-surface-elevated border-border text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
                         aria-invalid={errors.email ? "true" : "false"}
                         {...register("email")}
                       />
@@ -259,14 +255,14 @@ function RegisterContent() {
                           id="password"
                           type={showPassword ? "text" : "password"}
                           placeholder="••••••••"
-                          className="h-10 pr-10 text-sm focus-visible:ring-indigo-500/20"
+                          className="h-10 pr-10 text-sm bg-surface-elevated border-border text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
                           aria-invalid={errors.password ? "true" : "false"}
                           {...register("password")}
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         >
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
@@ -285,7 +281,7 @@ function RegisterContent() {
                         id="confirm_password"
                         type={showPassword ? "text" : "password"}
                         placeholder="••••••••"
-                        className="h-10 text-sm focus-visible:ring-indigo-500/20"
+                        className="h-10 text-sm bg-surface-elevated border-border text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
                         aria-invalid={errors.confirm_password ? "true" : "false"}
                         {...register("confirm_password")}
                       />
@@ -298,7 +294,7 @@ function RegisterContent() {
                     <Button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full h-10 mt-3 bg-indigo-600 text-white hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500 transition-all font-semibold rounded-lg shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full h-10 mt-3 bg-primary text-primary-foreground hover:bg-primary-hover transition-colors font-semibold rounded-md shadow-none flex items-center justify-center gap-2 cursor-pointer border border-primary"
                     >
                       {isSubmitting ? (
                         <>
@@ -317,7 +313,7 @@ function RegisterContent() {
                 Already have an account?{" "}
                 <Link
                   href="/login"
-                  className="font-semibold text-indigo-600 hover:text-indigo-500 hover:underline transition-all"
+                  className="font-semibold text-primary hover:underline transition-all"
                 >
                   Sign in instead
                 </Link>
@@ -327,7 +323,7 @@ function RegisterContent() {
             /* Step 2: Role Selection Screen */
             <div className="space-y-6">
               <div className="text-center lg:text-left space-y-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-500 block">
+                <span className="text-xs font-bold uppercase tracking-wider text-primary block">
                   Step 2 of 2 — Onboarding
                 </span>
                 <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
@@ -342,20 +338,20 @@ function RegisterContent() {
                 {/* Option 1: Admin */}
                 <div
                   onClick={() => setSelectedRole("ADMIN")}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 ${
+                  className={`p-4 rounded-xl border transition-colors cursor-pointer flex items-start gap-3.5 ${
                     selectedRole === "ADMIN"
-                      ? "border-indigo-500 bg-indigo-500/10 shadow-md ring-1 ring-indigo-500/50"
-                      : "border-border/60 bg-card hover:bg-muted/40"
+                      ? "border-primary bg-surface-elevated"
+                      : "border-border bg-card hover:bg-surface-elevated/60"
                   }`}
                 >
-                  <div className="mt-0.5 h-8 w-8 rounded-lg bg-indigo-500/20 text-indigo-500 flex items-center justify-center shrink-0">
+                  <div className="mt-0.5 h-8 w-8 rounded-lg bg-surface-elevated text-primary border border-border flex items-center justify-center shrink-0">
                     <Building2 className="h-4 w-4" />
                   </div>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-sm text-foreground">Admin</span>
                       {selectedRole === "ADMIN" && (
-                        <CheckCircle2 className="h-4 w-4 text-indigo-500" />
+                        <CheckCircle2 className="h-4 w-4 text-primary" />
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">
@@ -367,20 +363,20 @@ function RegisterContent() {
                 {/* Option 2: Compliance Analyst */}
                 <div
                   onClick={() => setSelectedRole("LEGAL_ANALYST")}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 ${
+                  className={`p-4 rounded-xl border transition-colors cursor-pointer flex items-start gap-3.5 ${
                     selectedRole === "LEGAL_ANALYST"
-                      ? "border-indigo-500 bg-indigo-500/10 shadow-md ring-1 ring-indigo-500/50"
-                      : "border-border/60 bg-card hover:bg-muted/40"
+                      ? "border-accent bg-surface-elevated"
+                      : "border-border bg-card hover:bg-surface-elevated/60"
                   }`}
                 >
-                  <div className="mt-0.5 h-8 w-8 rounded-lg bg-violet-500/20 text-violet-500 flex items-center justify-center shrink-0">
+                  <div className="mt-0.5 h-8 w-8 rounded-lg bg-surface-elevated text-accent border border-border flex items-center justify-center shrink-0">
                     <UserCheck className="h-4 w-4" />
                   </div>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-sm text-foreground">Compliance Analyst</span>
                       {selectedRole === "LEGAL_ANALYST" && (
-                        <CheckCircle2 className="h-4 w-4 text-indigo-500" />
+                        <CheckCircle2 className="h-4 w-4 text-accent" />
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">
@@ -393,7 +389,7 @@ function RegisterContent() {
               <Button
                 onClick={handleCompleteRoleSetup}
                 disabled={isSettingUpRole}
-                className="w-full h-10 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full h-10 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold text-sm rounded-md transition-colors cursor-pointer flex items-center justify-center gap-2 border border-primary"
               >
                 {isSettingUpRole ? (
                   <>
@@ -419,7 +415,7 @@ export default function RegisterPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-background">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       }
     >

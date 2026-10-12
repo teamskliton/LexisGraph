@@ -27,22 +27,18 @@ export default function HowItWorks() {
           {/* Horizontal connector (desktop only) */}
           <div
             aria-hidden="true"
-            className="hidden lg:block absolute top-7 left-[12.5%] right-[12.5%] h-px"
-            style={{ background: "linear-gradient(to right, var(--primary), var(--accent))", opacity: 0.3 }}
+            className="hidden lg:block absolute top-7 left-[12.5%] right-[12.5%] h-px bg-border"
           />
 
-          {HOW_IT_WORKS.map((step, i) => (
+          {HOW_IT_WORKS.map((step) => (
             <li
               key={step.step}
               className="flex flex-col items-center lg:items-center text-left lg:text-center gap-4 group"
             >
               {/* Step number badge */}
               <div
-                className="relative z-10 w-14 h-14 rounded-full flex items-center justify-center font-extrabold text-base border-2 transition-all duration-200 group-hover:scale-105"
+                className="relative z-10 w-14 h-14 rounded-full flex items-center justify-center font-extrabold text-base border transition-colors bg-surface-elevated border-border text-primary"
                 style={{
-                  background: "var(--primary-subtle)",
-                  borderColor: "var(--primary)",
-                  color: "var(--primary)",
                   boxShadow: "0 0 0 6px var(--background)",
                 }}
               >

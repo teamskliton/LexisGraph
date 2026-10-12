@@ -82,15 +82,11 @@ function LoginContent() {
   return (
     <div className="flex min-h-screen w-full flex-col lg:flex-row bg-background">
       {/* Left side brand banner (Hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-zinc-950 p-12 text-white relative overflow-hidden border-r border-zinc-800">
-        {/* Glow Effects */}
-        <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] rounded-full bg-violet-600/20 blur-[120px] pointer-events-none" />
-
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-card p-12 text-foreground relative overflow-hidden border-r border-border">
         {/* Top Header */}
         <Link href="/" className="flex items-center gap-2.5 z-10 w-fit">
-          <BrandLogo size={40} className="shadow-lg shadow-indigo-500/20" priority />
-          <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+          <BrandLogo size={40} priority />
+          <span className="text-xl font-bold tracking-tight text-foreground">
             LexisGraph
           </span>
         </Link>
@@ -98,49 +94,49 @@ function LoginContent() {
         {/* Center Tech Visualization */}
         <div className="my-auto z-10 max-w-md space-y-8">
           <div className="space-y-4">
-            <h1 className="text-4xl font-extrabold tracking-tight leading-none bg-gradient-to-br from-white via-zinc-100 to-zinc-500 bg-clip-text text-transparent">
+            <h1 className="text-4xl font-extrabold tracking-tight leading-none text-foreground">
               Enterprise Policy Compliance
             </h1>
-            <p className="text-lg text-zinc-400 leading-relaxed">
+            <p className="text-lg text-muted-foreground leading-relaxed">
               Verify compliance frameworks using vector semantics combined with Neo4j Knowledge Graph relations.
             </p>
           </div>
 
           {/* Features Checklist */}
-          <div className="space-y-4 pt-4 border-t border-zinc-800/80">
+          <div className="space-y-4 pt-4 border-t border-border">
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-md bg-indigo-500/10 p-1 text-indigo-400 border border-indigo-500/25">
+              <div className="mt-1 rounded-md bg-surface-elevated p-1.5 text-primary border border-border">
                 <ShieldCheck className="h-4 w-4" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-zinc-200">Semantic Matching</h4>
-                <p className="text-xs text-zinc-400">High-dimensional embeddings find compliance gaps instantly.</p>
+                <h4 className="text-sm font-semibold text-foreground">Semantic Matching</h4>
+                <p className="text-xs text-muted-foreground">High-dimensional embeddings find compliance gaps instantly.</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-md bg-violet-500/10 p-1 text-violet-400 border border-violet-500/25">
+              <div className="mt-1 rounded-md bg-surface-elevated p-1.5 text-accent border border-border">
                 <Network className="h-4 w-4" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-zinc-200">Knowledge Graphs</h4>
-                <p className="text-xs text-zinc-400">Explore relational networks of policies and legal requirements.</p>
+                <h4 className="text-sm font-semibold text-foreground">Knowledge Graphs</h4>
+                <p className="text-xs text-muted-foreground">Explore relational networks of policies and legal requirements.</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="z-10 text-xs text-zinc-500 flex items-center justify-between">
+        <div className="z-10 text-xs text-muted-foreground flex items-center justify-between">
           <span>© {new Date().getFullYear()} LexisGraph Inc.</span>
-          <span className="flex items-center gap-1 hover:text-zinc-300 cursor-pointer transition-colors">
+          <span className="flex items-center gap-1 hover:text-foreground cursor-pointer transition-colors">
             Documentation <ArrowRight className="h-3 w-3" />
           </span>
         </div>
       </div>
 
       {/* Right side form card */}
-      <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:px-20 xl:px-24 relative">
+      <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:px-20 xl:px-24 relative bg-background">
         {/* Top-Right Theme Toggle */}
         <div className="absolute top-6 right-6">
           <ThemeToggle />
@@ -164,28 +160,28 @@ function LoginContent() {
             </p>
           </div>
 
-          <Card className="border-border bg-card/50 backdrop-blur-sm shadow-xl p-6 rounded-2xl">
+          <Card className="border-border bg-card shadow-xl p-6 rounded-xl">
             <CardContent className="p-0">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 {/* Visual Error Banner */}
                 {errorMessage && (
-                  <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-sm text-red-600 dark:text-red-400 space-y-2 animate-in fade-in duration-200">
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3.5 text-sm text-destructive space-y-2 animate-in fade-in duration-200">
                     <div className="flex items-start gap-2.5">
-                      <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                      <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-destructive" />
                       <div className="space-y-0.5">
-                        <p className="font-semibold text-xs uppercase tracking-wider text-red-700 dark:text-red-300">
+                        <p className="font-semibold text-xs uppercase tracking-wider text-destructive">
                           {isNoAccount ? "No Account Found" : "Sign In Failed"}
                         </p>
-                        <p className="text-xs text-red-600 dark:text-red-300/90 leading-relaxed">
+                        <p className="text-xs text-destructive/90 leading-relaxed">
                           {errorMessage}
                         </p>
                       </div>
                     </div>
                     {isNoAccount && (
-                      <div className="pt-2 pl-7 border-t border-red-500/15">
+                      <div className="pt-2 pl-7 border-t border-destructive/20">
                         <Link
                           href="/register"
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
                         >
                           Create an account here <ArrowRight className="h-3.5 w-3.5" />
                         </Link>
@@ -202,7 +198,7 @@ function LoginContent() {
                     id="username"
                     type="text"
                     placeholder="name@company.com"
-                    className="h-10 text-sm focus-visible:ring-indigo-500/20"
+                    className="h-10 text-sm border-border bg-surface-elevated text-foreground focus-visible:outline-2 focus-visible:outline-primary"
                     aria-invalid={errors.username ? "true" : "false"}
                     {...register("username")}
                   />
@@ -223,14 +219,14 @@ function LoginContent() {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
-                      className="h-10 pr-10 text-sm focus-visible:ring-indigo-500/20"
+                      className="h-10 pr-10 text-sm border-border bg-surface-elevated text-foreground focus-visible:outline-2 focus-visible:outline-primary"
                       aria-invalid={errors.password ? "true" : "false"}
                       {...register("password")}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -240,11 +236,11 @@ function LoginContent() {
                   )}
                 </div>
 
-                {/* Submit button */}
+                {/* Submit button — solid primary */}
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full h-10 mt-2 bg-indigo-600 text-white hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500 transition-all font-semibold rounded-lg shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full h-10 mt-2 bg-primary text-primary-foreground hover:bg-primary-hover border border-primary transition-colors font-semibold rounded-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
@@ -263,7 +259,7 @@ function LoginContent() {
             New to LexisGraph?{" "}
             <Link
               href="/register"
-              className="font-semibold text-indigo-600 hover:text-indigo-500 hover:underline transition-all"
+              className="font-semibold text-primary hover:underline transition-colors"
             >
               Create an account
             </Link>
@@ -279,7 +275,7 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-background">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       }
     >

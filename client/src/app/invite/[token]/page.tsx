@@ -197,7 +197,7 @@ export default function AcceptInvitePage() {
       <main className="flex-1 flex items-center justify-center p-4">
         {isLoading || isAuthLoading ? (
           <Card className="p-10 max-w-md w-full text-center space-y-4 bg-card border-border shadow-2xl">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mx-auto" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
             <p className="text-xs text-muted-foreground font-medium">
               Validating secure invitation token...
             </p>
@@ -212,7 +212,7 @@ export default function AcceptInvitePage() {
             </div>
             <Button
               onClick={() => router.push(user ? "/dashboard" : "/login")}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 px-4 rounded-xl cursor-pointer"
+              className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 px-4 rounded-xl cursor-pointer"
             >
               Return to Home
             </Button>
@@ -227,13 +227,13 @@ export default function AcceptInvitePage() {
                 Taking you to your organization workspace...
               </p>
             </div>
-            <Loader2 className="h-4 w-4 animate-spin text-indigo-500 mx-auto" />
+            <Loader2 className="h-4 w-4 animate-spin text-primary mx-auto" />
           </Card>
         ) : details ? (
           <Card className="p-8 max-w-md w-full space-y-6 bg-card border-border shadow-2xl rounded-2xl">
             {/* Header Icon & Title */}
             <div className="text-center space-y-2">
-              <div className="h-14 w-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center mx-auto shadow-md">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center mx-auto shadow-md">
                 <Building2 className="h-7 w-7" />
               </div>
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
@@ -241,7 +241,7 @@ export default function AcceptInvitePage() {
               </span>
               <h1 className="text-xl font-extrabold text-foreground">
                 You're invited to join{" "}
-                <span className="text-indigo-500">{details.organization_name}</span>
+                <span className="text-primary">{details.organization_name}</span>
               </h1>
               <p className="text-xs text-muted-foreground">
                 Invited by <strong className="text-foreground">{details.inviter_name}</strong>
@@ -253,9 +253,9 @@ export default function AcceptInvitePage() {
               {/* Role */}
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground font-semibold flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-indigo-500" /> Assigned Role
+                  <Shield className="h-3.5 w-3.5 text-primary" /> Assigned Role
                 </span>
-                <Badge className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 text-[11px] font-mono">
+                <Badge className="bg-primary/10 text-primary border-primary/30 text-[11px] font-mono">
                   {formatRoleLabel(details.role)}
                 </Badge>
               </div>
@@ -264,7 +264,7 @@ export default function AcceptInvitePage() {
               {details.is_email_bound && details.email && (
                 <div className="flex items-center justify-between border-t border-border/40 pt-2 text-[11px]">
                   <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5 text-indigo-400" /> Invited Email
+                    <Mail className="h-3.5 w-3.5 text-primary" /> Invited Email
                   </span>
                   <span className="font-mono text-foreground font-semibold">
                     {details.email}
@@ -324,7 +324,7 @@ export default function AcceptInvitePage() {
                 <Button
                   onClick={handleAccept}
                   disabled={isAccepting || emailMismatch}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-10 rounded-xl shadow-lg shadow-indigo-600/20 font-bold cursor-pointer gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-10 rounded-xl shadow-lg shadow-primary/20 font-bold cursor-pointer gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAccepting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -373,7 +373,7 @@ export default function AcceptInvitePage() {
                       }
                       router.push(`/register?invite_token=${token}`);
                     }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 rounded-xl font-semibold cursor-pointer gap-1"
+                    className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 rounded-xl font-semibold cursor-pointer gap-1"
                   >
                     <UserPlus className="h-3.5 w-3.5" /> Sign up
                   </Button>
