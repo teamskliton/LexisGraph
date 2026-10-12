@@ -65,7 +65,7 @@ function deriveRemediationStatusBadge(status?: string, isOverdue?: boolean) {
     case "IN_PROGRESS":
       return {
         label: "IN PROGRESS",
-        className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+        className: "bg-primary/10 text-primary border-primary/30",
       };
     case "READY_FOR_REVIEW":
       return {
@@ -104,7 +104,7 @@ function derivePriorityBadge(priority?: string) {
     case "HIGH":
       return { label: "HIGH", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" };
     case "MEDIUM":
-      return { label: "MEDIUM", className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30" };
+      return { label: "MEDIUM", className: "bg-primary/10 text-primary border-primary/30" };
     case "LOW":
     default:
       return { label: "LOW", className: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30" };
@@ -490,7 +490,7 @@ export function RemediationSection({
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-indigo-500" />
+              <Wrench className="h-4 w-4 text-primary" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
                 Remediation Plan
               </h3>
@@ -505,7 +505,7 @@ export function RemediationSection({
               size="xs"
               onClick={handleCreateRemediation}
               disabled={isMutating}
-              className="h-8 text-xs font-semibold gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shrink-0"
+              className="h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer shrink-0"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Create Remediation</span>
@@ -525,7 +525,7 @@ export function RemediationSection({
       <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-3 flex-wrap">
         <div className="space-y-1 min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <Wrench className="h-4 w-4 text-indigo-500 shrink-0" />
+            <Wrench className="h-4 w-4 text-primary shrink-0" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-foreground truncate">
               {remediation.title}
             </h3>
@@ -629,7 +629,7 @@ export function RemediationSection({
               size="xs"
               onClick={handleSaveRemediationEdits}
               disabled={isMutating}
-              className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer"
+              className="h-7 text-xs bg-primary hover:bg-primary-hover text-primary-foreground font-semibold cursor-pointer"
             >
               Save Changes
             </Button>
@@ -718,7 +718,7 @@ export function RemediationSection({
             size="xs"
             onClick={handleStartRemediation}
             disabled={isMutating}
-            className="h-8 text-xs font-semibold gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+            className="h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
           >
             <Check className="h-3.5 w-3.5" />
             <span>Start Remediation</span>
@@ -774,7 +774,7 @@ export function RemediationSection({
                   size="xs"
                   onClick={() => setIsApproveModalOpen(true)}
                   disabled={isMutating}
-                  className="h-8 text-xs font-semibold gap-1.5 bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
+                  className="h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>Approve Remediation</span>
@@ -822,7 +822,7 @@ export function RemediationSection({
       <div className="space-y-3 pt-2 border-t border-border/40">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-            <Paperclip className="h-3.5 w-3.5 text-indigo-500" /> Attached Evidence ({remediation.evidence.length})
+            <Paperclip className="h-3.5 w-3.5 text-primary" /> Attached Evidence ({remediation.evidence.length})
           </span>
           {permissions.canManageRemediation && (
             <Button
@@ -830,7 +830,7 @@ export function RemediationSection({
               variant="outline"
               size="xs"
               onClick={handleOpenLinkDocModal}
-              className="h-6 text-[10px] font-medium gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10 cursor-pointer"
+              className="h-6 text-[10px] font-medium gap-1 text-primary border-primary/30 hover:bg-primary/10 cursor-pointer"
             >
               <FolderOpen className="h-3 w-3" />
               <span>Attach from Library</span>
@@ -851,12 +851,12 @@ export function RemediationSection({
                 className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-border/40 bg-muted/20 hover:bg-muted/30 transition-colors text-xs"
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <FileText className="h-4 w-4 text-indigo-500 shrink-0" />
+                  <FileText className="h-4 w-4 text-primary shrink-0" />
                   <div className="min-w-0 space-y-0.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="font-semibold text-foreground truncate">{ev.original_filename}</p>
                       {ev.cycle_number && (
-                        <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+                        <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 bg-primary/10 text-primary border-primary/30">
                           Cycle {ev.cycle_number}
                         </Badge>
                       )}
@@ -885,7 +885,7 @@ export function RemediationSection({
                     type="button"
                     onClick={() => handleDownloadEvidence(ev.id, ev.original_filename)}
                     disabled={downloadingEvidenceId === ev.id}
-                    className="p-1.5 text-indigo-500 hover:text-indigo-600 rounded-lg hover:bg-indigo-500/10 cursor-pointer disabled:opacity-50"
+                    className="p-1.5 text-primary hover:text-primary-hover rounded-lg hover:bg-primary/10 cursor-pointer disabled:opacity-50"
                     title="Download Evidence"
                   >
                     {downloadingEvidenceId === ev.id ? (
@@ -920,7 +920,7 @@ export function RemediationSection({
                 ref={fileInputRef}
                 type="file"
                 onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
-                className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-600 dark:file:text-indigo-400 hover:file:bg-indigo-500/20 cursor-pointer"
+                className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
               />
               <input
                 type="text"
@@ -933,7 +933,7 @@ export function RemediationSection({
                 type="submit"
                 size="xs"
                 disabled={!evidenceFile || isUploadingEvidence}
-                className="h-7 text-xs font-semibold gap-1 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shrink-0"
+                className="h-7 text-xs font-semibold gap-1 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer shrink-0"
               >
                 <UploadCloud className="h-3.5 w-3.5" />
                 <span>{isUploadingEvidence ? "Uploading..." : "Upload & Attach"}</span>
@@ -949,7 +949,7 @@ export function RemediationSection({
           <div className="bg-card border border-border/80 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                <FolderOpen className="h-4 w-4 text-indigo-500" /> Attach Document from Library
+                <FolderOpen className="h-4 w-4 text-primary" /> Attach Document from Library
               </h3>
               <Button
                 variant="ghost"
@@ -966,7 +966,7 @@ export function RemediationSection({
 
             {isLoadingDocs ? (
               <div className="py-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <RefreshCw className="h-4 w-4 animate-spin text-indigo-500" />
+                <RefreshCw className="h-4 w-4 animate-spin text-primary" />
                 <span>Loading organization documents...</span>
               </div>
             ) : availableDocs.length === 0 ? (
@@ -1017,7 +1017,7 @@ export function RemediationSection({
                 size="xs"
                 onClick={handleConfirmLinkDoc}
                 disabled={isLinkingDoc || availableDocs.length === 0 || !selectedDocId}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer"
+                className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold cursor-pointer"
               >
                 {isLinkingDoc ? "Linking..." : "Attach Document"}
               </Button>
@@ -1095,7 +1095,7 @@ export function RemediationSection({
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-card border border-border/80 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-purple-500" /> Approve Remediation
+              <CheckCircle2 className="h-4 w-4 text-primary" /> Approve Remediation
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Approve verified remediation. (Finding will remain ready for final resolution).
@@ -1114,7 +1114,7 @@ export function RemediationSection({
               <Button variant="outline" size="xs" onClick={() => setIsApproveModalOpen(false)} className="cursor-pointer">
                 Cancel
               </Button>
-              <Button size="xs" onClick={handleApprove} disabled={isMutating} className="bg-purple-600 hover:bg-purple-700 text-white font-semibold cursor-pointer">
+              <Button size="xs" onClick={handleApprove} disabled={isMutating} className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold cursor-pointer">
                 {isMutating ? "Approving..." : "Confirm Approval"}
               </Button>
             </div>

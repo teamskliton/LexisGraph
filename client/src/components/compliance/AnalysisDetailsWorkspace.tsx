@@ -351,7 +351,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
           <Button
             size="sm"
             onClick={loadWorkspace}
-            className="cursor-pointer text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+            className="cursor-pointer text-xs gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold"
             aria-label="Retry loading report"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -383,14 +383,14 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
 
         <Badge
           variant="outline"
-          className="border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 text-xs px-3 py-1 font-bold"
+          className="border-primary/30 text-primary bg-primary/10 text-xs px-3 py-1 font-bold"
         >
           Analysis Workspace
         </Badge>
       </div>
 
       {/* ── SECTION 1: ANALYSIS HEADER ── */}
-      <Card className="border border-border/60 bg-gradient-to-r from-card via-card/90 to-background p-6 shadow-sm">
+      <Card className="border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-3 flex-wrap">
@@ -404,7 +404,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
             </div>
 
             <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-              <Building2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" aria-hidden="true" />
+              <Building2 className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden="true" />
               <span>
                 Workspace: <strong>{organization?.name || "Organization Workspace"}</strong>
               </span>
@@ -421,10 +421,10 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
               variant="outline"
               size="sm"
               onClick={() => router.push(`/ai-assistant?reportId=${report.id}&question=${encodeURIComponent(`Summarize the major compliance risks in report #${report.id.slice(0, 8)}.`)}`)}
-              className="text-xs cursor-pointer gap-1.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+              className="text-xs cursor-pointer gap-1.5 border-accent/30 text-accent hover:bg-accent/10"
               aria-label="Analyze report with AI Assistant"
             >
-              <Sparkles className="h-4 w-4" aria-hidden="true" /> Analyze Report with AI
+              <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> Analyze Report with AI
             </Button>
 
             <Button
@@ -434,7 +434,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
               className="text-xs cursor-pointer gap-1.5"
               aria-label="Scroll to executive report section"
             >
-              <FileText className="h-4 w-4 text-indigo-500" aria-hidden="true" /> View Report
+              <FileText className="h-4 w-4 text-primary" aria-hidden="true" /> View Report
             </Button>
 
             <Button
@@ -470,7 +470,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
             <Button
               size="sm"
               onClick={handleShare}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md text-xs cursor-pointer gap-1.5"
+              className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold shadow-md text-xs cursor-pointer gap-1.5"
               aria-label="Copy workspace URL to clipboard"
             >
               <Share2 className="h-4 w-4" aria-hidden="true" /> Share
@@ -508,7 +508,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
               {tab.id === "GAP_ANALYSIS" && (
                 <Badge
                   variant="outline"
-                  className="text-[9px] px-1.5 py-0 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 font-bold"
+                  className="text-[9px] px-1.5 py-0 border-primary/30 text-primary bg-primary/10 font-bold"
                 >
                   NEW
                 </Badge>
@@ -535,7 +535,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       {/* ── SECTION 2: EXECUTIVE SUMMARY ── */}
       <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Sparkles className="h-4 w-4 text-indigo-500" aria-hidden="true" /> Executive Compliance Summary
+          <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> Executive Compliance Summary
         </span>
 
         {details?.summary ? (
@@ -556,7 +556,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
         <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
           <span className="text-[10px] uppercase font-bold text-muted-foreground block">Compliance Score</span>
           <p
-            className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1 font-mono"
+            className="text-xl font-extrabold text-primary mt-1 font-mono"
             aria-label={`Compliance score: ${score}%`}
           >
             {score}%
@@ -625,10 +625,10 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       </div>
 
       {/* ── FINDING LIFECYCLE OPERATIONS SUMMARY BAR ── */}
-      <Card className="border border-indigo-500/20 bg-card p-4 shadow-xs">
+      <Card className="border border-primary/20 bg-card p-4 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-indigo-500" />
+            <ShieldAlert className="h-5 w-5 text-primary" />
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
                 Finding Remediation Lifecycle Status
@@ -643,7 +643,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
             <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30">
               Open: {report?.open_count ?? 0}
             </Badge>
-            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-primary/10 text-primary border-primary/30">
               In Review: {report?.in_review_count ?? 0}
             </Badge>
             <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
@@ -656,7 +656,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
             <Button
               size="sm"
               onClick={() => router.push(`/compliance/reports/${report?.id}/findings`)}
-              className="text-xs font-semibold cursor-pointer gap-1 bg-indigo-600 hover:bg-indigo-700 text-white ml-2"
+              className="text-xs font-semibold cursor-pointer gap-1 bg-primary hover:bg-primary-hover text-primary-foreground ml-2"
             >
               <span>Manage Findings Workspace</span>
               <ArrowRight className="h-3.5 w-3.5" />
@@ -675,7 +675,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                 variant="outline"
                 size="xs"
                 onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
-                className="text-xs font-semibold cursor-pointer gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+                className="text-xs font-semibold cursor-pointer gap-1 text-primary border-primary/30"
               >
                 <span>View All Findings Workspace</span>
                 <ExternalLink className="h-3 w-3" />
@@ -701,7 +701,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer focus:ring-1 focus:ring-indigo-500"
+              className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer focus:ring-1 focus:ring-primary"
               aria-label="Filter findings by status"
             >
               <option value="ALL">All Statuses</option>
@@ -750,7 +750,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                           tabIndex={0}
                           aria-expanded={isExpanded}
                           aria-label={`Clause ${clause.regulation_clause_id} — ${clause.status}. Press to ${isExpanded ? "collapse" : "expand"} details.`}
-                          className="hover:bg-muted/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-inset"
+                          className="hover:bg-muted/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
                         >
                           <td className="p-3 pl-4">
                             <Badge
@@ -783,7 +783,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                             )}
                           </td>
 
-                          <td className="p-3 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          <td className="p-3 text-center font-mono font-bold text-primary">
                             {(clause.similarity_score * 100).toFixed(0)}%
                           </td>
 
@@ -803,7 +803,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                             <td colSpan={5} className="p-5 space-y-4 text-xs">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="p-3.5 rounded-lg bg-background border border-border/50 space-y-1">
-                                  <span className="text-[10px] font-bold text-indigo-500 uppercase block">
+                                  <span className="text-[10px] font-bold text-primary uppercase block">
                                     Regulation Citation
                                   </span>
                                   <p className="text-foreground">{clause.regulation_text}</p>
@@ -820,9 +820,9 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                                 </div>
                               </div>
 
-                              <div className="p-3.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 space-y-1">
-                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase flex items-center gap-1">
-                                  <Sparkles className="h-3 w-3" aria-hidden="true" /> LLM Legal Reasoning
+                              <div className="p-3.5 rounded-lg bg-accent/10 border border-accent/20 space-y-1">
+                                <span className="text-[10px] font-bold text-accent uppercase flex items-center gap-1">
+                                  <Sparkles className="h-3 w-3 text-accent" aria-hidden="true" /> LLM Legal Reasoning
                                 </span>
                                 <p className="text-foreground">{clause.reasoning}</p>
                               </div>
@@ -868,7 +868,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                     >
                       {clause.status}
                     </Badge>
-                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                    <span className="font-mono font-bold text-primary">
                       {(clause.similarity_score * 100).toFixed(0)}% Score
                     </span>
                   </div>
@@ -889,9 +889,9 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                     </p>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 space-y-1">
-                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase flex items-center gap-1">
-                      <Sparkles className="h-3 w-3" aria-hidden="true" /> Reasoning
+                  <div className="p-3.5 rounded-lg bg-accent/10 border border-accent/20 space-y-1">
+                    <span className="text-[10px] font-bold text-accent uppercase flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 text-accent" aria-hidden="true" /> Reasoning
                     </span>
                     <p className="text-foreground">{clause.reasoning}</p>
                   </div>
@@ -915,14 +915,14 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Network className="h-4 w-4 text-indigo-500" aria-hidden="true" /> Knowledge Graph Structural Evidence
+            <Network className="h-4 w-4 text-accent" aria-hidden="true" /> Knowledge Graph Structural Evidence
           </span>
 
           <Button
             variant="outline"
             size="sm"
             onClick={() => router.push("/knowledge-graph")}
-            className="text-xs cursor-pointer gap-1.5 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+            className="text-xs cursor-pointer gap-1.5 text-accent border-accent/30 hover:bg-accent/10"
             aria-label="Explore evidence in the knowledge graph"
           >
             Explore in Knowledge Graph <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -936,10 +936,10 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       </div>
 
       {/* ── SECTION 6: AI RECOMMENDATIONS ── */}
-      <Card className="border border-indigo-500/30 bg-indigo-500/5 p-6 space-y-4 shadow-xs">
+      <Card className="border border-accent/30 bg-accent/5 p-6 space-y-4 shadow-xs">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4" aria-hidden="true" /> AI Recommendations & Remediation
+          <span className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> AI Recommendations & Remediation
           </span>
           <Button
             variant="outline"
@@ -960,7 +960,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
                 className="p-3.5 rounded-lg border border-border/50 bg-background/90 flex items-start gap-3"
               >
                 <span
-                  className="h-6 w-6 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0"
+                  className="h-6 w-6 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0"
                   aria-hidden="true"
                 >
                   {idx + 1}
@@ -1009,7 +1009,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
               <Button
                 size="sm"
                 onClick={handleExportPDF}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs cursor-pointer gap-1.5"
+                className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold text-xs cursor-pointer gap-1.5"
                 aria-label="Download this report as PDF"
               >
                 <Download className="h-4 w-4" aria-hidden="true" /> Download PDF
@@ -1031,7 +1031,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       {/* ── SECTION 8: TIMELINE ── */}
       <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Clock className="h-4 w-4 text-indigo-500" aria-hidden="true" /> Execution Milestone Timeline
+          <Clock className="h-4 w-4 text-primary" aria-hidden="true" /> Execution Milestone Timeline
         </span>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
@@ -1056,14 +1056,14 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <History className="h-4 w-4 text-indigo-500" aria-hidden="true" /> Related Analyses for Organization
+            <History className="h-4 w-4 text-primary" aria-hidden="true" /> Related Analyses for Organization
           </span>
 
           <Button
             variant="outline"
             size="sm"
             onClick={() => router.push("/compliance/history")}
-            className="text-xs cursor-pointer gap-1.5 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+            className="text-xs cursor-pointer gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
             aria-label="View all analysis history"
           >
             View All History <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1091,7 +1091,7 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
 
                 <div className="flex items-center gap-3">
                   {rel.overall_score != null ? (
-                    <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                    <span className="font-bold font-mono text-primary">
                       {rel.overall_score}%
                     </span>
                   ) : (

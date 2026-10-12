@@ -96,7 +96,7 @@ export const LatestAnalysisCard: React.FC<LatestAnalysisCardProps> = ({
               </span>
               <span>
                 Score:{" "}
-                <strong className="text-indigo-600 dark:text-indigo-400 font-bold">
+                <strong className="text-primary font-bold">
                   {score != null ? `${score}%` : "Pending"}
                 </strong>
               </span>
@@ -112,7 +112,7 @@ export const LatestAnalysisCard: React.FC<LatestAnalysisCardProps> = ({
                 router.push(`/compliance/progress/${latestJob.job_id}`);
               }
             }}
-            className="gap-1.5 text-xs font-semibold cursor-pointer shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white"
+            className="gap-1.5 text-xs font-semibold cursor-pointer shrink-0 bg-primary hover:bg-primary-hover text-primary-foreground"
             aria-label={latestReport ? `Open analysis report ${latestReport.id.slice(0, 8)}` : "Open analysis job"}
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /> Open Analysis
@@ -125,7 +125,7 @@ export const LatestAnalysisCard: React.FC<LatestAnalysisCardProps> = ({
           role="status"
           aria-live="polite"
         >
-          <div className="h-12 w-12 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto">
+          <div className="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
             <Zap className="h-6 w-6" aria-hidden="true" />
           </div>
           <div>
@@ -138,7 +138,7 @@ export const LatestAnalysisCard: React.FC<LatestAnalysisCardProps> = ({
           <Button
             onClick={onRunAnalysis}
             size="sm"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold gap-1.5 cursor-pointer mt-2"
+            className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold gap-1.5 cursor-pointer mt-2"
             aria-label="Run your first compliance analysis"
           >
             <Zap className="h-4 w-4 text-amber-300" aria-hidden="true" /> Run First Analysis

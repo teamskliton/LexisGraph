@@ -239,7 +239,7 @@ export const AnalysisHistoryTable: React.FC<AnalysisHistoryTableProps> = ({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer focus:ring-1 focus:ring-indigo-500"
+              className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer focus:ring-1 focus:ring-primary"
               aria-label="Sort order"
             >
               <option value="newest">Newest First</option>
@@ -271,7 +271,7 @@ export const AnalysisHistoryTable: React.FC<AnalysisHistoryTableProps> = ({
           role="status"
           aria-live="polite"
         >
-          <div className="h-12 w-12 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto">
+          <div className="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
             <History className="h-6 w-6" aria-hidden="true" />
           </div>
 
@@ -291,7 +291,7 @@ export const AnalysisHistoryTable: React.FC<AnalysisHistoryTableProps> = ({
           {!searchQuery && statusFilter === "ALL" && (
             <Button
               onClick={() => router.push("/compliance/new")}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md gap-1.5 cursor-pointer text-xs"
+              className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold shadow-md gap-1.5 cursor-pointer text-xs"
               aria-label="Start a new compliance analysis"
             >
               <PlusCircle className="h-4 w-4" aria-hidden="true" /> Run Analysis
@@ -359,7 +359,7 @@ export const AnalysisHistoryTable: React.FC<AnalysisHistoryTableProps> = ({
                       {/* Compliance Score */}
                       <td className="p-3.5 text-center font-bold font-mono text-sm">
                         {item.score != null ? (
-                          <span className="text-indigo-600 dark:text-indigo-400">{item.score}%</span>
+                          <span className="text-primary">{item.score}%</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -382,7 +382,7 @@ export const AnalysisHistoryTable: React.FC<AnalysisHistoryTableProps> = ({
                             variant="ghost"
                             size="sm"
                             onClick={() => router.push(`/compliance/progress/${item.jobId}`)}
-                            className="h-8 text-xs cursor-pointer px-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
+                            className="h-8 text-xs cursor-pointer px-2 text-primary hover:underline"
                             aria-label={`View job details for audit ${item.jobId.slice(0, 8)}`}
                           >
                             Details

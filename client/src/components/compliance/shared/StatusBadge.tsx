@@ -41,7 +41,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = "sm" })
       return (
         <Badge
           variant="outline"
-          className={`bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 ${textClass}`}
+          className={`bg-primary/10 text-primary border-primary/30 ${textClass}`}
           aria-label="Status: Running"
         >
           <Loader2 className={`${iconClass} animate-spin`} aria-hidden="true" />

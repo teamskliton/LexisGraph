@@ -226,13 +226,13 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
             onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
             className="gap-1.5 text-xs cursor-pointer"
           >
-            <ShieldAlert className="h-3.5 w-3.5 text-indigo-500" /> View Findings
+            <ShieldAlert className="h-3.5 w-3.5 text-primary" /> View Findings
           </Button>
 
           <Button
             size="sm"
             onClick={() => router.push("/knowledge-graph")}
-            className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+            className="gap-1.5 text-xs font-semibold cursor-pointer border border-accent/40 text-accent hover:bg-accent/10 bg-accent/5"
           >
             <Network className="h-3.5 w-3.5" /> Explore Knowledge Graph
           </Button>
@@ -390,7 +390,7 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
             <Button
               size="sm"
               onClick={fetchRecommendations}
-              className="text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+              className="text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground gap-1.5"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>Retry</span>
@@ -466,7 +466,7 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
                     </Badge>
 
                     {item.assignee && (
-                      <Badge variant="outline" className="text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+                      <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
                         Assigned: {item.assignee.full_name}
                       </Badge>
                     )}
@@ -491,7 +491,7 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-border/40 text-xs">
                   {/* Policy Side */}
                   <div className="p-2.5 rounded-lg bg-muted/20 border border-border/40 space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-indigo-500 block">
+                    <span className="text-[10px] uppercase font-bold text-primary block">
                       Affected Policy Clause
                     </span>
                     <p className="text-muted-foreground truncate">
@@ -529,7 +529,7 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
                   <Button
                     size="sm"
                     onClick={() => handleOpenDrawer(item)}
-                    className="h-8 text-xs font-semibold cursor-pointer gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                    className="h-8 text-xs font-semibold cursor-pointer gap-1 bg-primary hover:bg-primary-hover text-primary-foreground"
                   >
                     <span>View Source Finding</span>
                     <ChevronRight className="h-3.5 w-3.5" />

@@ -222,9 +222,9 @@ export function ComplianceCalendarWorkspace() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold text-foreground tracking-tight flex items-center gap-2">
-                  <CalendarIcon className="h-5 w-5 text-indigo-500" /> Compliance Remediation Calendar
+                  <CalendarIcon className="h-5 w-5 text-primary" /> Compliance Remediation Calendar
                 </h1>
-                <Badge variant="outline" className="text-[10px] font-mono uppercase bg-indigo-500/10 text-indigo-600 border-indigo-500/30">
+                <Badge variant="outline" className="text-[10px] font-mono uppercase bg-primary/10 text-primary border-primary/30">
                   {calendarData?.organization_name || "Active Org"}
                 </Badge>
               </div>
@@ -297,14 +297,14 @@ export function ComplianceCalendarWorkspace() {
 
           <Card className="border border-border/60 bg-card p-4 shadow-2xs flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
                 Next 30 Days
               </span>
-              <div className="text-2xl font-bold tabular-nums text-indigo-500">
+              <div className="text-2xl font-bold tabular-nums text-primary">
                 {calendarData?.summary.next_30_days_count || 0}
               </div>
             </div>
-            <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+            <div className="p-3 rounded-xl bg-primary/10 text-primary border border-primary/20">
               <CalendarIcon className="h-5 w-5" />
             </div>
           </Card>
@@ -338,7 +338,7 @@ export function ComplianceCalendarWorkspace() {
                 variant="ghost"
                 size="sm"
                 onClick={handleToday}
-                className="text-xs font-semibold text-indigo-500 cursor-pointer ml-1"
+                className="text-xs font-semibold text-primary cursor-pointer ml-1"
               >
                 Today
               </Button>
@@ -353,7 +353,7 @@ export function ComplianceCalendarWorkspace() {
                   setAssignedToMe(false);
                   setOverdueOnly(false);
                 }}
-                className={cn("text-xs font-semibold cursor-pointer h-8", !assignedToMe && !overdueOnly && "bg-indigo-600 text-white")}
+                className={cn("text-xs font-semibold cursor-pointer h-8", !assignedToMe && !overdueOnly && "bg-primary text-primary-foreground")}
               >
                 All Deadlines
               </Button>
@@ -362,7 +362,7 @@ export function ComplianceCalendarWorkspace() {
                 variant={assignedToMe ? "default" : "outline"}
                 size="sm"
                 onClick={() => setAssignedToMe((prev) => !prev)}
-                className={cn("text-xs font-semibold gap-1.5 cursor-pointer h-8", assignedToMe && "bg-indigo-600 text-white")}
+                className={cn("text-xs font-semibold gap-1.5 cursor-pointer h-8", assignedToMe && "bg-primary text-primary-foreground")}
               >
                 <UserCheck className="h-3.5 w-3.5" />
                 <span>Assigned to Me</span>
@@ -382,7 +382,7 @@ export function ComplianceCalendarWorkspace() {
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-lg border border-border/60 bg-muted/20 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                className="h-8 px-2.5 rounded-lg border border-border/60 bg-muted/20 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
               >
                 <option value="ALL">Severity: All</option>
                 <option value="CRITICAL">Critical</option>
@@ -434,9 +434,9 @@ export function ComplianceCalendarWorkspace() {
                     className={cn(
                       "h-24 p-2 rounded-xl border transition-all cursor-pointer flex flex-col justify-between group",
                       isSelected
-                        ? "border-indigo-500 bg-indigo-500/10 ring-1 ring-indigo-500"
+                        ? "border-primary bg-primary/10 ring-1 ring-primary"
                         : isCurrent
-                        ? "border-indigo-500/50 bg-indigo-500/5"
+                        ? "border-primary/50 bg-primary/5"
                         : "border-border/60 bg-card hover:bg-muted/30",
                       hasOverdue && !isSelected && "border-rose-500/40 bg-rose-500/5"
                     )}
@@ -446,9 +446,9 @@ export function ComplianceCalendarWorkspace() {
                         className={cn(
                           "text-xs font-mono font-bold h-6 w-6 rounded-full flex items-center justify-center",
                           isCurrent
-                            ? "bg-indigo-600 text-white"
+                            ? "bg-primary text-primary-foreground"
                             : isSelected
-                            ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400"
+                            ? "bg-primary/20 text-primary"
                             : "text-foreground"
                         )}
                       >
@@ -464,7 +464,7 @@ export function ComplianceCalendarWorkspace() {
                               ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
                               : hasCritical
                               ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
-                              : "bg-indigo-500/10 text-indigo-600 border-indigo-500/30"
+                              : "bg-primary/10 text-primary border-primary/30"
                           )}
                         >
                           {dayDeadlines.length} due
@@ -508,7 +508,7 @@ export function ComplianceCalendarWorkspace() {
         <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-              <CalendarIcon className="h-4 w-4 text-indigo-500" />
+              <CalendarIcon className="h-4 w-4 text-primary" />
               {selectedDate
                 ? `Remediation Deadlines for ${format(selectedDate, "dd MMMM yyyy")}`
                 : `Remediation Deadlines (${format(currentMonth, "MMMM yyyy")})`}
@@ -519,7 +519,7 @@ export function ComplianceCalendarWorkspace() {
                   variant="ghost"
                   size="xs"
                   onClick={() => setSelectedDate(null)}
-                  className="text-xs text-indigo-500 font-semibold cursor-pointer"
+                  className="text-xs text-primary font-semibold cursor-pointer"
                 >
                   Show All Month
                 </Button>
@@ -590,7 +590,7 @@ export function ComplianceCalendarWorkspace() {
                       </div>
 
                       <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                        <CalendarIcon className="h-3.5 w-3.5 text-indigo-500" />
+                        <CalendarIcon className="h-3.5 w-3.5 text-primary" />
                         <span>Due: {format(dueDt, "dd MMM yyyy")}</span>
                       </div>
                     </div>
@@ -608,7 +608,7 @@ export function ComplianceCalendarWorkspace() {
                     <div className="flex items-center justify-between text-[11px] pt-2 border-t border-border/30">
                       <div className="flex items-center gap-3 text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1">
-                          <User className="h-3 w-3 text-indigo-500" />
+                          <User className="h-3 w-3 text-primary" />
                           <span>Assignee: <strong className="text-foreground">{item.assignee?.full_name || "Unassigned"}</strong></span>
                         </span>
                         {item.regulation_title && (
@@ -626,7 +626,7 @@ export function ComplianceCalendarWorkspace() {
                           e.stopPropagation();
                           handleOpenDrawer(item);
                         }}
-                        className="h-6 text-xs font-semibold text-indigo-600 dark:text-indigo-400 gap-1 cursor-pointer"
+                        className="h-6 text-xs font-semibold text-primary gap-1 cursor-pointer hover:underline"
                       >
                         <span>Open Finding</span>
                         <ChevronRight className="h-3 w-3" />

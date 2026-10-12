@@ -73,7 +73,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     case "IN_REVIEW":
       return {
         label: "IN REVIEW",
-        className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+        className: "bg-primary/10 text-primary border-primary/30",
       };
     case "REMEDIATION":
     case "REMEDIATION_REQUIRED":
@@ -350,7 +350,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
             </Button>
           </div>
           <div className="flex items-center gap-3 mt-1">
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
               <ShieldAlert className="h-5 w-5" />
             </div>
             <div>
@@ -371,7 +371,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
               size="sm"
               onClick={handleExportFindings}
               disabled={isExporting}
-              className="gap-1.5 text-xs cursor-pointer border-indigo-500/30 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium"
+              className="gap-1.5 text-xs cursor-pointer border-primary/30 hover:border-primary/50 hover:bg-primary/10 text-primary font-medium"
             >
               {isExporting ? (
                 <>
@@ -380,7 +380,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                 </>
               ) : (
                 <>
-                  <Download className="h-3.5 w-3.5 text-indigo-500" />
+                  <Download className="h-3.5 w-3.5 text-primary" />
                   <span>Export Findings</span>
                 </>
               )}
@@ -399,7 +399,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           <Button
             size="sm"
             onClick={() => router.push("/knowledge-graph")}
-            className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+            className="gap-1.5 text-xs font-semibold cursor-pointer border border-accent/40 text-accent hover:bg-accent/10 bg-accent/5"
           >
             <Network className="h-3.5 w-3.5" /> Explore Knowledge Graph
           </Button>
@@ -414,7 +414,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Total Findings
               </span>
-              <FileCheck2 className="h-4 w-4 text-indigo-500" />
+              <FileCheck2 className="h-4 w-4 text-primary" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-bold tabular-nums text-foreground">{metrics.total}</span>
@@ -437,13 +437,13 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
 
           <Card className="border border-border/60 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
                 In Review
               </span>
-              <Clock className="h-4 w-4 text-indigo-500" />
+              <Clock className="h-4 w-4 text-primary" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold tabular-nums text-indigo-500">{metrics.inReview}</span>
+              <span className="text-2xl font-bold tabular-nums text-primary">{metrics.inReview}</span>
               <span className="text-[10px] text-muted-foreground">Under legal review</span>
             </div>
           </Card>
@@ -508,7 +508,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer font-semibold text-indigo-600 dark:text-indigo-400"
+            className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer font-semibold text-primary"
           >
             <option value="ALL">All Statuses</option>
             <option value="OPEN">Open</option>
@@ -580,7 +580,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
             <Button
               size="sm"
               onClick={fetchFindings}
-              className="text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+              className="text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground gap-1.5"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>Retry</span>
@@ -607,7 +607,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
       {/* ── 6. Empty State ── */}
       {!isLoading && !error && filteredFindings.length === 0 && (
         <Card className="border border-dashed border-border/60 bg-muted/10 py-12 px-6 text-center space-y-4">
-          <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 flex items-center justify-center mx-auto">
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center mx-auto">
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div className="space-y-1 max-w-sm mx-auto">
@@ -696,7 +696,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                         <td className="px-4 py-3.5 text-muted-foreground">
                           {item.assignee ? (
                             <div className="flex items-center gap-1.5 text-foreground font-semibold">
-                              <UserCheck className="h-3.5 w-3.5 text-indigo-500" />
+                              <UserCheck className="h-3.5 w-3.5 text-primary" />
                               <span>{item.assignee.full_name}</span>
                             </div>
                           ) : (
@@ -705,7 +705,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                         </td>
 
                         {/* Score */}
-                        <td className="px-4 py-3.5 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        <td className="px-4 py-3.5 text-center font-mono font-bold text-primary">
                           {scoreText}
                         </td>
 
@@ -755,7 +755,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                         {lifecycle.label}
                       </Badge>
                     </div>
-                    <span className="font-mono font-bold text-xs text-indigo-500">{scoreText} Score</span>
+                    <span className="font-mono font-bold text-xs text-primary">{scoreText} Score</span>
                   </div>
 
                   <div className="space-y-1">
@@ -784,7 +784,7 @@ export function FindingsWorkspace({ reportId }: FindingsWorkspaceProps) {
                     <Button
                       size="sm"
                       onClick={() => handleOpenDrawer(item)}
-                      className="h-8 text-xs font-semibold cursor-pointer gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                      className="h-8 text-xs font-semibold cursor-pointer gap-1 bg-primary hover:bg-primary-hover text-primary-foreground"
                     >
                       <span>Open Finding</span>
                       <ChevronRight className="h-3.5 w-3.5" />

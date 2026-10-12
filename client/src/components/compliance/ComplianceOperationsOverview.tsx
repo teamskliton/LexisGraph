@@ -89,7 +89,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     case "IN_REVIEW":
       return {
         label: "IN REVIEW",
-        className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+        className: "bg-primary/10 text-primary border-primary/30",
       };
     case "REMEDIATION":
       return {
@@ -223,7 +223,7 @@ export function ComplianceOperationsOverview() {
               </Button>
             </div>
             <div className="flex items-center gap-3 mt-1">
-              <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+              <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
                 <ShieldAlert className="h-5 w-5" />
               </div>
               <div>
@@ -243,7 +243,7 @@ export function ComplianceOperationsOverview() {
               variant="outline"
               size="sm"
               onClick={() => router.push("/compliance/calendar")}
-              className="gap-1.5 text-xs font-semibold cursor-pointer border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+              className="gap-1.5 text-xs font-semibold cursor-pointer border-primary/30 text-primary hover:bg-primary/10"
             >
               <Calendar className="h-3.5 w-3.5" />
               <span>Deadlines Calendar</span>
@@ -253,7 +253,7 @@ export function ComplianceOperationsOverview() {
               variant="outline"
               size="sm"
               onClick={() => router.push("/compliance/my-work?view=all")}
-              className="gap-1.5 text-xs font-semibold cursor-pointer border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+              className="gap-1.5 text-xs font-semibold cursor-pointer border-primary/30 text-primary hover:bg-primary/10"
             >
               <Layers className="h-3.5 w-3.5" />
               <span>All Findings ({summary?.total_findings || 0})</span>
@@ -284,7 +284,7 @@ export function ComplianceOperationsOverview() {
               <Button
                 size="sm"
                 onClick={() => router.push("/compliance/new")}
-                className="gap-1.5 text-xs font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white"
+                className="gap-1.5 text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
               >
                 <PlusCircle className="h-3.5 w-3.5" /> Start New Analysis
               </Button>
@@ -300,7 +300,7 @@ export function ComplianceOperationsOverview() {
             className={cn(
               "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
               activeTab === "OPERATIONS"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
           >
@@ -314,7 +314,7 @@ export function ComplianceOperationsOverview() {
             className={cn(
               "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
               activeTab === "ANALYTICS"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
           >
@@ -326,7 +326,7 @@ export function ComplianceOperationsOverview() {
                 "text-[9px] px-1.5 py-0 font-bold",
                 activeTab === "ANALYTICS"
                   ? "bg-white/20 text-white border-white/40"
-                  : "bg-indigo-500/10 text-indigo-600 border-indigo-500/30"
+                  : "bg-primary/10 text-primary border-primary/30"
               )}
             >
               Sprint 7.11
@@ -349,7 +349,7 @@ export function ComplianceOperationsOverview() {
                   <h3 className="text-sm font-bold text-foreground">Compliance Overview Unavailable</h3>
                   <p className="text-xs text-muted-foreground max-w-md mx-auto">{error}</p>
                 </div>
-                <Button size="sm" onClick={fetchOverview} className="text-xs font-semibold cursor-pointer bg-indigo-600 text-white">
+                <Button size="sm" onClick={fetchOverview} className="text-xs font-semibold cursor-pointer bg-primary text-primary-foreground">
                   Retry
                 </Button>
               </Card>
@@ -371,7 +371,7 @@ export function ComplianceOperationsOverview() {
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Compliance Status
                   </span>
-                  <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                  <ShieldCheck className="h-4 w-4 text-primary" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
                   <span className="text-2xl font-extrabold tabular-nums text-foreground font-mono">
@@ -410,13 +410,13 @@ export function ComplianceOperationsOverview() {
               {/* In Review */}
               <Card className="border border-border/60 bg-card p-4 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
                     In Review
                   </span>
-                  <Clock className="h-4 w-4 text-indigo-500" />
+                  <Clock className="h-4 w-4 text-primary" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold tabular-nums text-indigo-500">{summary.in_review}</span>
+                  <span className="text-2xl font-bold tabular-nums text-primary">{summary.in_review}</span>
                   <span className="text-[10px] text-muted-foreground">Under legal review</span>
                 </div>
               </Card>
@@ -571,7 +571,7 @@ export function ComplianceOperationsOverview() {
 
                       <div className="flex items-center justify-between text-[11px] border-t border-border/30 pt-2">
                         <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <User className="h-3 w-3 text-indigo-500" />
+                          <User className="h-3 w-3 text-primary" />
                           <span>Assignee: {item.assignee?.full_name || <em className="text-muted-foreground/70">Unassigned</em>}</span>
                         </div>
 
@@ -582,7 +582,7 @@ export function ComplianceOperationsOverview() {
                             e.stopPropagation();
                             handleOpenDrawer(item);
                           }}
-                          className="h-6 text-[11px] gap-1 cursor-pointer text-indigo-600 dark:text-indigo-400"
+                          className="h-6 text-[11px] gap-1 cursor-pointer text-primary"
                         >
                           <span>View Finding</span>
                           <ChevronRight className="h-3 w-3" />
@@ -598,15 +598,15 @@ export function ComplianceOperationsOverview() {
           {/* SECTION 2: MY WORK */}
           <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-500 flex items-center gap-1.5">
-                <UserCheck className="h-4 w-4 text-indigo-500" /> My Work ({overviewData?.my_work.length || 0} Assigned)
+              <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                <UserCheck className="h-4 w-4 text-primary" /> My Work ({overviewData?.my_work.length || 0} Assigned)
               </span>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="xs"
                   onClick={() => router.push("/compliance/my-work")}
-                  className="text-xs text-indigo-500 hover:text-indigo-600 gap-1 cursor-pointer font-semibold"
+                  className="text-xs text-primary hover:text-primary-hover gap-1 cursor-pointer font-semibold"
                 >
                   <span>View Workspace</span>
                   <ChevronRight className="h-3 w-3" />
@@ -690,7 +690,7 @@ export function ComplianceOperationsOverview() {
           <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-indigo-500" /> Team Workload Intelligence
+                <Users className="h-4 w-4 text-primary" /> Team Workload Intelligence
               </span>
               <span className="text-[10px] font-mono text-muted-foreground">
                 {overviewData?.team_workload?.length || 0} Members
@@ -727,7 +727,7 @@ export function ComplianceOperationsOverview() {
                           <span className="block text-[10px] font-mono text-muted-foreground">{formatRoleLabel(m.role)}</span>
                         </td>
                         <td className="py-2.5 text-center font-bold text-blue-500 tabular-nums">{m.open_count}</td>
-                        <td className="py-2.5 text-center font-bold text-indigo-500 tabular-nums">{m.in_review_count}</td>
+                        <td className="py-2.5 text-center font-bold text-primary tabular-nums">{m.in_review_count}</td>
                         <td className="py-2.5 text-center font-bold text-amber-500 tabular-nums">{m.remediation_count}</td>
                         <td className="py-2.5 text-center font-bold text-emerald-500 tabular-nums">{m.resolved_count}</td>
                         <td className="py-2.5 text-right font-bold text-foreground tabular-nums">{m.total_assigned}</td>
@@ -743,7 +743,7 @@ export function ComplianceOperationsOverview() {
           <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <BarChart3 className="h-4 w-4 text-indigo-500" /> Report Exposure Summary
+                <BarChart3 className="h-4 w-4 text-primary" /> Report Exposure Summary
               </span>
             </div>
 
@@ -797,7 +797,7 @@ export function ComplianceOperationsOverview() {
           <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <History className="h-4 w-4 text-indigo-500" /> Recent Lifecycle Activity
+                <History className="h-4 w-4 text-primary" /> Recent Lifecycle Activity
               </span>
             </div>
 
@@ -813,7 +813,7 @@ export function ComplianceOperationsOverview() {
             ) : (
               <div className="space-y-3">
                 {overviewData.recent_activity.map((act) => (
-                  <div key={act.id} className="flex items-start gap-2.5 text-xs border-l-2 border-indigo-500/30 pl-3 py-1">
+                  <div key={act.id} className="flex items-start gap-2.5 text-xs border-l-2 border-primary/30 pl-3 py-1">
                     <Clock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                     <div className="space-y-0.5">
                       <p className="font-medium text-foreground">
@@ -833,13 +833,13 @@ export function ComplianceOperationsOverview() {
           <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <BarChart3 className="h-4 w-4 text-indigo-500" /> Recent Reports
+                <BarChart3 className="h-4 w-4 text-primary" /> Recent Reports
               </span>
               <Button
                 variant="ghost"
                 size="xs"
                 onClick={() => router.push("/reports")}
-                className="text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer gap-1"
+                className="text-xs text-primary cursor-pointer gap-1"
               >
                 <span>View All Reports</span>
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -871,7 +871,7 @@ export function ComplianceOperationsOverview() {
                           <span className="text-xs font-bold text-foreground">
                             Report #{report.id.slice(0, 8)}
                           </span>
-                          <Badge variant="outline" className="text-[9px] uppercase font-bold px-1.5 py-0.2 bg-indigo-500/10 text-indigo-600 border-indigo-500/30">
+                          <Badge variant="outline" className="text-[9px] uppercase font-bold px-1.5 py-0.2 bg-primary/10 text-primary border-primary/30">
                             {report.status || (report as any).report_status}
                           </Badge>
                         </div>
@@ -910,7 +910,7 @@ export function ComplianceOperationsOverview() {
             <Button
               variant="outline"
               onClick={() => router.push("/compliance/new")}
-              className="h-12 text-xs font-semibold cursor-pointer gap-2 justify-start border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+              className="h-12 text-xs font-semibold cursor-pointer gap-2 justify-start border-primary/30 text-primary hover:bg-primary/10"
             >
               <PlusCircle className="h-4 w-4" />
               <span>Run New Analysis</span>
@@ -919,7 +919,7 @@ export function ComplianceOperationsOverview() {
             <Button
               variant="outline"
               onClick={() => router.push("/compliance/calendar")}
-              className="h-12 text-xs font-semibold cursor-pointer gap-2 justify-start border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+              className="h-12 text-xs font-semibold cursor-pointer gap-2 justify-start border-primary/30 text-primary hover:bg-primary/10"
             >
               <Calendar className="h-4 w-4" />
               <span>Compliance Calendar</span>

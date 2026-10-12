@@ -159,13 +159,13 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
           <ArrowLeft className="h-4 w-4" /> Back to Workspace
         </Button>
 
-        <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 text-xs px-3 py-1">
+        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs px-3 py-1">
           Execution Engine
         </Badge>
       </div>
 
       {/* STEP 2: ANALYSIS SUBMITTED HEADER CARD */}
-      <Card className="border border-border/60 bg-gradient-to-r from-card via-card/90 to-background p-6 shadow-xs">
+      <Card className="border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -214,8 +214,8 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
       <Card className="border border-border/60 bg-card p-6 shadow-sm space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-              {isRunning && <Loader2 className="h-5 w-5 text-indigo-500 animate-spin" />}
+            <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              {isRunning && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
               {isCompleted && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
               {isFailed && <XCircle className="h-5 w-5 text-rose-500" />}
             </div>
@@ -227,7 +227,7 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
                   className={cn(
                     "text-xs px-2.5 py-0.5 font-bold uppercase",
                     isRunning
-                      ? "bg-indigo-500/10 text-indigo-600 border-indigo-500/30"
+                      ? "bg-primary/10 text-primary border-primary/30"
                       : isCompleted
                       ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
                       : "bg-rose-500/10 text-rose-600 border-rose-500/30"
@@ -256,10 +256,10 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-muted-foreground flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-indigo-500 animate-pulse" />
+              <Sparkles className="h-3.5 w-3.5 text-accent animate-pulse" />
               Real-Time Backend Status
             </span>
-            <span className="font-mono text-indigo-600 dark:text-indigo-400">{progress}%</span>
+            <span className="font-mono text-primary">{progress}%</span>
           </div>
 
           <div className="w-full h-3 bg-muted rounded-full overflow-hidden p-0.5 border border-border/50">
@@ -270,7 +270,7 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
                   ? "bg-emerald-500"
                   : isFailed
                   ? "bg-rose-500"
-                  : "bg-indigo-600 animate-pulse"
+                  : "bg-primary animate-pulse"
               )}
               style={{ width: `${Math.max(progress, 4)}%` }}
             />
@@ -312,7 +312,7 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-4 rounded-xl bg-background/80 border border-border/50 text-center space-y-1">
               <span className="text-xs font-bold text-muted-foreground uppercase">Compliance Score</span>
-              <p className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">
+              <p className="text-3xl font-extrabold text-primary">
                 {completedReport?.overall_score != null ? `${completedReport.overall_score}%` : "85%"}
               </p>
             </div>
@@ -351,7 +351,7 @@ export const AnalysisExecutionView: React.FC<AnalysisExecutionViewProps> = ({
 
                 <Button
                   onClick={() => router.push(`/compliance/reports/${job.report_id}`)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md gap-1.5 cursor-pointer"
+                  className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold shadow-md gap-1.5 cursor-pointer"
                 >
                   <ExternalLink className="h-4 w-4" /> View Report
                 </Button>

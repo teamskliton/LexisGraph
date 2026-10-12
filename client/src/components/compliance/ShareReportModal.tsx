@@ -186,7 +186,7 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
       <DialogContent className="sm:max-w-[540px] p-6 gap-5">
         <DialogHeader className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
               <Share2 className="h-4 w-4" />
             </div>
             <DialogTitle className="text-lg font-bold text-foreground">
@@ -202,13 +202,13 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
         <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-indigo-500" />
+              <ShieldCheck className="h-4 w-4 text-primary" />
               <span className="font-bold text-sm text-foreground">
                 Audit #{reportId.slice(0, 8)}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+              <span className="text-xs font-bold text-primary font-mono">
                 {score}% Score
               </span>
               <RiskBadge riskLevel={riskLevel} score={score} size="xs" />
@@ -225,7 +225,7 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
               )}
               {regulationName && (
                 <div className="text-muted-foreground flex items-center gap-1.5 truncate">
-                  <Layers className="h-3 w-3 text-indigo-500 shrink-0" />
+                  <Layers className="h-3 w-3 text-primary shrink-0" />
                   <span className="truncate">{regulationName}</span>
                 </div>
               )}
@@ -250,7 +250,7 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
               type="button"
               size="sm"
               onClick={handleCopyLink}
-              className="h-9 px-3 shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs gap-1.5 cursor-pointer"
+              className="h-9 px-3 shrink-0 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold text-xs gap-1.5 cursor-pointer"
             >
               {copiedLink ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
               {copiedLink ? "Copied!" : "Copy Link"}
@@ -268,7 +268,7 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
             onClick={handleCopySummary}
             className="text-xs h-9 justify-center gap-1.5 cursor-pointer font-medium"
           >
-            {copiedSummary ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <FileText className="h-3.5 w-3.5 text-indigo-500" />}
+            {copiedSummary ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
             {copiedSummary ? "Summary Copied!" : "Copy Summary"}
           </Button>
 
@@ -290,7 +290,7 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
               variant="outline"
               size="sm"
               onClick={handleNativeShare}
-              className="text-xs h-9 justify-center gap-1.5 cursor-pointer font-medium border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+              className="text-xs h-9 justify-center gap-1.5 cursor-pointer font-medium border-primary/30 text-primary hover:bg-primary/10"
             >
               <Sparkles className="h-3.5 w-3.5" /> Share App...
             </Button>

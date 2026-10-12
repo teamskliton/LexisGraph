@@ -50,14 +50,14 @@ export const ComplianceWorkspaceHeader: React.FC<ComplianceWorkspaceHeaderProps>
   const router = useRouter();
 
   return (
-    <Card className="border border-border/60 bg-gradient-to-r from-card via-card/90 to-background p-6 shadow-sm">
+    <Card className="border border-border bg-card p-6 shadow-sm">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         {/* Organization & Header Info */}
         <div className="space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
             {/* Organization Selector / Label */}
             <div className="flex items-center gap-2 bg-muted/40 border border-border/50 rounded-lg px-3 py-1.5 text-xs font-semibold text-foreground">
-              <Building2 className="h-4 w-4 text-indigo-500 shrink-0" />
+              <Building2 className="h-4 w-4 text-primary shrink-0" />
               {organizations.length > 1 ? (
                 <div className="relative flex items-center">
                   <select
@@ -106,7 +106,7 @@ export const ComplianceWorkspaceHeader: React.FC<ComplianceWorkspaceHeaderProps>
           <Button
             onClick={onRunAnalysis}
             size="sm"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md shadow-indigo-600/20 gap-1.5 cursor-pointer"
+            className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold shadow-sm gap-1.5 cursor-pointer"
           >
             <Zap className="h-4 w-4 text-amber-300" />
             Run Analysis
@@ -128,7 +128,7 @@ export const ComplianceWorkspaceHeader: React.FC<ComplianceWorkspaceHeaderProps>
             onClick={() => router.push("/knowledge-graph")}
             className="gap-1.5 text-xs cursor-pointer"
           >
-            <Network className="h-4 w-4 text-purple-400" />
+            <Network className="h-4 w-4 text-accent" />
             View Knowledge Graph
           </Button>
         </div>

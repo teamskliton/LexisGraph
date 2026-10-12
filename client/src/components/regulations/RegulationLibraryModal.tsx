@@ -86,7 +86,7 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-indigo-400" />
+            <BookOpen className="w-5 h-5 text-primary" />
             Global Regulation Library
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -94,7 +94,7 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
             <span className="font-semibold text-slate-200">{organizationName || 'your organization'}</span> without duplicating embeddings or storage.
           </p>
         </div>
-        <Badge className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 px-3 py-1 text-xs self-start sm:self-auto">
+        <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-xs self-start sm:self-auto">
           <Sparkles className="w-3 h-3 mr-1 animate-pulse" /> Shared Repository
         </Badge>
       </div>
@@ -114,7 +114,7 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
       {/* Regulations List */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
           <span className="text-xs">Searching global regulation library...</span>
         </div>
       ) : regulations.length === 0 ? (
@@ -132,7 +132,7 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
               key={reg.id}
               className={`p-4 transition-all duration-200 border bg-slate-950/60 flex flex-col justify-between ${
                 reg.is_linked
-                  ? 'border-indigo-500/40 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/20'
+                  ? 'border-primary/40 shadow-lg shadow-primary/5 ring-1 ring-primary/20'
                   : 'border-slate-800 hover:border-slate-700'
               }`}
             >
@@ -157,7 +157,7 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
                     </span>
                   )}
                   {reg.version && (
-                    <span className="font-mono text-indigo-400">v{reg.version}</span>
+                    <span className="font-mono text-primary">v{reg.version}</span>
                   )}
                   {reg.act_year && (
                     <span className="text-slate-500 font-mono">({reg.act_year})</span>
@@ -184,7 +184,7 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
                   className={`h-8 text-xs font-medium px-3 rounded-lg transition-all ${
                     reg.is_linked
                       ? 'border-slate-700 text-slate-300 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30'
-                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20'
+                      : 'bg-primary hover:bg-primary-hover text-primary-foreground shadow-sm'
                   }`}
                 >
                   {actionInProgress === reg.id ? (

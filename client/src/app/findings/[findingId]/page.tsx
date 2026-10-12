@@ -89,7 +89,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     case "IN_REVIEW":
       return {
         label: "IN REVIEW",
-        className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+        className: "bg-primary/10 text-primary border-primary/30",
       };
     case "REMEDIATION":
     case "REMEDIATION_REQUIRED":
@@ -615,7 +615,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                 const q = encodeURIComponent(`Explain why this finding (${finding.id}) exists and what should be done.`);
                 router.push(`/ai-assistant?findingId=${finding.id}&question=${q}`);
               }}
-              className="gap-1.5 text-xs border-indigo-500/30 text-indigo-600 dark:text-indigo-400 cursor-pointer hover:bg-indigo-500/10"
+              className="gap-1.5 text-xs border-accent/30 text-accent cursor-pointer hover:bg-accent/10"
             >
               <Sparkles className="h-3.5 w-3.5" />
               <span>Explain with AI</span>
@@ -627,7 +627,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                 const searchTerm = finding.policy_clause_id || finding.regulation_clause_id || "";
                 router.push(searchTerm ? `/knowledge-graph?search=${encodeURIComponent(searchTerm)}` : "/knowledge-graph");
               }}
-              className="gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer font-semibold"
+              className="gap-1.5 text-xs bg-accent hover:bg-accent/90 text-accent-foreground cursor-pointer font-semibold"
             >
               <Network className="h-3.5 w-3.5" />
               <span>Explore Graph</span>
@@ -705,7 +705,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                 size="sm"
                 onClick={() => handleStatusChange("IN_REVIEW")}
                 disabled={isUpdatingStatus}
-                className="h-8 text-xs font-semibold gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                className="h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
               >
                 <Clock className="h-3.5 w-3.5" />
                 <span>Start Review</span>
@@ -942,7 +942,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                   size="sm"
                   onClick={() => handleStatusChange("IN_REVIEW")}
                   disabled={isUpdatingStatus}
-                  className="h-8 text-xs font-semibold gap-1.5 border-indigo-500/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 cursor-pointer"
+                  className="h-8 text-xs font-semibold gap-1.5 border-primary/40 text-primary hover:bg-primary/10 cursor-pointer"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Reopen / Return to Review</span>
@@ -961,7 +961,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
         <Card className="p-6 border border-border/60 bg-card space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
             <h2 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-              <FileText className="h-4 w-4 text-indigo-500" />
+              <FileText className="h-4 w-4 text-primary" />
               Compliance Gap Evaluation
             </h2>
             <div className="flex items-center gap-2 text-xs font-semibold">
@@ -981,7 +981,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
             {finding.reasoning && (
               <div>
                 <span className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
-                  <Sparkles className="h-3.5 w-3.5 text-indigo-500" /> AI Compliance Reasoning
+                  <Sparkles className="h-3.5 w-3.5 text-accent" /> AI Compliance Reasoning
                 </span>
                 <p className="text-xs text-foreground font-medium mt-1 p-3 rounded-xl bg-muted/20 border border-border/40 leading-relaxed">
                   {finding.reasoning}
@@ -1018,7 +1018,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
           <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-3 flex-wrap">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-indigo-500" />
+                <MessageSquare className="h-4 w-4 text-primary" />
                 <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
                   Reviewer Discussion & Collaboration
                 </h2>
@@ -1048,7 +1048,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                 className={cn(
                   "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                   discussionFilter === "UNRESOLVED"
-                    ? "bg-background text-indigo-600 dark:text-indigo-400 shadow-xs"
+                    ? "bg-background text-primary shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -1085,7 +1085,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                 {mentionQuery !== null && getFilteredMembers(mentionQuery).length > 0 && (
                   <div className="absolute left-0 bottom-full mb-1 w-72 max-h-48 overflow-y-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-xl z-30 p-1.5 space-y-1">
                     <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                      <AtSign className="h-3 w-3 text-indigo-500" /> Mention Team Member ({getFilteredMembers(mentionQuery).length})
+                      <AtSign className="h-3 w-3 text-primary" /> Mention Team Member ({getFilteredMembers(mentionQuery).length})
                     </div>
                     {getFilteredMembers(mentionQuery).map((m) => (
                       <button
@@ -1095,7 +1095,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                         className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent hover:text-accent-foreground flex items-center justify-between gap-2 cursor-pointer transition-colors"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="h-6 w-6 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                          <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                             {m.full_name.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
@@ -1123,7 +1123,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                     setCommentInput((prev) => (prev.endsWith("@") ? prev : `${prev}@`));
                     setMentionQuery("");
                   }}
-                  className="h-8 text-xs text-muted-foreground hover:text-indigo-600 gap-1 px-2 cursor-pointer"
+                  className="h-8 text-xs text-muted-foreground hover:text-primary gap-1 px-2 cursor-pointer"
                 >
                   <AtSign className="h-3.5 w-3.5" />
                   <span>Mention</span>
@@ -1133,7 +1133,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                   type="submit"
                   size="sm"
                   disabled={isPostingComment || !commentInput.trim()}
-                  className="gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer font-semibold"
+                  className="gap-1.5 text-xs bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer font-semibold"
                 >
                   <Send className="h-3.5 w-3.5" />
                   <span>{isPostingComment ? "Adding..." : "Post Comment"}</span>
@@ -1165,7 +1165,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                 <div key={c.id} className="pt-3 space-y-2 first:pt-0">
                   <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                      <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                         {c.user_name.charAt(0).toUpperCase()}
                       </div>
                       <span className="font-bold text-foreground">{c.user_name}</span>
@@ -1205,7 +1205,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                           setReplyText("");
                           setReplyMentionQuery(null);
                         }}
-                        className="text-indigo-500 hover:text-indigo-600 font-semibold flex items-center gap-1 cursor-pointer"
+                        className="text-primary hover:text-primary-hover font-semibold flex items-center gap-1 cursor-pointer"
                       >
                         <CornerDownRight className="h-3 w-3" />
                         <span>Reply</span>
@@ -1226,7 +1226,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                   </div>
 
                   {replyingToId === c.id && (
-                    <form onSubmit={(e) => handlePostComment(e, c.id)} className="ml-8 pt-2 space-y-2 border-l-2 border-indigo-500/30 pl-3 relative bg-muted/20 rounded-r-xl pr-3 pb-2">
+                    <form onSubmit={(e) => handlePostComment(e, c.id)} className="ml-8 pt-2 space-y-2 border-l-2 border-primary/30 pl-3 relative bg-muted/20 rounded-r-xl pr-3 pb-2">
                       <div className="relative">
                         <input
                           type="text"
@@ -1241,7 +1241,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                         {replyMentionQuery !== null && getFilteredMembers(replyMentionQuery).length > 0 && (
                           <div className="absolute left-0 bottom-full mb-1 w-72 max-h-48 overflow-y-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-xl z-30 p-1.5 space-y-1">
                             <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                              <AtSign className="h-3 w-3 text-indigo-500" /> Mention Team Member ({getFilteredMembers(replyMentionQuery).length})
+                              <AtSign className="h-3 w-3 text-primary" /> Mention Team Member ({getFilteredMembers(replyMentionQuery).length})
                             </div>
                             {getFilteredMembers(replyMentionQuery).map((m) => (
                               <button
@@ -1251,7 +1251,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                                 className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent hover:text-accent-foreground flex items-center justify-between gap-2 cursor-pointer transition-colors"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <div className="h-6 w-6 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                  <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                                     {m.full_name.charAt(0).toUpperCase()}
                                   </div>
                                   <div className="min-w-0">
@@ -1288,7 +1288,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                           type="submit"
                           size="xs"
                           disabled={isPostingComment || !replyText.trim()}
-                          className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                          className="h-7 text-xs bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
                         >
                           {isPostingComment ? "Posting..." : "Post Reply"}
                         </Button>
@@ -1302,7 +1302,7 @@ function FindingDetailContent({ findingId }: { findingId: string }) {
                         <div key={reply.id} className="bg-muted/20 p-2.5 rounded-lg space-y-1">
                           <div className="flex items-center justify-between text-[10px] gap-2 flex-wrap">
                             <div className="flex items-center gap-1.5">
-                              <div className="h-5 w-5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[9px] font-bold shrink-0">
+                              <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold shrink-0">
                                 {reply.user_name.charAt(0).toUpperCase()}
                               </div>
                               <span className="font-bold text-foreground">{reply.user_name}</span>

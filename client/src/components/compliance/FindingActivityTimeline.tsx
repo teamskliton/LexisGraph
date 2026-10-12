@@ -197,9 +197,9 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
     if (et === "FINDING_CREATED") {
       return {
         icon: <Sparkles className="h-3.5 w-3.5" />,
-        badgeClass: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
-        borderClass: "border-indigo-500/30",
-        dotClass: "bg-indigo-500",
+        badgeClass: "bg-primary/10 text-primary border-primary/30",
+        borderClass: "border-primary/30",
+        dotClass: "bg-primary",
       };
     }
     if (et === "FINDING_UPDATED") {
@@ -281,9 +281,9 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
     if (et.startsWith("FINDING_COMMENT") || et === "FINDING_MENTIONED") {
       return {
         icon: <MessageSquare className="h-3.5 w-3.5" />,
-        badgeClass: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
-        borderClass: "border-indigo-500/30",
-        dotClass: "bg-indigo-500",
+        badgeClass: "bg-primary/10 text-primary border-primary/30",
+        borderClass: "border-primary/30",
+        dotClass: "bg-primary",
       };
     }
     if (et === "REMEDIATION_CREATED" || et === "REMEDIATION_STARTED") {
@@ -332,7 +332,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
       {/* Header with Title, Count, & Refresh Action */}
       <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+          <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
             <History className="h-4 w-4" />
           </div>
           <div>
@@ -358,7 +358,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
           className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
           title="Refresh activity timeline"
         >
-          <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin text-indigo-500")} />
+          <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin text-primary")} />
         </Button>
       </div>
 
@@ -391,7 +391,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
             value={searchQuery}
             onChange={handleSearchChange}
             placeholder="Search audit trail..."
-            className="w-full pl-8 pr-7 py-1 text-[11px] bg-muted/30 border border-border/50 rounded-lg focus:outline-hidden focus:border-indigo-500 text-foreground placeholder:text-muted-foreground/60 transition-colors"
+            className="w-full pl-8 pr-7 py-1 text-[11px] bg-muted/30 border border-border/50 rounded-lg focus:outline-hidden focus:border-primary text-foreground placeholder:text-muted-foreground/60 transition-colors"
           />
           {searchQuery && (
             <button
@@ -526,7 +526,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
                           <button
                             type="button"
                             onClick={() => toggleExpand(act.id)}
-                            className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                            className="flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline cursor-pointer"
                           >
                             <span>{isExpanded ? "Hide Details" : "View Audit Details"}</span>
                             {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
@@ -677,7 +677,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
                                     <button
                                       type="button"
                                       onClick={() => onNavigateToSection("remediation")}
-                                      className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1 cursor-pointer"
+                                      className="text-[10px] font-semibold text-primary hover:text-primary/80 flex items-center gap-1 cursor-pointer"
                                     >
                                       <span>[View Remediation / Cycles]</span>
                                       <ExternalLink className="h-2.5 w-2.5" />
@@ -687,7 +687,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
                                     <button
                                       type="button"
                                       onClick={() => onNavigateToSection("discussions")}
-                                      className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1 cursor-pointer"
+                                      className="text-[10px] font-semibold text-primary hover:text-primary/80 flex items-center gap-1 cursor-pointer"
                                     >
                                       <span>[View Discussion]</span>
                                       <ExternalLink className="h-2.5 w-2.5" />

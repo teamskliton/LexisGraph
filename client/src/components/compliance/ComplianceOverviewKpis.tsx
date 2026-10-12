@@ -62,10 +62,10 @@ export const ComplianceOverviewKpis: React.FC<ComplianceOverviewKpisProps> = ({
       value: totalAnalyses,
       description: "Total AI compliance runs completed",
       icon: <Zap className="h-4 w-4" />,
-      iconBg: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+      iconBg: "bg-primary/10 text-primary",
       status: {
         label: totalAnalyses > 0 ? "Completed" : "None",
-        className: totalAnalyses > 0 ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" : "bg-muted text-muted-foreground",
+        className: totalAnalyses > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
       },
     },
     {
@@ -110,10 +110,10 @@ export const ComplianceOverviewKpis: React.FC<ComplianceOverviewKpisProps> = ({
       value: regulationsCount,
       description: "Statutory acts & benchmarks applied",
       icon: <BookOpen className="h-4 w-4" />,
-      iconBg: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+      iconBg: "bg-accent/10 text-accent",
       status: {
         label: regulationsCount > 0 ? "Mapped" : "None",
-        className: regulationsCount > 0 ? "bg-violet-500/10 text-violet-600 dark:text-violet-400" : "bg-muted text-muted-foreground",
+        className: regulationsCount > 0 ? "bg-accent/10 text-accent" : "bg-muted text-muted-foreground",
       },
     },
   ];

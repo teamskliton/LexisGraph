@@ -148,10 +148,10 @@ export function FindingAnalyticsDashboard({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
               Analytics & Compliance Health
             </span>
-            <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-600 border-indigo-500/30">
+            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
               Sprint 7.11
             </Badge>
           </div>
@@ -183,7 +183,7 @@ export function FindingAnalyticsDashboard({
                 className={cn(
                   "rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer",
                   dateRange === opt.value
-                    ? "bg-indigo-600 text-white shadow-2xs"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                 )}
               >
@@ -226,7 +226,7 @@ export function FindingAnalyticsDashboard({
           <Button
             size="sm"
             onClick={fetchAnalytics}
-            className="text-xs font-semibold cursor-pointer bg-indigo-600 text-white"
+            className="text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
           >
             Retry Analytics
           </Button>
@@ -235,10 +235,10 @@ export function FindingAnalyticsDashboard({
 
       {/* ── 3. Compliance Health Executive Summary Card ── */}
       {!isLoading && summary && (
-        <Card className="border border-indigo-500/30 bg-indigo-500/5 p-5 sm:p-6 space-y-4 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-500/20 pb-3">
+        <Card className="border border-primary/30 bg-primary/5 p-5 sm:p-6 space-y-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary/20 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20">
+              <div className="p-2 rounded-xl bg-primary text-primary-foreground shadow-md">
                 <Sparkles className="h-4 w-4" />
               </div>
               <div>
@@ -268,7 +268,7 @@ export function FindingAnalyticsDashboard({
                 key={idx}
                 className="flex items-start gap-2.5 p-3 rounded-lg border border-border/40 bg-background/60 text-xs"
               >
-                <CheckCircle className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
+                <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                 <span className="text-foreground/90 font-medium">{bullet}</span>
               </div>
             ))}
@@ -285,13 +285,13 @@ export function FindingAnalyticsDashboard({
             {/* 1. Total Findings */}
             <Card
               onClick={() => handleNavigateToFindings({})}
-              className="p-3.5 border border-border/60 bg-card hover:border-indigo-500/50 hover:bg-muted/30 transition-all cursor-pointer group shadow-2xs"
+              className="p-3.5 border border-border/60 bg-card hover:border-primary/50 hover:bg-muted/30 transition-all cursor-pointer group shadow-2xs"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Total
                 </span>
-                <Layers className="h-3.5 w-3.5 text-muted-foreground group-hover:text-indigo-500 transition-colors" />
+                <Layers className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
               <div className="mt-2 flex items-baseline justify-between">
                 <span className="text-2xl font-bold tabular-nums text-foreground font-mono">
@@ -325,19 +325,19 @@ export function FindingAnalyticsDashboard({
             {/* 3. In Review */}
             <Card
               onClick={() => handleNavigateToFindings({ lifecycle_status: "IN_REVIEW" })}
-              className="p-3.5 border border-indigo-500/30 bg-indigo-500/5 hover:border-indigo-500 hover:bg-indigo-500/10 transition-all cursor-pointer group shadow-2xs"
+              className="p-3.5 border border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10 transition-all cursor-pointer group shadow-2xs"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                   In Review
                 </span>
-                <Clock className="h-3.5 w-3.5 text-indigo-500" />
+                <Clock className="h-3.5 w-3.5 text-primary" />
               </div>
               <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400 font-mono">
+                <span className="text-2xl font-bold tabular-nums text-primary font-mono">
                   {summary?.in_review || 0}
                 </span>
-                <ChevronRight className="h-3 w-3 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
+                <ChevronRight className="h-3 w-3 text-primary group-hover:translate-x-0.5 transition-transform" />
               </div>
               <span className="text-[10px] text-muted-foreground block mt-0.5">Reviewer queue</span>
             </Card>
@@ -431,7 +431,7 @@ export function FindingAnalyticsDashboard({
         <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-              <BarChart3 className="h-4 w-4 text-indigo-500" /> Finding Status Distribution
+              <BarChart3 className="h-4 w-4 text-primary" /> Finding Status Distribution
             </span>
             <span className="text-[10px] text-muted-foreground font-mono">
               Total: {summary?.total_findings || 0}
@@ -451,7 +451,7 @@ export function FindingAnalyticsDashboard({
                 let colorClass = "bg-blue-500";
                 if (item.status === "RESOLVED") colorClass = "bg-emerald-500";
                 if (item.status === "REMEDIATION") colorClass = "bg-amber-500";
-                if (item.status === "IN_REVIEW") colorClass = "bg-indigo-500";
+                if (item.status === "IN_REVIEW") colorClass = "bg-primary";
                 if (item.status === "REASSESSMENT_REQUIRED") colorClass = "bg-purple-500";
                 if (item.status === "REOPENED") colorClass = "bg-rose-500";
                 if (item.status === "REJECTED") colorClass = "bg-slate-500";
@@ -463,7 +463,7 @@ export function FindingAnalyticsDashboard({
                     className="group cursor-pointer space-y-1.5 p-2 rounded-lg hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center justify-between text-xs font-medium">
-                      <span className="text-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      <span className="text-foreground group-hover:text-primary transition-colors">
                         {item.status.replace("_", " ")}
                       </span>
                       <div className="flex items-center gap-2">
@@ -529,7 +529,7 @@ export function FindingAnalyticsDashboard({
                         <Badge variant="outline" className={cn("text-[10px] font-bold uppercase", badgeClass)}>
                           {item.severity}
                         </Badge>
-                        <span className="text-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        <span className="text-foreground group-hover:text-primary transition-colors">
                           {item.severity} Impact Findings
                         </span>
                       </div>
@@ -558,7 +558,7 @@ export function FindingAnalyticsDashboard({
         <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-              <TrendingUp className="h-4 w-4 text-indigo-500" /> Finding Creation & Resolution Trends
+              <TrendingUp className="h-4 w-4 text-primary" /> Finding Creation & Resolution Trends
             </span>
             <span className="text-[10px] text-muted-foreground font-mono">Cadence</span>
           </div>
@@ -624,9 +624,9 @@ export function FindingAnalyticsDashboard({
         <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-              <Activity className="h-4 w-4 text-indigo-500" /> Remediation Engine Performance
+              <Activity className="h-4 w-4 text-primary" /> Remediation Engine Performance
             </span>
-            <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-600 border-indigo-500/30">
+            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
               Auditable Cycles
             </Badge>
           </div>

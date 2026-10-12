@@ -552,7 +552,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 {/* Policy Gaps */}
                 <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
-                    <FileCheck2 className="h-3.5 w-3.5 text-indigo-500" />
+                    <FileCheck2 className="h-3.5 w-3.5 text-primary" />
                     Top Policy Gaps
                   </h4>
                   {reportData.policy_gaps.length === 0 ? (

@@ -125,7 +125,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 function LifecycleBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
     OPEN: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
-    IN_REVIEW: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+    IN_REVIEW: "bg-primary/10 text-primary border-primary/30",
     REMEDIATION: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
     RESOLVED: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
     REOPENED: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30",
@@ -224,7 +224,7 @@ function ClauseRow({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full text-left p-3.5 flex items-start gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-inset"
+        className="w-full text-left p-3.5 flex items-start gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
         aria-expanded={isExpanded}
       >
         <span className="mt-0.5 shrink-0">{meta.icon}</span>
@@ -246,7 +246,7 @@ function ClauseRow({
             {clause.finding && (
               <Badge
                 variant="outline"
-                className="text-[10px] font-bold px-2 py-0.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10"
+                className="text-[10px] font-bold px-2 py-0.5 border-primary/30 text-primary bg-primary/10"
               >
                 F-{clause.finding.finding_id.slice(0, 8)}
               </Badge>
@@ -277,7 +277,7 @@ function ClauseRow({
         <div className="border-t border-border/30 p-4 space-y-4 text-xs">
           <div className="space-y-1">
             <h4 className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <BookOpen className="h-3.5 w-3.5 text-indigo-500" /> Regulation Requirement
+              <BookOpen className="h-3.5 w-3.5 text-primary" /> Regulation Requirement
             </h4>
             <p className="text-foreground/90 leading-relaxed bg-muted/30 p-3 rounded-lg border border-border/40">
               {clause.regulation_text}
@@ -306,7 +306,7 @@ function ClauseRow({
 
           <div className="space-y-1">
             <h4 className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-purple-500" /> Analysis Reasoning
+              <Sparkles className="h-3.5 w-3.5 text-accent" /> Analysis Reasoning
             </h4>
             <p className="text-foreground/80 leading-relaxed">{clause.reasoning}</p>
           </div>
@@ -348,8 +348,8 @@ function ClauseRow({
 
 
           {clause.finding && (
-            <div className="p-3 rounded-lg bg-indigo-500/5 border border-indigo-500/20 space-y-2">
-              <h4 className="font-bold text-[10px] uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+              <h4 className="font-bold text-[10px] uppercase tracking-wider text-primary flex items-center gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" /> Finding: F-{clause.finding.finding_id.slice(0, 8)}
               </h4>
               <div className="flex items-center gap-2 flex-wrap">
@@ -370,7 +370,7 @@ function ClauseRow({
                 size="sm"
                 variant="outline"
                 onClick={() => onViewFinding(clause.finding!.finding_id)}
-                className="text-[11px] gap-1.5 cursor-pointer h-7 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                className="text-[11px] gap-1.5 cursor-pointer h-7 border-primary/30 text-primary hover:bg-primary/10"
               >
                 <ArrowRight className="h-3.5 w-3.5" /> View Finding
               </Button>
@@ -389,7 +389,7 @@ function ClauseRow({
               size="sm"
               variant="outline"
               onClick={() => onExploreGraph(clause.regulation_text.slice(0, 60))}
-              className="text-[11px] gap-1.5 cursor-pointer h-7 border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+              className="text-[11px] gap-1.5 cursor-pointer h-7 border-accent/30 text-accent hover:bg-accent/10"
             >
               <Network className="h-3.5 w-3.5" /> Explore Knowledge Graph
             </Button>
@@ -535,7 +535,7 @@ export const GapAnalysisWorkspace: React.FC<GapAnalysisWorkspaceProps> = ({
       {summary && (
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-indigo-500" /> Coverage Summary
+            <ShieldCheck className="h-4 w-4 text-primary" /> Coverage Summary
             <span className="text-muted-foreground/60 normal-case font-normal">
               — {summary.total_requirements} regulation requirements evaluated
             </span>
@@ -550,7 +550,7 @@ export const GapAnalysisWorkspace: React.FC<GapAnalysisWorkspaceProps> = ({
           {data.regulation && (
             <Card className="border border-border/60 bg-card p-4 space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5">
-                <BookOpen className="h-3.5 w-3.5 text-indigo-500" /> Regulation Applied
+                <BookOpen className="h-3.5 w-3.5 text-primary" /> Regulation Applied
               </span>
               <p className="text-sm font-bold text-foreground">{data.regulation.title}</p>
               <p className="text-[11px] text-muted-foreground">
@@ -574,7 +574,7 @@ export const GapAnalysisWorkspace: React.FC<GapAnalysisWorkspaceProps> = ({
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <FileCheck2 className="h-4 w-4 text-indigo-500" /> Regulatory Requirements
+            <FileCheck2 className="h-4 w-4 text-primary" /> Regulatory Requirements
             {filteredClauses.length !== data.clauses.length && (
               <span className="text-muted-foreground/60 normal-case font-normal">
                 — showing {filteredClauses.length} of {data.clauses.length}
@@ -621,7 +621,7 @@ export const GapAnalysisWorkspace: React.FC<GapAnalysisWorkspaceProps> = ({
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer",
                   filterStatus === f.value
-                    ? "bg-indigo-600 text-white border-indigo-600"
+                    ? "bg-primary text-primary-foreground border-primary"
                     : "bg-muted/20 text-muted-foreground border-border/50 hover:bg-muted/40"
                 )}
               >
@@ -671,7 +671,7 @@ export const GapAnalysisWorkspace: React.FC<GapAnalysisWorkspaceProps> = ({
             <span>Processing: {data.processing_time_seconds.toFixed(1)}s</span>
           )}
           <span className="flex items-center gap-1">
-            <Sparkles className="h-3 w-3 text-purple-400" />
+            <Sparkles className="h-3 w-3 text-accent" />
             Engine: {data.analysis_engine}
           </span>
         </div>

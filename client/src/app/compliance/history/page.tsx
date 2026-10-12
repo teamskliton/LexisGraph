@@ -65,7 +65,7 @@ function AnalysisHistoryContent() {
                   const org = organizations.find((o) => o.id === e.target.value);
                   if (org) setSelectedOrg(org);
                 }}
-                className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer font-medium focus:ring-1 focus:ring-indigo-500"
+                className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer font-medium focus:ring-1 focus:ring-primary"
               >
                 {organizations.map((org) => (
                   <option key={org.id} value={org.id}>

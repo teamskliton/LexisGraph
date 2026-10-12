@@ -153,7 +153,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     case "IN_REVIEW":
       return {
         label: "IN REVIEW",
-        className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+        className: "bg-primary/10 text-primary border-primary/30",
       };
     case "REMEDIATION":
     case "REMEDIATION_REQUIRED":
@@ -969,7 +969,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
         {/* Fixed Header */}
         <div className="shrink-0 flex items-center justify-between p-5 border-b border-border bg-card z-10">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 shrink-0">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
               <ShieldAlert className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -1028,7 +1028,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                         size="xs"
                         onClick={() => handleStatusChange("IN_REVIEW")}
                         disabled={isUpdatingStatus}
-                        className="h-8 text-xs font-semibold gap-1 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                        className="h-8 text-xs font-semibold gap-1 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
                       >
                         <Clock className="h-3.5 w-3.5" />
                         <span>Start Review</span>
@@ -1301,7 +1301,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                           size="xs"
                           onClick={() => handleStatusChange("IN_REVIEW")}
                           disabled={isUpdatingStatus}
-                          className="h-8 text-xs font-semibold gap-1 border-indigo-500/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 cursor-pointer"
+                          className="h-8 text-xs font-semibold gap-1 border-primary/40 text-primary hover:bg-primary/10 cursor-pointer"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
                           <span>Reopen / Return to Review</span>
@@ -1325,7 +1325,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                 {currentFinding.assignee ? (
                   <Badge
                     variant="outline"
-                    className="gap-1 text-xs font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+                    className="gap-1 text-xs font-semibold bg-primary/10 text-primary border-primary/30"
                   >
                     <UserCheck className="h-3.5 w-3.5" />
                     <span>{currentFinding.assignee.full_name}</span>
@@ -1376,7 +1376,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
             {/* Remediation Due Date Section */}
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-border/40 flex-wrap">
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-indigo-500 shrink-0" />
+                <Calendar className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-xs font-medium text-muted-foreground">Due Date:</span>
                 {currentFinding.remediation_due_date ? (
                   <span className="text-xs font-bold text-foreground">
@@ -1695,7 +1695,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
           <Card className="border border-border/60 bg-card p-4 space-y-3 shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-indigo-500" /> Compliance Evaluation
+                <Sparkles className="h-3.5 w-3.5 text-accent" /> Compliance Evaluation
               </span>
               {typeof currentFinding.confidence === "number" && (
                 <span className="text-xs font-mono font-semibold text-muted-foreground">
@@ -1747,7 +1747,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
             <Card className="border border-border/60 bg-card p-4 space-y-2.5 shadow-2xs">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                  <FileText className="h-3.5 w-3.5 text-indigo-400" /> Internal Policy
+                  <FileText className="h-3.5 w-3.5 text-primary" /> Internal Policy
                 </span>
                 {currentFinding.policy_clause_id && (
                   <Badge variant="secondary" className="font-mono text-[10px]">
@@ -1809,12 +1809,12 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
             <Card className="border border-border/60 bg-card p-4 space-y-3 shadow-2xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <History className="h-4 w-4 text-indigo-500" />
+                  <History className="h-4 w-4 text-primary" />
                   <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
                     Resolution History
                   </span>
                 </div>
-                <Badge variant="outline" className="text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20">
+                <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/20">
                   {currentFinding.resolution_history?.length || 1} { (currentFinding.resolution_history?.length || 1) === 1 ? "Period" : "Periods" }
                 </Badge>
               </div>
@@ -1929,7 +1929,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
             <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-3 flex-wrap">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-indigo-500" />
+                  <MessageSquare className="h-4 w-4 text-primary" />
                   <span className="text-xs font-bold uppercase tracking-wider text-foreground">
                     Discussion
                   </span>
@@ -1959,7 +1959,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                   className={cn(
                     "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer",
                     discussionFilter === "UNRESOLVED"
-                      ? "bg-background text-indigo-600 dark:text-indigo-400 shadow-xs"
+                      ? "bg-background text-primary shadow-xs"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -1996,17 +1996,16 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                   {mentionQuery !== null && topLevelFilteredMembers.length > 0 && (
                     <div className="absolute left-0 bottom-full mb-1 w-72 max-h-48 overflow-y-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-xl z-30 p-1.5 space-y-1">
                       <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                        <AtSign className="h-3 w-3 text-indigo-500" /> Mention Team Member ({topLevelFilteredMembers.length})
+                        <AtSign className="h-3 w-3 text-primary" /> Mention Team Member ({topLevelFilteredMembers.length})
                       </div>
                       {topLevelFilteredMembers.map((m) => (
                         <button
-                          key={m.user_id}
                           type="button"
                           onClick={() => selectMentionMember(m, false)}
                           className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent hover:text-accent-foreground flex items-center justify-between gap-2 cursor-pointer transition-colors"
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="h-6 w-6 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                               {m.full_name.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
@@ -2034,7 +2033,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                       setCommentText((prev) => (prev.endsWith("@") ? prev : `${prev}@`));
                       setMentionQuery("");
                     }}
-                    className="h-8 text-xs text-muted-foreground hover:text-indigo-600 gap-1 px-2 cursor-pointer"
+                    className="h-8 text-xs text-muted-foreground hover:text-primary gap-1 px-2 cursor-pointer"
                   >
                     <AtSign className="h-3.5 w-3.5" />
                     <span>Mention</span>
@@ -2044,7 +2043,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                     type="submit"
                     size="sm"
                     disabled={isCommenting || !commentText.trim()}
-                    className="h-8 px-3 text-xs gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                    className="h-8 px-3 text-xs gap-1.5 cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground font-semibold"
                   >
                     <Send className="h-3.5 w-3.5" />
                     <span>{isCommenting ? "Adding..." : "Post Comment"}</span>
@@ -2079,7 +2078,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                     {/* Top comment header */}
                     <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
                       <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                           {c.user_name.charAt(0).toUpperCase()}
                         </div>
                         <span className="font-bold text-foreground">{c.user_name}</span>
@@ -2121,7 +2120,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                             setReplyText("");
                             setReplyMentionQuery(null);
                           }}
-                          className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-semibold flex items-center gap-1 cursor-pointer"
+                          className="text-primary hover:text-primary-hover font-semibold flex items-center gap-1 cursor-pointer"
                         >
                           <CornerDownRight className="h-3 w-3" />
                           <span>Reply</span>
@@ -2143,7 +2142,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
 
                     {/* Inline Reply Form */}
                     {replyingToId === c.id && (
-                      <form onSubmit={(e) => handleAddComment(e, c.id)} className="ml-8 mt-2 pl-3 pt-2 pb-2 space-y-2 border-l-2 border-indigo-500/30 relative bg-muted/20 rounded-r-xl pr-3">
+                      <form onSubmit={(e) => handleAddComment(e, c.id)} className="ml-8 mt-2 pl-3 pt-2 pb-2 space-y-2 border-l-2 border-primary/30 relative bg-muted/20 rounded-r-xl pr-3">
                         <div className="relative">
                           <input
                             type="text"
@@ -2158,7 +2157,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                           {replyMentionQuery !== null && replyFilteredMembers.length > 0 && (
                             <div className="absolute left-0 bottom-full mb-1 w-72 max-h-48 overflow-y-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-xl z-30 p-1.5 space-y-1">
                               <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                                <AtSign className="h-3 w-3 text-indigo-500" /> Mention Team Member ({replyFilteredMembers.length})
+                                <AtSign className="h-3 w-3 text-primary" /> Mention Team Member ({replyFilteredMembers.length})
                               </div>
                               {replyFilteredMembers.map((m) => (
                                 <button
@@ -2168,7 +2167,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                                   className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent hover:text-accent-foreground flex items-center justify-between gap-2 cursor-pointer transition-colors"
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
-                                    <div className="h-6 w-6 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                    <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                                       {m.full_name.charAt(0).toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
@@ -2205,7 +2204,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                             type="submit"
                             size="xs"
                             disabled={isCommenting || !replyText.trim()}
-                            className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer font-semibold"
+                            className="h-7 text-xs bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer font-semibold"
                           >
                             {isCommenting ? "Posting..." : "Post Reply"}
                           </Button>
@@ -2220,7 +2219,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                           <div key={reply.id} className="bg-muted/30 p-2.5 rounded-xl space-y-1 border border-border/30">
                             <div className="flex items-center justify-between text-[11px] gap-2 flex-wrap">
                               <div className="flex items-center gap-1.5">
-                                <div className="h-5 w-5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[9px] font-bold shrink-0">
+                                <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold shrink-0">
                                   {reply.user_name.charAt(0).toUpperCase()}
                                 </div>
                                 <span className="font-bold text-foreground">{reply.user_name}</span>
@@ -2284,7 +2283,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                 const q = encodeURIComponent(`Explain why this finding (${currentFinding.id}) exists and what should be done.`);
                 router.push(`/ai-assistant?findingId=${currentFinding.id}&question=${q}`);
               }}
-              className="text-xs cursor-pointer gap-1.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+              className="text-xs cursor-pointer gap-1.5 border-accent/30 text-accent hover:bg-accent/10"
             >
               <Sparkles className="h-3.5 w-3.5" /> Explain with AI
             </Button>
@@ -2295,7 +2294,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                 const searchTerm = currentFinding.policy_clause_id || currentFinding.regulation_clause_id || "";
                 router.push(searchTerm ? `/knowledge-graph?search=${encodeURIComponent(searchTerm)}` : "/knowledge-graph");
               }}
-              className="text-xs cursor-pointer gap-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+              className="text-xs cursor-pointer gap-1 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold"
             >
               <Network className="h-3.5 w-3.5" /> Explore Graph
             </Button>
@@ -2414,7 +2413,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
               <div className="pt-1.5 border-t border-border/40 space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-muted-foreground font-semibold flex items-center gap-1">
-                    <Paperclip className="h-3 w-3 text-indigo-500" /> Attached Evidence:
+                    <Paperclip className="h-3 w-3 text-primary" /> Attached Evidence:
                   </span>
                   <span className="font-bold text-foreground">
                     {remediation?.evidence?.length || 0} file(s)

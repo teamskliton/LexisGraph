@@ -223,7 +223,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
       </div>
 
       {/* TOP HEADER */}
-      <Card className="border border-border/60 bg-gradient-to-r from-card via-card/90 to-background p-6 shadow-sm">
+      <Card className="border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-3 flex-wrap">
@@ -234,7 +234,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
             </div>
 
             <p className="text-xs text-muted-foreground flex items-center gap-2">
-              <Building2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>Workspace: <strong>{organization?.name || "Organization Workspace"}</strong></span>
               <span>•</span>
               <code className="font-mono text-muted-foreground">Job ID: {jobId}</code>
@@ -250,7 +250,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
 
             <div className="p-3 rounded-lg border border-border/40 bg-muted/20 text-right">
               <span className="text-[10px] uppercase font-bold text-muted-foreground block">Elapsed Time</span>
-              <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">{formattedElapsedTime}</span>
+              <span className="font-bold text-primary font-mono">{formattedElapsedTime}</span>
             </div>
           </div>
         </div>
@@ -299,7 +299,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
                   onClick={() => setIsShareModalOpen(true)}
                   className="cursor-pointer text-xs gap-1.5"
                 >
-                  <Share2 className="h-4 w-4 text-indigo-500" /> Share Audit
+                  <Share2 className="h-4 w-4 text-primary" /> Share Audit
                 </Button>
 
                 <Button
@@ -314,7 +314,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
                 <Button
                   size="sm"
                   onClick={() => router.push(`/compliance/reports/${job.report_id}`)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer gap-1.5"
+                  className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold cursor-pointer gap-1.5"
                 >
                   <ExternalLink className="h-4 w-4" /> Open Report
                 </Button>
@@ -363,7 +363,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
         <Card className="lg:col-span-3 border border-border/60 bg-card p-5 space-y-4 flex flex-col justify-between shadow-xs">
           <div className="space-y-4">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <FileCheck2 className="h-4 w-4 text-indigo-500" /> Analysis Summary
+              <FileCheck2 className="h-4 w-4 text-primary" /> Analysis Summary
             </span>
 
             <div className="space-y-3 text-xs">
@@ -401,10 +401,10 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
         <Card className="md:col-span-2 lg:col-span-6 border border-border/60 bg-card p-5 space-y-5 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Activity className="h-4 w-4 text-indigo-500" /> Execution Timeline
+              <Activity className="h-4 w-4 text-primary" /> Execution Timeline
             </span>
 
-            <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+            <span className="text-xs font-mono font-bold text-primary">
               {progress}% Progress
             </span>
           </div>
@@ -440,13 +440,13 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
             <div className="relative group">
               <div className={cn(
                 "absolute -left-[23px] top-0.5 h-4 w-4 rounded-full flex items-center justify-center text-white",
-                isRunning ? "bg-indigo-600 animate-pulse" : isCompleted ? "bg-emerald-500" : "bg-rose-500"
+                isRunning ? "bg-primary animate-pulse" : isCompleted ? "bg-emerald-500" : "bg-rose-500"
               )}>
                 {isRunning ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : isCompleted ? <Check className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
               </div>
               <div className="space-y-0.5">
                 <p className="text-xs font-bold text-foreground">
-                  Current Pipeline Step: <span className="text-indigo-600 dark:text-indigo-400">{currentStep || "Processing"}</span>
+                  Current Pipeline Step: <span className="text-primary">{currentStep || "Processing"}</span>
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   GraphRAG vector retrieval & LLM reasoning engine active.
@@ -474,7 +474,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
         <Card className="lg:col-span-3 border border-border/60 bg-card p-5 space-y-4 flex flex-col justify-between shadow-xs">
           <div className="space-y-4">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Terminal className="h-4 w-4 text-indigo-500" /> Live Telemetry Details
+              <Terminal className="h-4 w-4 text-primary" /> Live Telemetry Details
             </span>
 
             <div className="space-y-3 text-xs">
@@ -507,7 +507,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
       {/* BOTTOM SECTION: REAL BACKEND ACTIVITY FEED */}
       <Card className="border border-border/60 bg-card p-5 space-y-4 shadow-xs">
         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Activity className="h-4 w-4 text-indigo-500" /> Backend Event Log
+          <Activity className="h-4 w-4 text-primary" /> Backend Event Log
         </span>
 
         <div className="space-y-2">
@@ -522,7 +522,7 @@ export const LiveAnalysisMonitor: React.FC<LiveAnalysisMonitorProps> = ({
                 ) : item.status === "FAILED" ? (
                   <XCircle className="h-4 w-4 text-rose-500 shrink-0" />
                 ) : (
-                  <Loader2 className="h-4 w-4 text-indigo-500 animate-spin shrink-0" />
+                  <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
                 )}
                 <span className="font-semibold text-foreground truncate">{item.title}</span>
               </div>

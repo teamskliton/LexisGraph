@@ -240,7 +240,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
               Review the selected data before starting compliance analysis.
             </p>
           </div>
-          <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 text-xs px-3 py-1">
+          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs px-3 py-1">
             Pre-Execution Setup
           </Badge>
         </div>
@@ -251,7 +251,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Building2 className="h-4 w-4 text-indigo-500" /> Section 1 — Organization Workspace
+              <Building2 className="h-4 w-4 text-primary" /> Section 1 — Organization Workspace
             </span>
             {onRefresh && (
               <Button
@@ -274,7 +274,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
               <select
                 value={organization.id}
                 onChange={(e) => onSelectOrganization(e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {organizations.map((org) => (
                   <option key={org.id} value={org.id}>
@@ -295,7 +295,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
           <div className="flex items-center gap-4 text-xs">
             <div className="p-3 rounded-lg border border-border/40 bg-muted/20 text-right">
               <span className="text-[10px] uppercase font-bold text-muted-foreground block">Compliance Score</span>
-              <span className="text-base font-bold text-indigo-600 dark:text-indigo-400">
+              <span className="text-base font-bold text-primary">
                 {latestReport?.overall_score != null ? `${latestReport.overall_score}%` : "No Score Yet"}
               </span>
             </div>
@@ -358,7 +358,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
                         }
                       }}
                       className={cn(
-                        "p-3 rounded-lg border flex items-center justify-between gap-3 cursor-pointer transition-all text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-inset",
+                        "p-3 rounded-lg border flex items-center justify-between gap-3 cursor-pointer transition-all text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
                         isSelected
                           ? "border-primary/50 bg-primary/5"
                           : "border-border/40 bg-muted/10 hover:bg-muted/30"
@@ -413,8 +413,8 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
             </div>
 
             {/* Sprint 8.1: 1-regulation-per-run clarification */}
-            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-indigo-500/5 border border-indigo-500/15">
-              <span className="text-indigo-400 text-[11px] leading-relaxed">
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-primary/5 border border-primary/20">
+              <span className="text-primary text-[11px] leading-relaxed">
                 <span className="font-bold">Each analysis run evaluates 1 regulation × 1 policy.</span>{" "}
                 Only the first selected regulation will be used. To analyze multiple regulations, run separate analyses.
               </span>
@@ -456,7 +456,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
                         }
                       }}
                       className={cn(
-                        "p-3 rounded-lg border flex items-center justify-between gap-3 cursor-pointer transition-all text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-inset",
+                        "p-3 rounded-lg border flex items-center justify-between gap-3 cursor-pointer transition-all text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
                         isSelected
                           ? "border-success/50 bg-success/5"
                           : "border-border/40 bg-muted/10 hover:bg-muted/30"
@@ -611,33 +611,33 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
         </div>
 
         {/* Expected Output Breakdown */}
-        <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
+        <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-2">
           <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5 text-indigo-500" /> Expected Audit Report Output Deliverables:
+            <Info className="h-3.5 w-3.5 text-primary" /> Expected Audit Report Output Deliverables:
           </p>
           <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs text-muted-foreground">
             <li className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>Executive Compliance Summary</span>
             </li>
             <li className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>Clause-by-Clause Compliance Findings</span>
             </li>
             <li className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>Uncovered Statutory Gap Analysis</span>
             </li>
             <li className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>Actionable Policy Recommendations</span>
             </li>
             <li className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>Knowledge Graph Evidence Links</span>
             </li>
             <li className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>PDF Audit Export Document</span>
             </li>
           </ul>
@@ -668,7 +668,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
             onClick={handleRunAnalysis}
             disabled={!canProceed || isSubmitting}
             size="lg"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md shadow-indigo-600/20 cursor-pointer disabled:opacity-50 gap-2"
+            className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold shadow-md shadow-primary/20 cursor-pointer disabled:opacity-50 gap-2"
           >
             {isSubmitting ? (
               <>

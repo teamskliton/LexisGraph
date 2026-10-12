@@ -74,7 +74,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     case "IN_REVIEW":
       return {
         label: "IN REVIEW",
-        className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+        className: "bg-primary/10 text-primary border-primary/30",
       };
     case "REMEDIATION":
     case "REMEDIATION_REQUIRED":
@@ -416,22 +416,17 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                 <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
                   {viewMode === "ALL_FINDINGS" ? (
                     <>
-                      <Layers className="h-5 w-5 text-indigo-500" /> All Organization Findings
+                      <Layers className="h-5 w-5 text-primary" /> All Organization Findings
                     </>
                   ) : (
                     <>
-                      <UserCheck className="h-5 w-5 text-indigo-500" /> My Assigned Work
+                      <UserCheck className="h-5 w-5 text-primary" /> My Assigned Work
                     </>
                   )}
                 </h1>
                 <Badge
                   variant="outline"
-                  className={cn(
-                    "text-xs font-semibold",
-                    viewMode === "ALL_FINDINGS"
-                      ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
-                      : "bg-indigo-500/10 text-indigo-500 border-indigo-500/20"
-                  )}
+                  className="text-xs font-semibold bg-primary/10 text-primary border-primary/20"
                 >
                   {viewMode === "ALL_FINDINGS"
                     ? `Total: ${totalOrgFindings} Findings`
@@ -462,7 +457,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <LayoutList className="h-3.5 w-3.5 text-purple-500" />
+                <LayoutList className="h-3.5 w-3.5 text-primary" />
                 <span>All Findings ({totalOrgFindings || allFindings.length})</span>
               </button>
               <button
@@ -478,7 +473,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <UserCheck className="h-3.5 w-3.5 text-indigo-500" />
+                <UserCheck className="h-3.5 w-3.5 text-primary" />
                 <span>My Work ({myWorkFindings.length})</span>
               </button>
             </div>
@@ -500,7 +495,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                 size="sm"
                 onClick={handleExportFindings}
                 disabled={isExporting}
-                className="gap-1.5 text-xs cursor-pointer shrink-0 border-indigo-500/30 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium"
+                className="gap-1.5 text-xs cursor-pointer shrink-0 border-primary/30 hover:border-primary/50 hover:bg-primary/10 text-primary font-medium"
               >
                 {isExporting ? (
                   <>
@@ -509,7 +504,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                   </>
                 ) : (
                   <>
-                    <Download className="h-3.5 w-3.5 text-indigo-500" />
+                    <Download className="h-3.5 w-3.5 text-primary" />
                     <span>Export Findings</span>
                   </>
                 )}
@@ -537,7 +532,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
 
             <Card className="border border-border/50 bg-card p-4 space-y-1">
               <span className="text-xs font-medium text-muted-foreground">In Review</span>
-              <p className="text-2xl font-bold text-indigo-500 tabular-nums">{metrics.inReview}</p>
+              <p className="text-2xl font-bold text-primary tabular-nums">{metrics.inReview}</p>
               <span className="text-[10px] text-muted-foreground">Under active review</span>
             </Card>
 
@@ -772,7 +767,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                     key={item.id}
                     onClick={() => handleOpenDrawer(item)}
                     className={cn(
-                      "border border-border/60 bg-card hover:border-indigo-500/50 transition-all cursor-pointer p-4 space-y-3 group shadow-xs",
+                      "border border-border/60 bg-card hover:border-primary/50 transition-all cursor-pointer p-4 space-y-3 group shadow-xs",
                       item.is_overdue && "border-rose-500/40 bg-rose-500/5"
                     )}
                   >
@@ -799,7 +794,7 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         {item.remediation_due_date && (
                           <div className="flex items-center gap-1 font-medium text-foreground">
-                            <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+                            <Calendar className="h-3.5 w-3.5 text-primary" />
                             <span>Due: {format(new Date(item.remediation_due_date), "dd MMM yyyy")}</span>
                           </div>
                         )}
@@ -829,12 +824,12 @@ export function MyWorkWorkspace({ initialView }: MyWorkWorkspaceProps) {
                     <div className="flex items-center justify-between pt-1 border-t border-border/30">
                       <span className="text-[11px] text-muted-foreground">
                         Assigned to:{" "}
-                        <strong className="text-indigo-500">
+                        <strong className="text-primary">
                           {item.assignee?.full_name || (item.assigned_to ? "Assigned" : "Unassigned")}
                         </strong>
                       </span>
 
-                      <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-indigo-500 gap-1 group-hover:translate-x-0.5 transition-transform">
+                      <Button variant="ghost" size="xs" className="h-7 text-xs font-semibold text-primary gap-1 group-hover:translate-x-0.5 transition-transform">
                         <span>Open Work Item</span>
                         <ChevronRight className="h-3.5 w-3.5" />
                       </Button>

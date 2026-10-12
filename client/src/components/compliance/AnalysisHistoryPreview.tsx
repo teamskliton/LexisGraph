@@ -40,7 +40,7 @@ export const AnalysisHistoryPreview: React.FC<AnalysisHistoryPreviewProps> = ({
       <div className="flex items-center justify-between">
         <div>
           <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <History className="h-4 w-4 text-indigo-500" aria-hidden="true" />
+            <History className="h-4 w-4 text-primary" aria-hidden="true" />
             Analysis History Preview
           </CardTitle>
 
@@ -53,7 +53,7 @@ export const AnalysisHistoryPreview: React.FC<AnalysisHistoryPreviewProps> = ({
           variant="outline"
           size="xs"
           onClick={() => router.push("/compliance/history")}
-          className="text-xs gap-1 cursor-pointer text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+          className="text-xs gap-1 cursor-pointer text-primary border-primary/30 hover:bg-primary/10"
           aria-label="View all analysis history"
         >
           View All <ArrowRight className="h-3 w-3" aria-hidden="true" />
