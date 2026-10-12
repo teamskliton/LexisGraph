@@ -59,7 +59,7 @@ export default function HeroSection() {
           <Link
             href={HERO.ctaPrimary.href}
             id="hero-cta-primary"
-            className="inline-flex items-center gap-2 px-6 py-3 text-base font-semibold bg-primary text-primary-foreground rounded-md hover:bg-primary-hover transition-colors duration-150 border border-primary"
+            className="inline-flex items-center gap-2 px-6 py-3 text-base font-semibold bg-primary text-primary-foreground hover:text-primary-foreground hover:underline underline-offset-4 rounded-md hover:bg-primary-hover transition-colors duration-150 border border-primary"
           >
             {HERO.ctaPrimary.label}
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

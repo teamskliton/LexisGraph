@@ -133,7 +133,7 @@ export default function LandingPage() {
             </Link>
             <Link
               href="/register"
-              className="px-4 py-2 text-xs font-semibold bg-primary hover:bg-primary-hover text-primary-foreground border border-primary rounded-md transition-colors duration-150"
+              className="px-4 py-2 text-xs font-semibold bg-primary hover:bg-primary-hover text-primary-foreground hover:text-primary-foreground hover:underline underline-offset-4 border border-primary rounded-md transition-colors duration-150"
             >
               Get Started
             </Link>
@@ -199,7 +199,7 @@ export default function LandingPage() {
               </Link>
               <Link
                 href="/register"
-                className="flex-1 py-2 text-center text-xs font-semibold bg-primary hover:bg-primary-hover text-primary-foreground border border-primary rounded-md"
+                className="flex-1 py-2 text-center text-xs font-semibold bg-primary hover:bg-primary-hover text-primary-foreground hover:text-primary-foreground border border-primary rounded-md"
               >
                 Get Started
               </Link>
@@ -255,7 +255,7 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row items-center gap-3.5 mt-8 w-full sm:w-auto">
             <Link
               href="/register"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 text-base font-semibold bg-primary hover:bg-primary-hover text-primary-foreground border border-primary rounded-md transition-colors duration-150"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 text-base font-semibold bg-primary hover:bg-primary-hover text-primary-foreground hover:text-primary-foreground hover:underline underline-offset-4 border border-primary rounded-md transition-colors duration-150"
             >
               <span>Get Started</span>
               <ArrowRight className="w-4 h-4" />
@@ -359,7 +359,7 @@ export default function LandingPage() {
                     </text>
                   </g>
 
-                  {/* Policies (Mid Right) - Secondary Accent */}
+                  {/* Policies (Mid Right) - Accent */}
                   <g className="cursor-pointer">
                     <rect
                       x="465"
@@ -367,10 +367,10 @@ export default function LandingPage() {
                       width="170"
                       height="42"
                       rx="8"
-                      className="fill-secondary/10 stroke-secondary transition-colors"
+                      className="fill-accent/10 stroke-accent transition-colors"
                       strokeWidth="1.75"
                     />
-                    <circle cx="488" cy="126" r="5" className="fill-secondary" />
+                    <circle cx="488" cy="126" r="5" className="fill-accent" />
                     <text
                       x="555"
                       y="130"
@@ -1176,7 +1176,7 @@ export default function LandingPage() {
               <div className="mt-8 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
                 <Link
                   href="/register"
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold bg-primary hover:bg-primary-hover text-primary-foreground border border-primary rounded-md transition-colors duration-150"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold bg-primary hover:bg-primary-hover text-primary-foreground hover:text-primary-foreground hover:underline underline-offset-4 border border-primary rounded-md transition-colors duration-150"
                 >
                   <span>Get Started →</span>
                 </Link>

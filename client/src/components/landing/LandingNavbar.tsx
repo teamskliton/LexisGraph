@@ -74,7 +74,7 @@ export default function LandingNavbar() {
               </Link>
               <Link
                 href="/register"
-                className="px-4 py-1.5 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors duration-150 shadow-sm"
+                className="px-4 py-1.5 text-sm font-semibold bg-primary text-primary-foreground hover:text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors duration-150 shadow-sm"
               >
                 Get Started
               </Link>
@@ -155,7 +155,7 @@ export default function LandingNavbar() {
               <Link
                 href="/register"
                 onClick={() => setOpen(false)}
-                className="w-full text-center px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors"
+                className="w-full text-center px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground hover:text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors"
               >
                 Get Started
               </Link>

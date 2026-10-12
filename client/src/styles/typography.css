@@ -141,6 +141,14 @@ a:hover {
   text-underline-offset: 3px;
 }
 
+/* Ensure button-styled links retain their high-contrast foreground color on hover */
+a[class*="text-primary-foreground"]:hover,
+a.btn-primary:hover,
+a.btn-ai:hover,
+a.btn-gradient:hover {
+  color: var(--primary-foreground);
+}
+
 a:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
