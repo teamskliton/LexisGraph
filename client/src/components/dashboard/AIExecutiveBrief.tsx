@@ -23,15 +23,11 @@ import {
   ArrowRight,
   Shield,
   Loader2,
-  Zap,
+  FileText,
+  BookOpen,
+  HelpCircle,
 } from "lucide-react";
-import {
-  RecentReportItem,
-  RiskBreakdown,
-  KpiStats,
-  ExecutiveRecommendation,
-  RecommendationPriority,
-} from "@/types/dashboard";
+import { PriorityActionItem, RecentReportItem } from "@/types/dashboard";
 import { ComplianceJob } from "@/services/api/compliance";
 import { cn } from "@/lib/utils";
 
@@ -39,298 +35,189 @@ export interface AIExecutiveBriefProps {
   isLoading?: boolean;
   activeJobs?: ComplianceJob[];
   recentReports?: RecentReportItem[];
-  riskBreakdown?: RiskBreakdown;
-  kpis?: KpiStats;
-  recommendations?: ExecutiveRecommendation[];
+  priorityActions?: PriorityActionItem[];
+  complianceScore?: number | null;
+  riskStatus?: string;
   summary?: string;
-  overallConfidence?: number;
-  lastAnalyzedAt?: string;
+  lastAnalyzedAt?: string | null;
   onViewFullAnalysis?: () => void;
-  onRecommendationAction?: (recommendation: ExecutiveRecommendation) => void;
   className?: string;
 }
 
-// ─── DEFAULT RECOMMENDATIONS (Fallback if not provided in props) ──────────────
-
-const DEFAULT_RECOMMENDATIONS: ExecutiveRecommendation[] = [
-  {
-    id: "rec-1",
-    priority: "Critical",
-    type: "Policy Update",
-    title: "Update POSH Policy",
-    explanation:
-      "POSH policy lacks updated remote work compliance guidelines required by recent mandates.",
-    actionLabel: "Open Policy",
-    confidence: 98,
-    affectedOrganization: "Acme Corp",
-    regulation: "POSH Act 2013",
-  },
-  {
-    id: "rec-2",
-    priority: "High",
-    type: "Critical Compliance Gap",
-    title: "2 compliance gaps require legal review",
-    explanation:
-      "Discrepancies detected between internal handling procedures and statutory compliance standards.",
-    actionLabel: "Review Report",
-    confidence: 94,
-    affectedOrganization: "Global Tech Inc.",
-  },
-  {
-    id: "rec-3",
-    priority: "Medium",
-    type: "New Regulation",
-    title: "DPDP amendment detected",
-    explanation:
-      "Statutory amendments released regarding data fiduciary obligations and consent manager workflows.",
-    actionLabel: "View Regulation",
-    confidence: 92,
-    regulation: "DPDP Act 2023",
-  },
-];
-
-// ─── HELPER UTILS ─────────────────────────────────────────────────────────────
-
-function getPriorityBadgeClass(priority: RecommendationPriority): string {
-  switch (priority) {
-    case "Critical":
-      return "bg-danger/10 text-danger border-danger/25 dark:bg-danger/20 font-semibold";
-    case "High":
-      return "bg-warning/10 text-warning-foreground dark:text-warning border-warning/25 dark:bg-warning/20 font-semibold";
-    case "Medium":
-      return "bg-info/10 text-info dark:text-info border-info/25 dark:bg-info/20 font-medium";
-    case "Low":
-      return "bg-muted text-muted-foreground border-border font-medium";
+function getSeverityBadge(severity: string) {
+  const s = severity.toUpperCase();
+  switch (s) {
+    case "CRITICAL":
+      return {
+        icon: <ShieldAlert className="h-3 w-3 text-rose-500 shrink-0" />,
+        className: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 font-semibold",
+      };
+    case "HIGH":
+      return {
+        icon: <AlertCircle className="h-3 w-3 text-orange-500 shrink-0" />,
+        className: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 font-semibold",
+      };
+    case "MEDIUM":
+      return {
+        icon: <Info className="h-3 w-3 text-amber-500 shrink-0" />,
+        className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-medium",
+      };
     default:
-      return "bg-muted text-muted-foreground border-border font-medium";
+      return {
+        icon: <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />,
+        className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-medium",
+      };
   }
 }
 
-function getPriorityIcon(priority: RecommendationPriority) {
-  switch (priority) {
-    case "Critical":
-      return <ShieldAlert className="h-3 w-3 text-danger shrink-0" />;
-    case "High":
-      return <AlertCircle className="h-3 w-3 text-warning shrink-0" />;
-    case "Medium":
-      return <Info className="h-3 w-3 text-info shrink-0" />;
-    case "Low":
-      return <CheckCircle2 className="h-3 w-3 text-muted-foreground shrink-0" />;
-  }
-}
-
-function formatAnalysisTimestamp(dateStr?: string): string {
-  if (!dateStr) return "Today • 10:42 AM";
+function formatAnalysisTimestamp(dateStr?: string | null): string {
+  if (!dateStr) return "Pending Analysis";
   try {
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return "Today • 10:42 AM";
+    if (isNaN(d.getTime())) return dateStr;
     const dayPrefix = isToday(d) ? "Today" : isYesterday(d) ? "Yesterday" : format(d, "MMM d, yyyy");
-    return `${dayPrefix} ${format(d, "h:mm a")}`;
+    return `${dayPrefix} at ${format(d, "h:mm a")}`;
   } catch {
-    return "Today • 10:42 AM";
+    return dateStr;
   }
 }
-
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export const AIExecutiveBrief: React.FC<AIExecutiveBriefProps> = ({
   isLoading = false,
   activeJobs = [],
   recentReports = [],
-  riskBreakdown,
-  kpis,
-  recommendations,
-  overallConfidence = 94,
+  priorityActions = [],
+  complianceScore,
+  riskStatus,
+  summary,
   lastAnalyzedAt,
   onViewFullAnalysis,
-  onRecommendationAction,
   className,
 }) => {
   const router = useRouter();
 
-  // Sort and pick top 3 priority actions
-  const priorityOrder: Record<RecommendationPriority, number> = {
-    Critical: 0,
-    High: 1,
-    Medium: 2,
-    Low: 3,
-  };
-
-  const topActions = useMemo(() => {
-    const source = recommendations || DEFAULT_RECOMMENDATIONS;
-    return [...source]
-      .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
-      .slice(0, 3);
-  }, [recommendations]);
-
-  // Derived Portfolio Status (Section 1)
-  const portfolioStatus = useMemo(() => {
-    const criticalGaps = riskBreakdown?.critical ?? 0;
-    const highGaps = riskBreakdown?.high ?? 0;
-    const score = recentReports[0]?.compliance_score ?? kpis?.average_compliance_score ?? null;
-
-    if (criticalGaps > 0) {
+  // Dynamic posture summary
+  const posture = useMemo(() => {
+    if (summary) {
       return {
-        label: "Critical" as const,
-        badgeClass: "bg-danger/10 text-danger border-danger/25 font-semibold",
-        summary: "Portfolio compliance is below acceptable thresholds due to unresolved policy gaps.",
+        badge: riskStatus || "Monitored",
+        badgeClass: "bg-primary/10 text-primary border-primary/20",
+        text: summary,
       };
     }
-    if (highGaps > 0 || (score !== null && score < 70)) {
+
+    if (complianceScore === null || complianceScore === undefined) {
       return {
-        label: "At Risk" as const,
-        badgeClass: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/25 font-semibold",
-        summary: "Multiple high-risk policy discrepancies require legal team review.",
+        badge: "Initial Setup",
+        badgeClass: "bg-muted text-muted-foreground border-border/50",
+        text: "No compliance audit analyses have been evaluated for this organization yet. Ingest policy documents and run your first regulatory check to populate executive intelligence.",
       };
     }
-    if (score !== null && score < 85) {
+
+    if (complianceScore >= 85) {
       return {
-        label: "Needs Review" as const,
-        badgeClass: "bg-warning/10 text-warning-foreground dark:text-warning border-warning/25 font-semibold",
-        summary: "Minor compliance gaps detected across active operational procedures.",
+        badge: "Healthy Posture",
+        badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+        text: `Organization compliance posture is strong (${complianceScore}%). Policies demonstrate high statutory alignment with monitored regulatory frameworks. Maintain regular ingestion cycles.`,
+      };
+    }
+    if (complianceScore >= 70) {
+      return {
+        badge: "Requires Review",
+        badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+        text: `Organization compliance posture is fair (${complianceScore}%). Several policy clauses show partial coverage or require human reviewer verification against statutory obligations.`,
       };
     }
     return {
-      label: "Healthy" as const,
-      badgeClass: "bg-success/10 text-success border-success/25 font-semibold",
-      summary: "Your overall compliance posture is strong across active regulatory frameworks.",
+      badge: "High Risk Detected",
+      badgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+      text: `Organization compliance posture is at risk (${complianceScore}%). Critical gaps have been identified between internal policy procedures and enforceable statutory mandates. Immediate remediation recommended.`,
     };
-  }, [riskBreakdown, kpis, recentReports]);
+  }, [complianceScore, riskStatus, summary]);
 
+  // Timestamp display
   const timestampDisplay = useMemo(() => {
     if (lastAnalyzedAt) return formatAnalysisTimestamp(lastAnalyzedAt);
     if (recentReports.length > 0 && recentReports[0].created_at) {
       return formatAnalysisTimestamp(recentReports[0].created_at);
     }
-    return "30 Jul 2026 12:22 AM";
+    return null;
   }, [lastAnalyzedAt, recentReports]);
 
-  // ── 1. LOADING SKELETON ─────────────────────────────────────────────────────
+  // Loading skeleton
   if (isLoading) {
     return (
-      <Card className={cn("border border-border bg-card shadow-sm", className)}>
-        <CardHeader className="py-2.5 px-4 border-b border-border/40">
+      <Card className={cn("border border-border/50 bg-card shadow-2xs h-full flex flex-col", className)}>
+        <CardHeader className="py-3.5 px-5 border-b border-border/40">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-6 w-6 rounded-lg" />
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="h-7 w-7 rounded-lg" />
               <div className="space-y-1">
                 <Skeleton className="h-4 w-36" />
                 <Skeleton className="h-3 w-56" />
               </div>
             </div>
-            <Skeleton className="h-5 w-36 rounded-full" />
+            <Skeleton className="h-5 w-24 rounded-full" />
           </div>
         </CardHeader>
-        <CardContent className="px-4 py-3 space-y-3">
-          <Skeleton className="h-12 w-full rounded-md" />
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-full rounded-md" />
-            <Skeleton className="h-10 w-full rounded-md" />
-            <Skeleton className="h-10 w-full rounded-md" />
+        <CardContent className="px-5 py-4 space-y-3.5 flex-1">
+          <Skeleton className="h-14 w-full rounded-lg" />
+          <div className="space-y-2.5 pt-2">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  // ── 2. ANALYSIS RUNNING STATE ───────────────────────────────────────────────
-  const isAnalysisRunning = activeJobs.length > 0;
-  if (isAnalysisRunning) {
-    const currentJob = activeJobs[0];
+  // Active Job Running State
+  if (activeJobs.length > 0) {
+    const job = activeJobs[0];
     return (
-      <Card className={cn("border border-primary/20 bg-card shadow-sm", className)}>
-        <CardHeader className="py-2.5 px-4 border-b border-border/40">
+      <Card className={cn("border border-primary/30 bg-card shadow-2xs h-full flex flex-col justify-between", className)}>
+        <CardHeader className="py-3.5 px-5 border-b border-border/40 shrink-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Loader2 className="h-4 w-4 animate-spin" />
               </div>
               <div>
-                <CardTitle className="text-xs font-semibold text-foreground tracking-tight">
+                <CardTitle className="text-sm font-semibold text-foreground">
                   AI Executive Brief
                 </CardTitle>
-                <CardDescription className="text-[11px] text-muted-foreground">
-                  Evaluating policy clauses against indexed regulatory frameworks...
+                <CardDescription className="text-xs text-muted-foreground">
+                  Compliance evaluation in progress...
                 </CardDescription>
               </div>
             </div>
-            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px] px-2 py-0.5 shrink-0 font-medium">
-              Powered by LexisGraph AI
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-0.5 font-medium">
+              Job Active
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="p-4">
-          <div className="flex flex-col items-center justify-center text-center p-3 rounded-lg border border-primary/15 bg-muted/20 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-              <span>Analyzing Documents (Job #{currentJob.id.slice(0, 8)})</span>
-            </div>
-            <div className="w-full max-w-sm h-1.5 rounded-full bg-primary/10 overflow-hidden">
-              <div className="h-full bg-primary rounded-full animate-pulse w-3/4" />
-            </div>
+        <CardContent className="px-5 py-8 flex-1 flex flex-col items-center justify-center text-center space-y-3">
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+            <Sparkles className="h-5 w-5 animate-pulse" />
+          </div>
+          <div className="space-y-1 max-w-md">
+            <h4 className="text-sm font-semibold text-foreground">
+              Evaluating Policy Clauses against Regulatory Graph
+            </h4>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              LexisGraph AI is verifying statutory requirements and semantic embeddings for job #{job.id.slice(0, 8)}.
+            </p>
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  // ── 3. EMPTY STATE ──────────────────────────────────────────────────────────
-  const hasNoReports = recentReports.length === 0 && (!recommendations || recommendations.length === 0);
-  if (hasNoReports) {
-    return (
-      <Card className={cn("border border-border bg-card shadow-sm", className)}>
-        <CardHeader className="py-2.5 px-4 border-b border-border/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
-                <Sparkles className="h-3.5 w-3.5" />
-              </div>
-              <div>
-                <CardTitle className="text-xs font-semibold text-foreground tracking-tight">
-                  AI Executive Brief
-                </CardTitle>
-                <CardDescription className="text-[11px] text-muted-foreground">
-                  AI-generated summary of your compliance portfolio.
-                </CardDescription>
-              </div>
-            </div>
-            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px] px-2 py-0.5 shrink-0 font-medium">
-              Powered by LexisGraph AI
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4">
-          <div className="flex flex-col items-center justify-center text-center py-6 px-4 rounded-lg border border-dashed border-border/60 bg-muted/10 space-y-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/10 text-success shrink-0">
-              <CheckCircle2 className="h-4.5 w-4.5" />
-            </div>
-            <div className="space-y-0.5">
-              <p className="text-xs font-semibold text-foreground">
-                Your compliance portfolio appears healthy.
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                No critical recommendations are available.
-              </p>
-            </div>
-            <Button
-              onClick={() => router.push("/compliance")}
-              size="xs"
-              className="gap-1 text-xs font-medium mt-1 cursor-pointer"
-            >
-              <Zap className="h-3 w-3" />
-              <span>Run New Analysis</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // ── 4. FULL BRIEF STATE ─────────────────────────────────────────────────────
   return (
-    <Card className={cn("border border-border bg-card shadow-sm h-full flex flex-col justify-between", className)}>
-      {/* ── CARD HEADER ── */}
-      <CardHeader className="py-3 px-5 border-b border-border/40 shrink-0">
+    <Card className={cn("border border-border/50 bg-card shadow-2xs h-full flex flex-col justify-between", className)}>
+      {/* ── Card Header ── */}
+      <CardHeader className="py-3.5 px-5 border-b border-border/40 shrink-0">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
@@ -341,7 +228,7 @@ export const AIExecutiveBrief: React.FC<AIExecutiveBriefProps> = ({
                 AI Executive Brief
               </CardTitle>
               <CardDescription className="text-xs text-muted-foreground truncate mt-0.5">
-                AI-generated summary of your compliance portfolio.
+                AI-driven analysis of organization compliance posture and corrective actions
               </CardDescription>
             </div>
           </div>
@@ -349,141 +236,171 @@ export const AIExecutiveBrief: React.FC<AIExecutiveBriefProps> = ({
             variant="outline"
             className="shrink-0 bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-0.5 font-medium"
           >
-            Powered by LexisGraph AI
+            LexisGraph AI
           </Badge>
         </div>
       </CardHeader>
 
-      <CardContent className="px-5 py-3.5 flex-1 flex flex-col justify-between gap-3.5">
-        {/* ── SECTION 1: Portfolio Status ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-lg bg-muted/20 border border-border/40 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Badge
-              variant="outline"
-              className={cn("text-[11px] px-2.5 py-0.5 shrink-0 tracking-wide uppercase", portfolioStatus.badgeClass)}
-            >
-              {portfolioStatus.label}
+      <CardContent className="px-5 py-4 flex-1 flex flex-col justify-between gap-4">
+        {/* ── Posture Summary ── */}
+        <div className="p-3.5 rounded-lg bg-muted/20 border border-border/50 space-y-1.5 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className={cn("text-[11px] px-2 py-0.5 uppercase tracking-wide", posture.badgeClass)}>
+              {posture.badge}
             </Badge>
-            <p className="text-xs text-foreground font-medium truncate">
-              {portfolioStatus.summary}
-            </p>
+            {complianceScore !== null && complianceScore !== undefined && (
+              <span className="text-xs font-semibold text-foreground">
+                Score: {complianceScore}%
+              </span>
+            )}
           </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {posture.text}
+          </p>
         </div>
 
-        {/* ── SECTION 2: Priority Actions (Top 3 Only, Spacious 1-Line Cards) ── */}
+        {/* ── Priority Actions Section ── */}
         <div className="space-y-2 flex-1 flex flex-col justify-center">
           <div className="flex items-center justify-between px-0.5 shrink-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               Priority Actions
             </span>
-            <span className="text-[10px] text-muted-foreground font-semibold bg-muted/50 px-2 py-0.5 rounded-full border border-border/30">
-              Top 3
+            <span className="text-[10px] text-muted-foreground font-medium bg-muted/40 px-2 py-0.5 rounded-full border border-border/30">
+              {priorityActions.length > 0 ? `${priorityActions.length} Actions` : "Zero Blockers"}
             </span>
           </div>
 
-          <div className="space-y-2 flex-1 flex flex-col justify-around">
-            {topActions.map((action) => {
-              const formattedConfidence =
-                action.confidence > 1
-                  ? Math.round(action.confidence)
-                  : Math.round(action.confidence * 100);
+          {priorityActions.length === 0 ? (
+            <div className="p-6 rounded-lg border border-dashed border-border/60 bg-muted/10 text-center space-y-2 my-auto">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-semibold text-foreground">
+                  No Unresolved Critical Findings
+                </p>
+                <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                  All analyzed policy clauses satisfy compliance thresholds or have been marked resolved.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2.5 flex-1 flex flex-col justify-around">
+              {priorityActions.slice(0, 3).map((action) => {
+                const sevBadge = getSeverityBadge(action.severity);
+                return (
+                  <div
+                    key={action.id}
+                    className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border border-border/50 bg-background/50 hover:border-border hover:bg-background transition-all duration-150 shadow-2xs"
+                  >
+                    {/* Finding Info */}
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={cn("gap-1 text-[10px] px-2 py-0.5 shrink-0 uppercase tracking-wide", sevBadge.className)}
+                        >
+                          {sevBadge.icon}
+                          <span>{action.severity}</span>
+                        </Badge>
+                        <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                          {action.title}
+                        </p>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground line-clamp-1 leading-relaxed">
+                        {action.description}
+                      </p>
 
-              return (
-                <div
-                  key={action.id}
-                  className="group flex items-center justify-between gap-3 p-3 rounded-lg border border-border/50 bg-background hover:border-border transition-all duration-150 shadow-2xs"
-                >
-                  {/* Left: Priority Badge + Title & 1-Line Description */}
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "gap-1 text-[11px] px-2 py-0.5 shrink-0 uppercase tracking-wide",
-                        getPriorityBadgeClass(action.priority)
+                      {/* Traceability: Policy & Regulation Links */}
+                      <div className="flex items-center gap-2 pt-0.5 text-[10px] text-muted-foreground flex-wrap">
+                        {action.relevant_policy && (
+                          <span className="inline-flex items-center gap-1 text-primary/80 font-medium">
+                            <FileText className="h-3 w-3 shrink-0" />
+                            <span className="truncate max-w-[140px]">{action.relevant_policy}</span>
+                          </span>
+                        )}
+                        {action.relevant_policy && action.relevant_regulation && <span>•</span>}
+                        {action.relevant_regulation && (
+                          <span className="inline-flex items-center gap-1 text-secondary-foreground/80 font-medium">
+                            <BookOpen className="h-3 w-3 shrink-0" />
+                            <span className="truncate max-w-[140px]">{action.relevant_regulation}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right: Confidence & Action Button */}
+                    <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                      {action.confidence !== null && action.confidence !== undefined && (
+                        <div
+                          className="text-right hidden md:block"
+                          title="NLP & semantic clause match confidence for regulatory entity extraction"
+                        >
+                          <span className="text-[10px] text-muted-foreground block leading-tight">
+                            Extraction
+                          </span>
+                          <span className="text-xs font-bold tabular-nums text-foreground">
+                            {action.confidence}%
+                          </span>
+                        </div>
                       )}
-                    >
-                      {getPriorityIcon(action.priority)}
-                      <span>{action.priority}</span>
-                    </Badge>
 
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                        {action.title}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
-                        {action.explanation}
-                      </p>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => {
+                          if (action.action_type === "policy" && action.policy_id) {
+                            router.push(`/documents?id=${action.policy_id}`);
+                          } else if (action.action_type === "regulation" && action.regulation_id) {
+                            router.push(`/regulations`);
+                          } else if (action.report_id) {
+                            router.push(`/reports/${action.report_id}`);
+                          } else {
+                            router.push("/compliance");
+                          }
+                        }}
+                        className="gap-1 text-xs h-7 px-2.5 font-medium hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors cursor-pointer"
+                      >
+                        <span>{action.action_label}</span>
+                        <ArrowRight className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
-
-                  {/* Right: Confidence % + Compact Action Button */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span
-                      className="text-xs font-medium text-muted-foreground hidden sm:inline"
-                      title="AI Confidence Score"
-                    >
-                      Confidence {formattedConfidence}%
-                    </span>
-
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onClick={() => {
-                        if (action.onAction) {
-                          action.onAction();
-                        } else if (onRecommendationAction) {
-                          onRecommendationAction(action);
-                        } else {
-                          router.push("/compliance");
-                        }
-                      }}
-                      className="gap-1 text-xs h-7 px-2.5 font-medium shrink-0 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors cursor-pointer"
-                    >
-                      <span>{action.actionLabel}</span>
-                      <ArrowRight className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </CardContent>
 
-      {/* ── SECTIONS 3 & 4 + BOTTOM CTA ── */}
+      {/* ── Footer: Confidence disclaimer & Full Analysis CTA ── */}
       <CardFooter className="py-2.5 px-5 border-t border-border/40 bg-muted/20 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        {/* Section 3 & 4: AI Confidence & Latest Update */}
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground min-w-0">
-          <div className="flex items-center gap-1.5 font-semibold text-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground min-w-0">
+          <div
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground cursor-help"
+            title="Semantic extraction confidence score indicates entity mapping accuracy. It is not an absolute legal certification."
+          >
             <Shield className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span>AI Confidence: {overallConfidence}%</span>
+            <span>Traceable to indexed statutory clauses</span>
+            <HelpCircle className="h-3 w-3 text-muted-foreground/60" />
           </div>
-          <span className="hidden sm:inline text-muted-foreground/60">•</span>
-          <span className="truncate hidden md:inline">
-            Based on latest indexed regulations and internal policies.
-          </span>
-          <span className="hidden sm:inline text-muted-foreground/60">•</span>
-          <div className="flex items-center gap-1">
-            <span>Last analyzed:</span>
-            <span className="font-semibold text-foreground tabular-nums">
-              {timestampDisplay}
-            </span>
-          </div>
+          {timestampDisplay && (
+            <>
+              <span className="hidden sm:inline text-muted-foreground/40">•</span>
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                Analyzed: <strong className="text-foreground font-medium">{timestampDisplay}</strong>
+              </span>
+            </>
+          )}
         </div>
 
-        {/* Bottom CTA */}
         <Button
           size="xs"
           onClick={() => {
-            if (onViewFullAnalysis) {
-              onViewFullAnalysis();
-            } else {
-              router.push("/reports");
-            }
+            if (onViewFullAnalysis) onViewFullAnalysis();
+            else router.push("/reports");
           }}
-          className="gap-1.5 text-xs h-7 px-3.5 font-semibold shrink-0 cursor-pointer ml-auto"
+          className="gap-1.5 text-xs h-7 px-3 font-semibold shrink-0 cursor-pointer ml-auto"
         >
-          <span>View Full Analysis</span>
+          <span>View Reports</span>
           <ArrowRight className="h-3.5 w-3.5" />
         </Button>
       </CardFooter>

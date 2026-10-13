@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { RecentReportItem } from "@/types/dashboard";
 import {
   Card,
@@ -9,17 +10,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   FileText,
   ArrowRight,
-  Building2,
   Calendar,
   CheckCircle2,
   Clock,
   AlertCircle,
-  ExternalLink,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,8 +30,6 @@ interface RecentReportsWidgetProps {
   reports?: RecentReportItem[];
   isLoading: boolean;
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatDate = (dateStr: string) => {
   try {
@@ -42,11 +43,10 @@ const formatDate = (dateStr: string) => {
   }
 };
 
-// Circular score ring — CSS only, no library
 const ScoreRing: React.FC<{ score: number | null }> = ({ score }) => {
   if (score === null || score === undefined) {
     return (
-      <div className="h-10 w-10 rounded-full border-2 border-border/50 flex items-center justify-center shrink-0">
+      <div className="h-9 w-9 rounded-full border border-border/50 flex items-center justify-center shrink-0 bg-muted/20">
         <span className="text-[9px] text-muted-foreground font-medium leading-none">
           N/A
         </span>
@@ -56,22 +56,22 @@ const ScoreRing: React.FC<{ score: number | null }> = ({ score }) => {
   const rounded = Math.round(score);
   const ringColor =
     rounded >= 85
-      ? "border-emerald-500 text-emerald-700 dark:text-emerald-400"
+      ? "border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5"
       : rounded >= 70
-      ? "border-amber-500 text-amber-700 dark:text-amber-400"
-      : "border-rose-500 text-rose-700 dark:text-rose-400";
+      ? "border-amber-500 text-amber-600 dark:text-amber-400 bg-amber-500/5"
+      : "border-rose-500 text-rose-600 dark:text-rose-400 bg-rose-500/5";
 
   return (
     <div
       className={cn(
-        "h-10 w-10 rounded-full border-2 flex flex-col items-center justify-center shrink-0",
+        "h-9 w-9 rounded-full border-2 flex flex-col items-center justify-center shrink-0 font-mono",
         ringColor
       )}
     >
       <span className="text-[11px] font-bold tabular-nums leading-none">
         {rounded}
       </span>
-      <span className="text-[8px] text-muted-foreground leading-none mt-0.5">
+      <span className="text-[7px] text-muted-foreground leading-none mt-0.5">
         %
       </span>
     </div>
@@ -83,45 +83,94 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 
   if (s === "COMPLETED") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
+      <Badge
+        variant="outline"
+        className="gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px] px-2 py-0.5 font-medium whitespace-nowrap"
+      >
         <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
         Completed
-      </span>
+      </Badge>
     );
   }
   if (s === "PROCESSING" || s === "RUNNING") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400 border border-blue-500/20 whitespace-nowrap">
+      <Badge
+        variant="outline"
+        className="gap-1 bg-primary/10 text-primary border-primary/20 text-[10px] px-2 py-0.5 font-medium whitespace-nowrap"
+      >
         <Clock className="h-2.5 w-2.5 shrink-0 animate-spin" />
         Processing
-      </span>
+      </Badge>
     );
   }
   if (s === "FAILED") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-400 border border-rose-500/20 whitespace-nowrap">
+      <Badge
+        variant="outline"
+        className="gap-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 text-[10px] px-2 py-0.5 font-medium whitespace-nowrap"
+      >
         <AlertCircle className="h-2.5 w-2.5 shrink-0" />
         Failed
-      </span>
+      </Badge>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20 whitespace-nowrap">
+    <Badge
+      variant="outline"
+      className="gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[10px] px-2 py-0.5 font-medium whitespace-nowrap"
+    >
       <Clock className="h-2.5 w-2.5 shrink-0" />
       {status}
-    </span>
+    </Badge>
   );
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const RiskBadge: React.FC<{ risk?: string | null }> = ({ risk }) => {
+  if (!risk) return null;
+  const r = risk.toLowerCase();
+
+  if (r.includes("low")) {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px] px-1.5 py-0 font-medium whitespace-nowrap"
+      >
+        <ShieldCheck className="h-2.5 w-2.5 shrink-0" />
+        Low Risk
+      </Badge>
+    );
+  }
+  if (r.includes("medium")) {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[10px] px-1.5 py-0 font-medium whitespace-nowrap"
+      >
+        <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
+        Medium Risk
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="gap-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 text-[10px] px-1.5 py-0 font-medium whitespace-nowrap"
+    >
+      <ShieldX className="h-2.5 w-2.5 shrink-0" />
+      High Risk
+    </Badge>
+  );
+};
 
 export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
   reports = [],
   isLoading,
 }) => {
+  const router = useRouter();
+
   if (isLoading) {
     return (
-      <Card>
+      <Card className="border border-border/50 bg-card shadow-2xs">
         <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -137,15 +186,12 @@ export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
               key={i}
               className="flex items-center gap-4 rounded-lg border border-border/40 p-3.5"
             >
-              <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+              <Skeleton className="h-9 w-9 rounded-full shrink-0" />
               <div className="flex-1 space-y-1.5 min-w-0">
                 <Skeleton className="h-3.5 w-1/2" />
-                <Skeleton className="h-3 w-2/3" />
                 <Skeleton className="h-3 w-1/3" />
               </div>
-              <div className="space-y-1.5 shrink-0">
-                <Skeleton className="h-5 w-20" />
-              </div>
+              <Skeleton className="h-5 w-20" />
             </div>
           ))}
         </CardContent>
@@ -154,42 +200,46 @@ export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
   }
 
   return (
-    <Card>
-      {/* Header */}
-      <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5">
+    <Card className="border border-border/50 bg-card shadow-2xs flex flex-col justify-between">
+      {/* ── Card Header ── */}
+      <CardHeader className="pb-3 border-b border-border/40 px-5 pt-5 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
               <FileText className="h-4 w-4" />
             </div>
-            <CardTitle className="text-sm font-semibold text-foreground">
-              Recent Reports
-            </CardTitle>
+            <div>
+              <CardTitle className="text-sm font-semibold text-foreground">
+                Recent Reports
+              </CardTitle>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Latest compliance audit reports for this organization
+              </p>
+            </div>
           </div>
           <Link
             href="/reports"
-            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
           >
-            View All
+            <span>View All Reports</span>
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </CardHeader>
 
-      <CardContent className="px-5 py-4">
+      {/* ── Card Content ── */}
+      <CardContent className="px-5 py-4 flex-1">
         {reports.length === 0 ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-              <FileText className="h-5 w-5 text-muted-foreground/40" />
+          <div className="flex flex-col items-center justify-center py-10 text-center space-y-2.5">
+            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground/50">
+              <FileText className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
-                No reports yet
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-foreground">
+                No Compliance Reports Yet
               </p>
-              <p className="text-xs text-muted-foreground/70 mt-1 max-w-xs">
-                Compliance reports appear here once you run an analysis against
-                your organization&apos;s policy documents.
+              <p className="text-[11px] text-muted-foreground max-w-xs mx-auto leading-relaxed">
+                Compliance checks and gap analyses evaluated for this organization will appear here.
               </p>
             </div>
           </div>
@@ -198,54 +248,42 @@ export const RecentReportsWidget: React.FC<RecentReportsWidgetProps> = ({
             {reports.slice(0, 5).map((report) => (
               <div
                 key={report.id}
+                onClick={() => router.push(`/reports/${report.id}`)}
                 className={cn(
-                  "group relative flex items-center gap-4 rounded-lg border border-border/40 bg-muted/10 px-4 py-3",
-                  "transition-all duration-150",
-                  // Hover: left accent bar + background
-                  "before:absolute before:left-0 before:inset-y-0 before:w-[3px] before:rounded-l-lg",
-                  "before:bg-transparent before:transition-colors before:duration-150",
-                  "hover:bg-muted/30 hover:border-border hover:before:bg-primary"
+                  "group flex items-center gap-3.5 rounded-lg border border-border/40 bg-muted/10 px-3.5 py-2.5 cursor-pointer",
+                  "transition-all duration-150 hover:bg-muted/30 hover:border-border hover:shadow-2xs"
                 )}
               >
-                {/* Score ring */}
+                {/* Score Ring */}
                 <ScoreRing score={report.compliance_score} />
 
-                {/* Report info */}
+                {/* Report Info */}
                 <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-semibold text-foreground truncate leading-snug group-hover:text-primary transition-colors"
-                    title={report.name}
-                  >
-                    {report.name}
-                  </p>
-                  <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Building2 className="h-3 w-3 shrink-0" />
-                      <span className="truncate max-w-[120px]">
-                        {report.organization_name}
-                      </span>
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p
+                      className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors"
+                      title={report.name}
+                    >
+                      {report.name}
+                    </p>
+                    <RiskBadge risk={report.risk_level} />
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                    <span className="inline-flex items-center gap-1 font-mono">
                       <Calendar className="h-3 w-3 shrink-0" />
                       {formatDate(report.created_at)}
+                    </span>
+                    <span>•</span>
+                    <span className="truncate max-w-[120px]">
+                      {report.organization_name}
                     </span>
                   </div>
                 </div>
 
-                {/* Status + action */}
-                <div className="flex items-center gap-2.5 shrink-0">
+                {/* Status Badge + Arrow */}
+                <div className="flex items-center gap-2 shrink-0">
                   <StatusBadge status={report.status} />
-                  {/* Open Report — visible on hover */}
-                  <Link href={`/reports/${report.id}`}>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-muted-foreground hover:text-foreground"
-                      aria-label={`Open report ${report.name}`}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                  </Link>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
                 </div>
               </div>
             ))}

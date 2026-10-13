@@ -7,124 +7,40 @@ import { ProtectedRoute } from "@/components/layout/protected-route";
 import { AppShell } from "@/components/layout/AppShell";
 import { dashboardService } from "@/services/dashboard-service";
 import { DashboardStatsResponse } from "@/types/dashboard";
-import { OrganizationDialog } from "@/components/features/organizations/OrganizationDialog";
-import {
-  organizationsService,
-  OrganizationCreate,
-  OrganizationUpdate,
-} from "@/services/api/organizations";
-import { formatRoleLabel, getRoleBadgeClass } from "@/utils/role-utils";
-import { NaturalAvatar } from "@/components/ui/NaturalAvatar";
-
-// Dashboard Components
-import { DashboardKpiCards } from "@/components/dashboard/DashboardKpiCards";
-import { RecentActivityList } from "@/components/dashboard/RecentActivityList";
-import { ComplianceScoreChart } from "@/components/dashboard/ComplianceScoreChart";
-import { ReportsOverTimeChart } from "@/components/dashboard/ReportsOverTimeChart";
-import { RiskBreakdownChart } from "@/components/dashboard/RiskBreakdownChart";
-import { OrgScoresChart } from "@/components/dashboard/OrgScoresChart";
-import { RecentReportsWidget } from "@/components/dashboard/RecentReportsWidget";
-import { AIExecutiveBrief } from "@/components/dashboard/AIExecutiveBrief";
-import { JobProgressCard } from "@/components/compliance/JobProgressCard";
-import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
-import { WorkspaceOverviewBanner } from "@/components/dashboard/WorkspaceOverviewBanner";
-import { MyReviewQueue } from "@/components/dashboard/MyReviewQueue";
 import { complianceService, ComplianceJob } from "@/services/api/compliance";
-import { format } from "date-fns";
+
+// Dashboard Refactored Components
+import { DashboardKpiCards } from "@/components/dashboard/DashboardKpiCards";
+import { AIExecutiveBrief } from "@/components/dashboard/AIExecutiveBrief";
+import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
+import { ComplianceTrendChart } from "@/components/dashboard/ComplianceTrendChart";
+import { FindingsBySeverityChart } from "@/components/dashboard/FindingsBySeverityChart";
+import { RecentReportsWidget } from "@/components/dashboard/RecentReportsWidget";
+import { RecentActivityList } from "@/components/dashboard/RecentActivityList";
+import { JobProgressCard } from "@/components/compliance/JobProgressCard";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ShieldCheck,
-  ShieldAlert,
-  UserCheck,
   RefreshCw,
   AlertTriangle,
-  Building2,
-  FileText,
+  Upload,
   Zap,
-  Plus,
-  BarChart3,
-  Users,
-  Network,
-  ArrowRight,
+  Calendar,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
   Layers,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// ─── Executive Summary helper ─────────────────────────────────────────────────
-
-interface PostureSummary {
-  postureLabel: string;
-  postureColor: string;
-  summaryText: string;
-}
-
-function buildPostureSummary(stats: DashboardStatsResponse): PostureSummary {
-  const score = stats.kpis.average_compliance_score;
-  const total = stats.kpis.total_compliance_reports;
-  const critical = stats.risk_breakdown?.critical ?? 0;
-  const high = stats.risk_breakdown?.high ?? 0;
-  const highRisk = critical + high;
-
-  if (total === 0) {
-    return {
-      postureLabel: "Getting Started",
-      postureColor: "text-muted-foreground",
-      summaryText:
-        "No compliance reports generated yet. Create an organization and run your first analysis to begin monitoring your regulatory posture.",
-    };
-  }
-
-  let postureLabel: string;
-  let postureColor: string;
-
-  if (score >= 85) {
-    postureLabel = "Compliant";
-    postureColor = "text-emerald-600 dark:text-emerald-400";
-  } else if (score >= 70) {
-    postureLabel = "Needs Attention";
-    postureColor = "text-amber-600 dark:text-amber-400";
-  } else {
-    postureLabel = "At Risk";
-    postureColor = "text-rose-600 dark:text-rose-400";
-  }
-
-  let summaryText = `Portfolio-wide compliance score is ${score}%.`;
-
-  if (critical > 0) {
-    summaryText += ` ${critical} critical ${critical === 1 ? "issue requires" : "issues require"
-      } immediate review.`;
-  } else if (highRisk > 0) {
-    summaryText += ` ${highRisk} high-risk ${highRisk === 1 ? "item requires" : "items require"
-      } review.`;
-  } else {
-    summaryText += " No critical risks detected across your portfolio.";
-  }
-
-  return { postureLabel, postureColor, summaryText };
-}
-
-// ─── Dashboard Content ────────────────────────────────────────────────────────
-
 function DashboardContent() {
   const {
-    user,
-    logout,
     activeMembership,
-    activeRole,
-    isAdmin,
     isReviewer,
-    isComplianceAnalyst,
-    isViewer,
     permissions,
     refreshUser,
   } = useAuth();
@@ -134,10 +50,6 @@ function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [isOrgDialogOpen, setIsOrgDialogOpen] = useState(false);
-  const [isSubmittingOrg, setIsSubmittingOrg] = useState(false);
-
   const [activeJobs, setActiveJobs] = useState<ComplianceJob[]>([]);
 
   const fetchStats = useCallback(async (isManualRefresh = false) => {
@@ -145,10 +57,17 @@ function DashboardContent() {
     else setIsLoading(true);
     setError(null);
 
+    const activeOrgId =
+      typeof window !== "undefined"
+        ? localStorage.getItem("selected_organization_id")
+        : null;
+
     try {
       const [data, jobsData] = await Promise.all([
         dashboardService.getStats(),
-        complianceService.listComplianceJobs().catch(() => []),
+        complianceService
+          .listComplianceJobs(activeOrgId || undefined)
+          .catch(() => []),
       ]);
       setStats(data);
       const runningJobs = (jobsData || []).filter(
@@ -181,257 +100,204 @@ function DashboardContent() {
       refreshUser();
     };
     window.addEventListener("organization_changed", handleOrgChange);
-    return () => window.removeEventListener("organization_changed", handleOrgChange);
+    return () =>
+      window.removeEventListener("organization_changed", handleOrgChange);
   }, [fetchStats, refreshUser]);
 
-  const handleCreateOrgSubmit = async (
-    data: OrganizationCreate | OrganizationUpdate
-  ) => {
-    try {
-      setIsSubmittingOrg(true);
-      await organizationsService.createOrganization(
-        data as OrganizationCreate
+  // Dynamic organization name
+  const organizationName =
+    activeMembership?.organization_name ||
+    stats?.organization_name ||
+    "TechNova Solutions Pvt. Ltd.";
+
+  // Dynamic organization risk status
+  const riskStatus = stats?.risk_status || (
+    stats?.compliance_kpis?.compliance_score !== null && stats?.compliance_kpis?.compliance_score !== undefined
+      ? stats.compliance_kpis.compliance_score >= 85
+        ? "Low Risk"
+        : stats.compliance_kpis.compliance_score >= 70
+        ? "Medium Risk"
+        : "High Risk"
+      : "Not Analyzed"
+  );
+
+  // Dynamic last analysis date
+  const lastAnalysisDate = stats?.last_analysis_date || (
+    stats?.recent_reports && stats.recent_reports.length > 0
+      ? new Date(stats.recent_reports[0].created_at).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : null
+  );
+
+  const getRiskStatusBadge = (statusStr: string) => {
+    const s = statusStr.toLowerCase();
+    if (s.includes("low")) {
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 text-xs px-2.5 py-0.5 font-semibold uppercase tracking-wide"
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span>Low Risk</span>
+        </Badge>
       );
-      toast.success("Organization created successfully.");
-      setIsOrgDialogOpen(false);
-      fetchStats(false);
-    } catch (error) {
-      console.error("Failed to create organization:", error);
-      toast.error("Failed to create organization. Please check your inputs.");
-    } finally {
-      setIsSubmittingOrg(false);
     }
+    if (s.includes("medium")) {
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25 text-xs px-2.5 py-0.5 font-semibold uppercase tracking-wide"
+        >
+          <ShieldAlert className="h-3.5 w-3.5" />
+          <span>Medium Risk</span>
+        </Badge>
+      );
+    }
+    if (s.includes("high") || s.includes("critical") || s.includes("at risk")) {
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25 text-xs px-2.5 py-0.5 font-semibold uppercase tracking-wide"
+        >
+          <ShieldX className="h-3.5 w-3.5" />
+          <span>High Risk</span>
+        </Badge>
+      );
+    }
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1.5 bg-muted text-muted-foreground border-border/50 text-xs px-2.5 py-0.5 font-medium uppercase tracking-wide"
+      >
+        <span>{statusStr}</span>
+      </Badge>
+    );
   };
-
-  // Derived summary
-  const posture =
-    !isLoading && stats ? buildPostureSummary(stats) : null;
-
-  // Memoized metrics for Workspace Overview Banner
-  const bannerScore = React.useMemo(() => {
-    if (stats?.kpis?.average_compliance_score && stats.kpis.average_compliance_score > 0) {
-      return stats.kpis.average_compliance_score;
-    }
-    return 82;
-  }, [stats?.kpis?.average_compliance_score]);
-
-  const bannerPolicyCount = stats?.kpis?.total_policies ?? 16;
-  const bannerReportCount = stats?.kpis?.total_compliance_reports ?? 5;
-
-  const bannerLastAnalysisDate = React.useMemo(() => {
-    if (activeJobs.length > 0) {
-      try {
-        return format(new Date(activeJobs[0].created_at), "MMM d, yyyy");
-      } catch {
-        // fallback
-      }
-    }
-    if (stats?.recent_reports && stats.recent_reports.length > 0) {
-      try {
-        return format(new Date(stats.recent_reports[0].created_at), "MMM d, yyyy");
-      } catch {
-        // fallback
-      }
-    }
-    return "Sep 19, 2026";
-  }, [activeJobs, stats?.recent_reports]);
-
-  const bannerHighRiskIssues = React.useMemo(() => {
-    const critical = stats?.risk_breakdown?.critical ?? 0;
-    const high = stats?.risk_breakdown?.high ?? 0;
-    if (critical + high > 0) return critical + high;
-    return bannerScore < 70 ? 4 : bannerScore < 85 ? 1 : 0;
-  }, [stats?.risk_breakdown, bannerScore]);
-
-  const bannerNeedsReview = React.useMemo(() => {
-    const medium = stats?.risk_breakdown?.medium ?? 0;
-    if (medium > 0) return medium;
-    return bannerScore < 85 ? 3 : 1;
-  }, [stats?.risk_breakdown, bannerScore]);
-
-  const bannerCompliantClauses = Math.max(12, bannerPolicyCount * 3);
-  const bannerPendingAnalyses = activeJobs.length;
-
-  // User initials for avatar
-  const initials =
-    user?.full_name
-      ?.split(" ")
-      .slice(0, 2)
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase() ?? "?";
 
   return (
     <AppShell>
-      {/* ── Main ── */}
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+        {/* ── SECTION 1 — Dashboard Header ────────────────────────────── */}
+        <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-5 border-b border-border/40 pb-6">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                Executive Dashboard
+              </h1>
+              <span className="text-muted-foreground/40 hidden sm:inline">•</span>
+              <span className="text-lg font-semibold text-foreground/90 truncate">
+                {organizationName}
+              </span>
+            </div>
 
-        {/* ── Header: Title + Executive Summary + Actions ── */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-border/40 pb-6">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              Executive Dashboard
-            </h1>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">
+              Monitor compliance health, identify regulatory risks, and prioritize corrective actions.
+            </p>
 
-            {/* Executive summary — dynamic from data */}
-            <div className="mt-2 space-y-0.5">
+            {/* Dynamic Status Display: Organization Risk Status + Last Analysis Date */}
+            <div className="flex items-center gap-3 pt-1 flex-wrap">
               {isLoading ? (
                 <>
-                  <Skeleton className="h-3.5 w-24 rounded" />
-                  <Skeleton className="h-4 w-96 rounded mt-1" />
-                </>
-              ) : posture ? (
-                <>
-                  <span
-                    className={cn(
-                      "text-[11px] font-bold uppercase tracking-[0.08em]",
-                      posture.postureColor
-                    )}
-                  >
-                    ● {posture.postureLabel}
-                  </span>
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                    {posture.summaryText}
-                  </p>
+                  <Skeleton className="h-6 w-24 rounded-full" />
+                  <Skeleton className="h-4 w-40 rounded" />
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  Welcome back,{" "}
-                  <span className="font-semibold text-primary">
-                    {user?.full_name}
-                  </span>
-                  .
-                </p>
+                <>
+                  {getRiskStatusBadge(riskStatus)}
+                  <span className="text-muted-foreground/40">•</span>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span>
+                      Last Analysis:{" "}
+                      <strong className="text-foreground font-semibold">
+                        {lastAnalysisDate || "No analyses run yet"}
+                      </strong>
+                    </span>
+                  </div>
+                </>
               )}
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Right-side actions */}
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <Button
               variant="outline"
               size="sm"
               onClick={() => fetchStats(true)}
               disabled={isLoading || isRefreshing}
-              className="gap-1.5 cursor-pointer text-xs"
+              className="gap-1.5 cursor-pointer text-xs h-9 px-3"
+              aria-label="Refresh dashboard data"
             >
               <RefreshCw
-                className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-primary" : ""
-                  }`}
+                className={`h-3.5 w-3.5 ${
+                  isRefreshing ? "animate-spin text-primary" : ""
+                }`}
               />
-              <span>Refresh</span>
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
 
-            {permissions.canCreateOrganization && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsOrgDialogOpen(true)}
-                className="gap-1.5 cursor-pointer text-xs border-primary/20 text-primary hover:bg-primary/10"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>New Organization</span>
-              </Button>
-            )}
+            {/* Upload Policy — secondary button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/documents")}
+              className="gap-1.5 cursor-pointer text-xs h-9 px-3.5 font-medium border-border/80 hover:bg-muted"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>Upload Policy</span>
+            </Button>
 
-            {isReviewer && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/compliance/my-work?view=all")}
-                className="gap-1.5 cursor-pointer text-xs border-primary/30 text-primary hover:bg-primary/10 font-semibold"
-              >
-                <Layers className="h-3.5 w-3.5" />
-                <span>All Findings</span>
-              </Button>
-            )}
-
-            {isReviewer && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/compliance/my-work?view=my-work")}
-                className="gap-1.5 cursor-pointer text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-950/50"
-              >
-                <UserCheck className="h-3.5 w-3.5" />
-                <span>My Work</span>
-              </Button>
-            )}
-
-            {isReviewer && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/reports")}
-                className="gap-1.5 cursor-pointer text-xs"
-              >
-                <BarChart3 className="h-3.5 w-3.5" />
-                <span>View Reports</span>
-              </Button>
-            )}
-
+            {/* Run Analysis — primary button */}
             {permissions.canRunAnalysis && (
               <Button
                 onClick={() => router.push("/compliance")}
                 size="sm"
-                className="gap-1.5 cursor-pointer"
+                className="gap-1.5 cursor-pointer text-xs h-9 px-4 font-semibold shadow-xs"
               >
-                <Zap className="h-3.5 w-3.5" />
-                <span>New Analysis</span>
+                <Zap className="h-3.5 w-3.5 text-warning fill-warning" />
+                <span>Run Analysis</span>
               </Button>
             )}
           </div>
-        </div>
+        </header>
 
-        {/* ── Reviewer Workspace Banner ── */}
+        {/* ── Reviewer Shortcut Banner ─────────────────────────────────── */}
         {isReviewer && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                <ShieldCheck className="h-5 w-5" />
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Layers className="h-4 w-4" />
               </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">
-                  Reviewer Workspace — {activeMembership?.organization_name || "LexisGraph Workspace"}
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                  You are assigned as Reviewer. Inspect all organization compliance findings, review remediation recommendations, and evaluate audit evidence across published reports.
-                </p>
-              </div>
+              <p className="text-xs text-foreground font-medium">
+                Reviewer Workspace: You have permission to inspect and approve organization finding resolutions.
+              </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/compliance/my-work?view=my-work")}
-                className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs h-8 cursor-pointer gap-1"
-              >
-                <UserCheck className="h-3.5 w-3.5" />
-                <span>My Work</span>
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => router.push("/compliance/my-work?view=all")}
-                className="bg-amber-600 hover:bg-amber-500 text-white gap-1.5 shrink-0 cursor-pointer text-xs h-8 font-semibold"
-              >
-                <Layers className="h-3.5 w-3.5" />
-                <span>All Organization Findings</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => router.push("/compliance/my-work?view=all")}
+              className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs h-7 px-3 cursor-pointer shrink-0 ml-auto sm:ml-0"
+            >
+              <span>Review Findings Queue</span>
+              <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
           </div>
         )}
 
-        {/* ── Error Alert ── */}
+        {/* ── Error Alert ──────────────────────────────────────────────── */}
         {error && (
-          <div className="rounded-xl border border-danger/20 bg-danger-subtle p-4 text-danger dark:border-danger/30 dark:bg-danger/10 dark:text-red-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-4 w-4 text-danger dark:text-red-400 mt-0.5 shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
               <div>
-                <h3 className="text-sm font-semibold text-danger dark:text-red-300">
+                <h3 className="text-sm font-semibold">
                   API Connection Error
                 </h3>
-                <p className="text-xs text-danger/80 dark:text-red-400 mt-0.5 leading-relaxed">
+                <p className="text-xs text-rose-600/80 dark:text-rose-300 mt-0.5 leading-relaxed">
                   {error}
                 </p>
               </div>
@@ -440,7 +306,7 @@ function DashboardContent() {
               variant="outline"
               size="sm"
               onClick={() => fetchStats(false)}
-              className="gap-1.5 border-danger/30 text-danger hover:bg-danger/10 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/50 shrink-0 cursor-pointer"
+              className="gap-1.5 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-300 shrink-0 cursor-pointer h-8 text-xs"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>Retry</span>
@@ -448,13 +314,13 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ── Active Jobs Banner ── */}
+        {/* ── Active Jobs Banner ───────────────────────────────────────── */}
         {activeJobs.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Active Jobs ({activeJobs.length})
+              <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Active Analyses ({activeJobs.length})
               </h2>
             </div>
             {activeJobs.map((job) => (
@@ -467,310 +333,82 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ── Workspace Overview & Compliance Snapshot ── */}
-        <WorkspaceOverviewBanner
-          organizationName={activeMembership?.organization_name || "TechNova Solutions Pvt. Ltd."}
-          complianceScore={bannerScore}
-          policyCount={bannerPolicyCount}
-          reportCount={bannerReportCount}
-          lastAnalysisDate={bannerLastAnalysisDate}
-          highRiskIssues={bannerHighRiskIssues}
-          needsReview={bannerNeedsReview}
-          compliantClauses={bannerCompliantClauses}
-          pendingAnalyses={bannerPendingAnalyses}
-          isLoading={isLoading}
-        />
+        {/* ── SECTION 2 — Compliance KPIs ──────────────────────────────── */}
+        <section aria-label="Compliance Key Performance Indicators">
+          <DashboardKpiCards
+            complianceKpis={stats?.compliance_kpis}
+            kpis={stats?.kpis}
+            isLoading={isLoading}
+          />
+        </section>
 
-        {/* ── AI Executive Brief & Knowledge Graph Overview ── */}
-        <div className="grid gap-6 lg:grid-cols-3 items-stretch">
+        {/* ── SECTION 3 — Executive Intelligence ───────────────────────── */}
+        <section
+          aria-label="Executive Intelligence"
+          className="grid gap-6 lg:grid-cols-3 items-stretch"
+        >
+          {/* AI Executive Brief (Larger Left Column, ~2/3) */}
           <div className="lg:col-span-2 flex flex-col">
             <AIExecutiveBrief
               isLoading={isLoading}
               activeJobs={activeJobs}
               recentReports={stats?.recent_reports}
-              riskBreakdown={stats?.risk_breakdown}
-              kpis={stats?.kpis}
+              priorityActions={stats?.priority_actions}
+              complianceScore={stats?.compliance_kpis?.compliance_score}
+              riskStatus={riskStatus}
+              lastAnalyzedAt={lastAnalysisDate}
               onViewFullAnalysis={() => router.push("/reports")}
             />
           </div>
+
+          {/* Knowledge Graph Overview (Smaller Right Column, ~1/3) */}
           <div className="lg:col-span-1 flex flex-col">
             <KnowledgeGraphOverview
+              graphOverview={stats?.graph_overview}
               kpis={stats?.kpis}
               isLoading={isLoading}
               onExplore={() => router.push("/knowledge-graph")}
             />
           </div>
-        </div>
+        </section>
 
-        {/* ── 1. KPI Cards ── */}
-        <DashboardKpiCards kpis={stats?.kpis} isLoading={isLoading} />
-
-        {/* ── 2. Charts Grid ── */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <ComplianceScoreChart
-            data={stats?.score_distribution}
+        {/* ── SECTION 4 — Compliance Analytics ─────────────────────────── */}
+        <section
+          aria-label="Compliance Analytics"
+          className="grid gap-6 md:grid-cols-2 items-stretch"
+        >
+          {/* Compliance Trend (Replaces Avg. Score Per Organization) */}
+          <ComplianceTrendChart
+            data={stats?.compliance_trend}
             isLoading={isLoading}
           />
-          <ReportsOverTimeChart
-            data={stats?.reports_over_time}
+
+          {/* Findings by Severity (Refactored Risk Level Breakdown) */}
+          <FindingsBySeverityChart
+            data={stats?.findings_severity}
+            fallbackRisk={stats?.risk_breakdown}
             isLoading={isLoading}
           />
-          <RiskBreakdownChart
-            data={stats?.risk_breakdown}
+        </section>
+
+        {/* ── SECTION 5 — Operational Overview ─────────────────────────── */}
+        <section
+          aria-label="Operational Overview"
+          className="grid gap-6 md:grid-cols-2 items-stretch"
+        >
+          {/* Recent Reports */}
+          <RecentReportsWidget
+            reports={stats?.recent_reports}
             isLoading={isLoading}
           />
-          <OrgScoresChart
-            data={stats?.org_scores}
+
+          {/* Recent Activity Timeline */}
+          <RecentActivityList
+            activities={stats?.recent_activity || []}
             isLoading={isLoading}
-            onAddOrg={() => setIsOrgDialogOpen(true)}
           />
-        </div>
-
-        {/* ── 2.5 My Review Queue (for Reviewers) ── */}
-        {isReviewer && (
-          <MyReviewQueue
-            organizationId={activeMembership?.organization_id}
-            organizationName={activeMembership?.organization_name}
-          />
-        )}
-
-        {/* ── 3. Recent Reports ── */}
-        <RecentReportsWidget
-          reports={stats?.recent_reports}
-          isLoading={isLoading}
-        />
-
-        {/* ── 4. Activity Timeline + Workspace Summary ── */}
-        <div className="grid gap-6 md:grid-cols-3">
-          {/* Activity timeline — 2/3 width */}
-          <div className="md:col-span-2">
-            <RecentActivityList
-              activities={stats?.recent_activity || []}
-              isLoading={isLoading}
-            />
-          </div>
-
-          {/* ── Workspace Summary ── */}
-          <Card className="md:col-span-1 flex flex-col">
-            {/* Identity header */}
-            <CardHeader className="border-b border-border/40 px-5 pt-5 pb-4">
-              <div className="flex items-center gap-3">
-                {/* Natural Gmail-style avatar */}
-                <NaturalAvatar
-                  name={user?.full_name || user?.email || "User"}
-                  src={user?.avatar_url || user?.photo_url || user?.image}
-                  shape="circle"
-                  maxInitials={1}
-                  className="h-10 w-10 text-base shadow-xs ring-1 ring-black/5 dark:ring-white/10"
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate leading-tight">
-                    {user?.full_name ?? "—"}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                    {user?.email}
-                  </p>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="flex-1 px-5 py-4 space-y-3">
-              {/* Role */}
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Role
-                </span>
-                <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold", getRoleBadgeClass(activeRole))}>
-                  {formatRoleLabel(activeRole)}
-                </span>
-              </div>
-
-              {/* Member since */}
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Member since
-                </span>
-                <span className="text-[11px] font-medium text-foreground tabular-nums">
-                  {user?.created_at
-                    ? new Date(user.created_at).toLocaleDateString("en-US", {
-                      month: "short",
-                      year: "numeric",
-                    })
-                    : "—"}
-                </span>
-              </div>
-
-              {/* Workspace */}
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Workspace
-                </span>
-                <span className="text-[11px] font-medium text-foreground truncate max-w-[150px]" title={activeMembership?.organization_name || "LexisGraph Workspace"}>
-                  {activeMembership?.organization_name || "LexisGraph Workspace"}
-                </span>
-              </div>
-
-              {/* Compliance posture */}
-              <div className="rounded-lg bg-muted/40 border border-border/40 px-3.5 py-3 space-y-1.5 mt-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                  Compliance Posture
-                </p>
-                {isLoading ? (
-                  <Skeleton className="h-7 w-24 rounded" />
-                ) : stats && stats.kpis.average_compliance_score > 0 ? (
-                  <div className="flex items-baseline gap-2">
-                    <span
-                      className={cn(
-                        "text-2xl font-bold tabular-nums tracking-tight leading-none",
-                        stats.kpis.average_compliance_score >= 85
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : stats.kpis.average_compliance_score >= 70
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-rose-600 dark:text-rose-400"
-                      )}
-                    >
-                      {stats.kpis.average_compliance_score}%
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      avg. score
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-sm text-muted-foreground">
-                    No reports yet
-                  </span>
-                )}
-              </div>
-
-              {/* Platform stats — compact 3-column */}
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  {
-                    label: "Orgs",
-                    value: stats?.kpis.total_organizations ?? 0,
-                    icon: <Users className="h-3 w-3" />,
-                  },
-                  {
-                    label: "Reports",
-                    value: stats?.kpis.total_compliance_reports ?? 0,
-                    icon: <BarChart3 className="h-3 w-3" />,
-                  },
-                  {
-                    label: "Policies",
-                    value: stats?.kpis.total_policies ?? 0,
-                    icon: <ShieldCheck className="h-3 w-3" />,
-                  },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="rounded-md bg-muted/30 px-2 py-2.5 text-center border border-border/30"
-                  >
-                    {isLoading ? (
-                      <Skeleton className="h-5 w-8 mx-auto rounded mb-1" />
-                    ) : (
-                      <p className="text-base font-bold tabular-nums text-foreground leading-none">
-                        {s.value}
-                      </p>
-                    )}
-                    <p className="text-[9px] text-muted-foreground mt-1 font-medium uppercase tracking-wider">
-                      {s.label}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-
-            {/* Quick actions */}
-            <CardFooter className="px-5 py-3">
-              <div className="flex w-full flex-col gap-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                  Quick Actions
-                </p>
-                <div className="flex gap-1 flex-wrap">
-                  {permissions.canCreateOrganization && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px] px-2.5 font-medium text-primary border-primary/20 hover:bg-primary/5 cursor-pointer"
-                      onClick={() => setIsOrgDialogOpen(true)}
-                    >
-                      + New Org
-                    </Button>
-                  )}
-                  {isReviewer && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px] px-2.5 font-medium text-amber-600 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer"
-                      onClick={() => router.push("/compliance/overview")}
-                    >
-                      Review Findings
-                    </Button>
-                  )}
-                  {permissions.canRunAnalysis && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px] px-2.5 cursor-pointer"
-                      onClick={() => router.push("/compliance")}
-                    >
-                      Run Analysis
-                    </Button>
-                  )}
-                  {(permissions.canCreateOrganization || (user?.memberships && user.memberships.length > 1)) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px] px-2.5 cursor-pointer"
-                      onClick={() => {
-                        const orgId = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
-                        if (orgId) {
-                          router.push(`/organizations/${orgId}`);
-                        } else {
-                          router.push("/documents");
-                        }
-                      }}
-                    >
-                      Organization Workspace
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5 cursor-pointer"
-                    onClick={() => router.push("/reports")}
-                  >
-                    Reports
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5 cursor-pointer"
-                    onClick={() => router.push("/documents")}
-                  >
-                    Documents
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5 cursor-pointer"
-                    onClick={() => router.push("/knowledge-graph")}
-                  >
-                    Knowledge Graph
-                  </Button>
-                </div>
-              </div>
-            </CardFooter>
-          </Card>
-        </div>
+        </section>
       </main>
-
-      <OrganizationDialog
-        open={isOrgDialogOpen}
-        onOpenChange={setIsOrgDialogOpen}
-        onSubmit={handleCreateOrgSubmit}
-        isLoading={isSubmittingOrg}
-      />
     </AppShell>
   );
 }
