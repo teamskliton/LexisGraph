@@ -46,6 +46,8 @@ def _verify_org_access(db: Session, user: User, organization_id: uuid.UUID):
         )
 
 
+from fastapi import Header
+
 @router.get(
     "",
     response_model=List[NotificationResponse],
@@ -56,15 +58,25 @@ def list_notifications(
     unread_only: bool = Query(False, description="Filter unread notifications only"),
     limit: int = Query(30, ge=1, le=100, description="Page limit"),
     offset: int = Query(0, ge=0, description="Page offset"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[NotificationResponse]:
-    """Retrieve notifications for the authenticated user."""
+    """Retrieve notifications for the authenticated user scoped to workspace."""
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
     query = select(Notification).where(Notification.user_id == current_user.id)
 
-    if organization_id:
-        _verify_org_access(db, current_user, organization_id)
-        query = query.where(Notification.organization_id == organization_id)
+    if target_org_id:
+        _verify_org_access(db, current_user, target_org_id)
+        query = query.where(Notification.organization_id == target_org_id)
 
     if unread_only:
         query = query.where(Notification.is_read == False)
@@ -124,18 +136,28 @@ def list_notifications(
 )
 def get_unread_count(
     organization_id: Optional[uuid.UUID] = Query(None, description="Optional organization UUID filter"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UnreadCountResponse:
-    """Return count of unread notifications for authenticated user."""
+    """Return count of unread notifications for authenticated user in active workspace."""
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
     query = select(func.count(Notification.id)).where(
         Notification.user_id == current_user.id,
         Notification.is_read == False,
     )
 
-    if organization_id:
-        _verify_org_access(db, current_user, organization_id)
-        query = query.where(Notification.organization_id == organization_id)
+    if target_org_id:
+        _verify_org_access(db, current_user, target_org_id)
+        query = query.where(Notification.organization_id == target_org_id)
 
     count = db.scalar(query) or 0
     return UnreadCountResponse(unread_count=count)

@@ -33,6 +33,8 @@ from app.core.dependencies import get_current_user
 from app.db.models import User
 
 
+from fastapi import Header
+
 @router.get(
     "",
     response_model=ReportPaginatedResponse,
@@ -56,19 +58,36 @@ def list_reports(
     report_id: Optional[str] = Query(None, description="Search by Report ID substring"),
     policy_name: Optional[str] = Query(None, description="Search by Policy Document Name substring"),
     sort_by: Optional[str] = Query("newest", description="Sort order: newest, oldest, highest_score, lowest_score"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> ReportPaginatedResponse:
     """
     List reports with comprehensive server-side filtering, sorting, and pagination.
+    Enforces strict active workspace tenant scoping.
     """
-    user_id = current_user.id if current_user else None
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
+    if target_org_id:
+        if not verify_user_organization_access(db, current_user.id, target_org_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's reports.",
+            )
+
     items, total = service.list_reports(
         db,
         page=page,
         page_size=page_size,
-        organization_id=organization_id,
+        organization_id=target_org_id,
         regulation_id=regulation_id,
         status_filter=status,
         risk_level=risk_level,
@@ -77,7 +96,7 @@ def list_reports(
         report_id_query=report_id,
         policy_name_query=policy_name,
         sort_by=sort_by,
-        user_id=user_id,
+        user_id=current_user.id,
     )
     return ReportPaginatedResponse(
         total=total,
@@ -97,10 +116,18 @@ def get_organization_reports(
     status: Optional[ComplianceReportStatus] = Query(None, description="Optional report status filter"),
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
+    current_user: User = Depends(get_current_user),
 ) -> List[ReportItemResponse]:
     """
     Return every report belonging to a specific organization, ordered newest first.
+    Enforces active membership authorization.
     """
+    if not verify_user_organization_access(db, current_user.id, organization_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this organization's reports.",
+        )
+
     items = service.list_reports_by_organization(
         db,
         organization_id=organization_id,
@@ -118,11 +145,26 @@ def compare_reports(
     report_id_2: uuid.UUID = Query(..., description="Second report ID to compare against"),
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Compare two compliance reports. Returns score diff, resolved findings, regressions, and recommendation changes.
+    Enforces authorization on both reports.
     """
+    rep1 = service.get_report(db, report_id_1)
+    rep2 = service.get_report(db, report_id_2)
+
+    if not verify_user_organization_access(db, current_user.id, rep1.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to the first report's organization.",
+        )
+    if not verify_user_organization_access(db, current_user.id, rep2.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to the second report's organization.",
+        )
+
     try:
         return service.compare_reports(db, report_id_1, report_id_2)
     except ReportNotFoundError as e:
@@ -134,10 +176,23 @@ def compare_reports(
 
 def verify_user_organization_access(db: Session, user_id: Optional[uuid.UUID], organization_id: uuid.UUID) -> bool:
     if not user_id:
-        return True
+        return False
     from app.db.models.organization import Organization
     from app.db.models.rbac import OrganizationMember, MemberStatus
-    from sqlalchemy import or_, select
+    from sqlalchemy import and_, or_, select
+
+    # Check if user has an explicit INACTIVE membership
+    inactive = db.execute(
+        select(OrganizationMember.id).where(
+            and_(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == user_id,
+                OrganizationMember.status == MemberStatus.INACTIVE,
+            )
+        )
+    ).scalar_one_or_none()
+    if inactive:
+        return False
 
     member_org_ids = db.scalars(
         select(OrganizationMember.organization_id).where(
@@ -166,7 +221,7 @@ def get_report(
     report_id: uuid.UUID,
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> ReportDetailResponse:
     """
     Return the complete report details by ID directly from PostgreSQL.
@@ -174,7 +229,7 @@ def get_report(
     """
     try:
         report = service.get_report(db, report_id)
-        if current_user and not verify_user_organization_access(db, current_user.id, report.organization_id):
+        if not verify_user_organization_access(db, current_user.id, report.organization_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this organization's compliance report.",

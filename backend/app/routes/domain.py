@@ -5,9 +5,11 @@ import json
 import logging
 import re
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.core.dependencies import get_current_user
+from app.db.models import User
 from app.services.graph_builder import build_graph
 from app.services.preprocessing import build_processed_document
 from app.utils.file_handler import UnsupportedFileTypeError, extract_text
@@ -15,6 +17,17 @@ from app.utils.hash import generate_content_hash
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+def _require_domain_analyst_or_admin(user: User) -> None:
+    if getattr(user, "is_superuser", False):
+        return
+    role_str = str(getattr(user, "role", "")).upper()
+    if any(allowed in role_str for allowed in ("ADMIN", "ANALYST", "MANAGER")):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Only Compliance Analysts and Administrators are authorized to upload domain regulations.",
+    )
 
 _DOMAIN_ROOT = Path("data/domain_documents")
 _DOMAIN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{2,40}$")
@@ -196,9 +209,11 @@ async def _process_domain_upload(file_bytes: bytes, filename: str, normalized_do
 async def upload_domain_document(
     file: UploadFile | None = File(default=None),
     domain: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
+    _require_domain_analyst_or_admin(current_user)
     try:
-        logger.info("[DOMAIN] Upload API hit")
+        logger.info("[DOMAIN] Upload API hit by user=%s", current_user.id)
         logger.info("[DOMAIN] STEP 1: Upload request received")
 
 
@@ -269,7 +284,10 @@ async def upload_domain_document(
 
 
 @router.get("/domain/status")
-async def domain_upload_status(hash: str = Query(..., min_length=8)) -> dict:
+async def domain_upload_status(
+    hash: str = Query(..., min_length=8),
+    current_user: User = Depends(get_current_user),
+) -> dict:
     status = UPLOAD_STATUS.get(hash)
     if not status:
         raise HTTPException(status_code=404, detail="Upload status not found")
@@ -287,7 +305,9 @@ async def domain_upload_status(hash: str = Query(..., min_length=8)) -> dict:
 
 
 @router.get("/domain/status/latest")
-async def domain_upload_status_latest() -> dict:
+async def domain_upload_status_latest(
+    current_user: User = Depends(get_current_user),
+) -> dict:
     if not UPLOAD_STATUS:
         raise HTTPException(status_code=404, detail="No upload status available")
 
@@ -309,7 +329,10 @@ async def domain_upload_status_latest() -> dict:
 
 
 @router.get("/domain/list")
-async def list_domain_files(domain: str = Query(...)) -> dict:
+async def list_domain_files(
+    domain: str = Query(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
     try:
         normalized_domain = _normalize_domain(domain)
     except ValueError as exc:

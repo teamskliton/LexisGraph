@@ -2,9 +2,11 @@ from asyncio import to_thread
 from datetime import datetime, timezone
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 
+from app.core.dependencies import get_current_user
+from app.db.models.user import User
 from app.db.session import get_session
 from app.db.models.document import Document
 
@@ -12,9 +14,37 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _get_latest_documents(limit: int = 5) -> list[dict]:
+def _require_admin_privileges(user: User) -> None:
+    if getattr(user, "is_superuser", False):
+        return
+    role_str = str(getattr(user, "role", "")).upper()
+    if any(allowed in role_str for allowed in ("SUPER_ADMIN", "ADMIN")):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Super-administrator privileges required to access system debug endpoints.",
+    )
+
+
+def _get_latest_documents(limit: int = 5, user: User | None = None) -> list[dict]:
     with get_session() as session:
-        docs = session.scalars(select(Document).order_by(Document.created_at.desc()).limit(limit)).all()
+        query = select(Document).order_by(Document.created_at.desc())
+        if user and not getattr(user, "is_superuser", False):
+            # Scope to organizations user has access to
+            from app.db.models.rbac import OrganizationMember, MemberStatus
+            member_orgs = session.scalars(
+                select(OrganizationMember.organization_id).where(
+                    OrganizationMember.user_id == user.id,
+                    OrganizationMember.status == MemberStatus.ACTIVE,
+                )
+            ).all()
+            from app.db.models.organization import Organization
+            created_orgs = session.scalars(
+                select(Organization.id).where(Organization.created_by == user.id)
+            ).all()
+            allowed_orgs = set(member_orgs + created_orgs)
+            query = query.where(Document.organization_id.in_(allowed_orgs))
+        docs = session.scalars(query.limit(limit)).all()
         return [
             {
                 "id": str(doc.id),
@@ -28,10 +58,13 @@ def _get_latest_documents(limit: int = 5) -> list[dict]:
 
 
 @router.get("/debug/user-documents")
-async def debug_user_documents() -> dict:
-    """Return latest 5 documents from PostgreSQL."""
+async def debug_user_documents(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return latest 5 documents from PostgreSQL with tenant bounding."""
+    _require_admin_privileges(current_user)
     try:
-        documents = await to_thread(_get_latest_documents, 5)
+        documents = await to_thread(_get_latest_documents, 5, current_user)
         return {"count": len(documents), "documents": documents}
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to fetch user debug documents")
@@ -39,12 +72,30 @@ async def debug_user_documents() -> dict:
 
 
 @router.get("/debug/stats")
-async def debug_stats() -> dict:
+async def debug_stats(
+    current_user: User = Depends(get_current_user),
+) -> dict:
     """Return document counts from PostgreSQL."""
+    _require_admin_privileges(current_user)
     try:
         def _fetch_counts() -> int:
             with get_session() as session:
-                return session.scalar(select(func.count(Document.id))) or 0
+                query = select(func.count(Document.id))
+                if not getattr(current_user, "is_superuser", False):
+                    from app.db.models.rbac import OrganizationMember, MemberStatus
+                    from app.db.models.organization import Organization
+                    member_orgs = session.scalars(
+                        select(OrganizationMember.organization_id).where(
+                            OrganizationMember.user_id == current_user.id,
+                            OrganizationMember.status == MemberStatus.ACTIVE,
+                        )
+                    ).all()
+                    created_orgs = session.scalars(
+                        select(Organization.id).where(Organization.created_by == current_user.id)
+                    ).all()
+                    allowed_orgs = set(member_orgs + created_orgs)
+                    query = query.where(Document.organization_id.in_(allowed_orgs))
+                return session.scalar(query) or 0
 
         total_count = await to_thread(_fetch_counts)
         return {
@@ -56,8 +107,16 @@ async def debug_stats() -> dict:
 
 
 @router.get("/debug/neo4j-state")
-def neo4j_state() -> dict:
-    """Returns exact count of all nodes and edges in Neo4j right now."""
+def neo4j_state(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Returns exact count of nodes and edges in Neo4j. Superadmin only."""
+    _require_admin_privileges(current_user)
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Superadmin access required for raw Neo4j state inspection.",
+        )
     from app.db.neo4j import is_neo4j_available, run_query
 
     if not is_neo4j_available():

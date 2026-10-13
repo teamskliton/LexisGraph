@@ -351,7 +351,8 @@ def get_compliance_job_by_id(
             detail="Compliance job not found.",
         )
 
-    if job.created_by != user_id and job.organization.created_by != user_id:
+    from app.routes.reports import verify_user_organization_access
+    if not verify_user_organization_access(db, user_id, job.organization_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this compliance job.",

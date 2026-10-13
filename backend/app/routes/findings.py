@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, or_, func, case
 from sqlalchemy.orm import Session
@@ -97,6 +97,8 @@ def list_findings(
     regulation_id: Optional[uuid.UUID] = Query(None, description="Filter by regulation UUID"),
     report_id: Optional[uuid.UUID] = Query(None, description="Filter by report UUID"),
     overdue_only: bool = Query(False, description="Filter overdue findings only"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FindingPaginatedResponse:
@@ -104,19 +106,27 @@ def list_findings(
     List all findings for an organization with pagination, full-text search, and multi-faceted filters.
     Requires active membership or ownership in the requested organization.
     """
-    if organization_id:
-        target_org = db.get(Organization, organization_id)
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
+    if target_org_id:
+        target_org = db.get(Organization, target_org_id)
         if not target_org:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Organization with ID '{organization_id}' not found.",
+                detail=f"Organization with ID '{target_org_id}' not found.",
             )
 
         # Verify access authorization
         is_creator = target_org.created_by == current_user.id
         is_active_member = db.scalar(
             select(func.count(OrganizationMember.id)).where(
-                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.organization_id == target_org_id,
                 OrganizationMember.user_id == current_user.id,
                 OrganizationMember.status == MemberStatus.ACTIVE,
             )
@@ -127,18 +137,20 @@ def list_findings(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this organization's findings.",
             )
-        target_org_ids = [organization_id]
+        target_org_ids = [target_org_id]
     else:
-        member_org_ids = db.scalars(
+        # Resolve user's primary active workspace (never aggregate all workspaces)
+        primary_org_id = db.scalar(
             select(OrganizationMember.organization_id).where(
                 OrganizationMember.user_id == current_user.id,
                 OrganizationMember.status == MemberStatus.ACTIVE,
+            ).order_by(OrganizationMember.joined_at.desc()).limit(1)
+        )
+        if not primary_org_id:
+            primary_org_id = db.scalar(
+                select(Organization.id).where(Organization.created_by == current_user.id).limit(1)
             )
-        ).all()
-        created_org_ids = db.scalars(
-            select(Organization.id).where(Organization.created_by == current_user.id)
-        ).all()
-        target_org_ids = list(set(member_org_ids) | set(created_org_ids))
+        target_org_ids = [primary_org_id] if primary_org_id else []
 
     if not target_org_ids:
         return FindingPaginatedResponse(
@@ -249,6 +261,8 @@ def get_finding_analytics(
     regulation_id: Optional[uuid.UUID] = Query(None, description="Filter by regulation UUID"),
     severity: Optional[str] = Query(None, description="Filter by severity: CRITICAL, HIGH, MEDIUM, LOW"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status: COMPLIANT, NON_COMPLIANT, etc."),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FindingAnalyticsResponse:
@@ -257,18 +271,26 @@ def get_finding_analytics(
     for the authenticated user's organization.
     Enforces strict tenant isolation and deterministic SQL aggregations without data fabrication.
     """
-    if organization_id:
-        target_org = db.get(Organization, organization_id)
+    target_org_id_cand = organization_id
+    if not target_org_id_cand and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id_cand = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
+    if target_org_id_cand:
+        target_org = db.get(Organization, target_org_id_cand)
         if not target_org:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Organization with ID '{organization_id}' not found.",
+                detail=f"Organization with ID '{target_org_id_cand}' not found.",
             )
 
         is_creator = target_org.created_by == current_user.id
         is_active_member = db.scalar(
             select(func.count(OrganizationMember.id)).where(
-                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.organization_id == target_org_id_cand,
                 OrganizationMember.user_id == current_user.id,
                 OrganizationMember.status == MemberStatus.ACTIVE,
             )
@@ -1039,6 +1061,8 @@ def export_findings(
     from_date: Optional[datetime] = Query(None, description="Filter findings created on or after this timestamp"),
     to_date: Optional[datetime] = Query(None, description="Filter findings created on or before this timestamp"),
     format: str = Query("csv", description="Export format (csv)"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -1052,20 +1076,28 @@ def export_findings(
             detail="Unsupported export format. Supported formats: csv",
         )
 
+    target_org_id_cand = organization_id
+    if not target_org_id_cand and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id_cand = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
     target_org = None
-    if organization_id:
-        target_org = db.get(Organization, organization_id)
+    if target_org_id_cand:
+        target_org = db.get(Organization, target_org_id_cand)
         if not target_org:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Organization with ID '{organization_id}' not found.",
+                detail=f"Organization with ID '{target_org_id_cand}' not found.",
             )
 
         # Verify access authorization
         is_creator = target_org.created_by == current_user.id
         is_active_member = db.scalar(
             select(func.count(OrganizationMember.id)).where(
-                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.organization_id == target_org_id_cand,
                 OrganizationMember.user_id == current_user.id,
                 OrganizationMember.status == MemberStatus.ACTIVE,
             )
@@ -1078,44 +1110,40 @@ def export_findings(
             )
 
         # Role-based access control: Viewer / Employee cannot export
-        user_role = get_user_org_role(db, current_user.id, organization_id)
+        user_role = get_user_org_role(db, current_user.id, target_org_id_cand)
         if ROLE_RANK.get(user_role, 0) < ROLE_RANK[UserRole.REVIEWER]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have permission to export findings. Requires Reviewer role or higher.",
             )
-        target_org_ids = [organization_id]
+        target_org_ids = [target_org_id_cand]
     else:
-        # Default to user's accessible active organizations where user has export role
-        member_orgs = db.execute(
-            select(OrganizationMember.organization_id, OrganizationMember.role).where(
+        # Resolve active workspace
+        active_org_id = db.scalar(
+            select(OrganizationMember.organization_id).where(
                 OrganizationMember.user_id == current_user.id,
                 OrganizationMember.status == MemberStatus.ACTIVE,
+            ).order_by(OrganizationMember.joined_at.desc()).limit(1)
+        )
+        if not active_org_id:
+            active_org_id = db.scalar(
+                select(Organization.id).where(Organization.created_by == current_user.id).limit(1)
             )
-        ).all()
-        created_org_ids = db.scalars(
-            select(Organization.id).where(Organization.created_by == current_user.id)
-        ).all()
 
-        allowed_org_ids = set(created_org_ids)
-        for org_id, role in member_orgs:
-            if ROLE_RANK.get(role, 0) >= ROLE_RANK[UserRole.REVIEWER]:
-                allowed_org_ids.add(org_id)
-
-        if not allowed_org_ids:
-            has_any_org = bool(member_orgs) or bool(created_org_ids)
-            if has_any_org:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You do not have permission to export findings. Requires Reviewer role or higher.",
-                )
+        if not active_org_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to any organizations.",
+                detail="No accessible active organization found to export findings.",
             )
-        target_org_ids = list(allowed_org_ids)
-        if len(target_org_ids) == 1:
-            target_org = db.get(Organization, target_org_ids[0])
+
+        user_role = get_user_org_role(db, current_user.id, active_org_id)
+        if ROLE_RANK.get(user_role, 0) < ROLE_RANK[UserRole.REVIEWER]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to export findings. Requires Reviewer role or higher.",
+            )
+        target_org = db.get(Organization, active_org_id)
+        target_org_ids = [active_org_id]
 
     # Build query joined on ComplianceReport for multi-tenant scoping
     query = (
@@ -1472,6 +1500,12 @@ def get_finding_and_verify_access(
         )
 
     if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
+        )
+
+    if getattr(user, "is_superuser", False):
         return finding, report, None
 
     # Check org membership
@@ -1699,7 +1733,7 @@ def _format_comment_response(
 def get_finding(
     finding_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> FindingItemResponse:
     """Retrieve detailed finding by ID with authorization check."""
     finding, _, _ = get_finding_and_verify_access(db, finding_id, current_user, require_mutation=False)

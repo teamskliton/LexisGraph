@@ -17,7 +17,7 @@ from app.core.schemas import DocumentResponse, DocumentStatusResponse, Regulatio
 from app.db.models import Document, DocumentType as DBDocumentType, Organization, ProcessingStatus, User, Regulation
 from app.db.session import get_db
 from typing import Union, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query, Header
 from sqlalchemy import select
 from app.services.activity_service import log_activity
 from app.services.storage import store_document, StorageError, InvalidMimeTypeError, FileTooLargeError
@@ -233,15 +233,31 @@ def upload_document(
     summary="List documents in an organization",
 )
 def list_documents(
-    organization_id: uuid.UUID,
+    organization_id: Optional[uuid.UUID] = Query(None, description="Optional organization UUID filter"),
     document_type: Optional[str] = Query(None, description="Optional filter by document type: POLICY or REGULATION"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[Union[Document, dict]]:
     """
     List organization-scoped policies and linked global regulations.
     """
-    org = _validate_organization_ownership(db, organization_id, current_user.id)
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
+    if not target_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="organization_id query parameter or X-Workspace-Id header required.",
+        )
+
+    org = _validate_organization_ownership(db, target_org_id, current_user.id)
 
     # 1. Fetch organization-owned policy documents
     policies = db.query(Document).filter(
@@ -624,6 +640,9 @@ def get_document_viewer(
                 detail="Document or Regulation not found.",
             )
 
+    if doc:
+        _validate_organization_ownership(db, doc.organization_id, current_user.id)
+
     title = doc.original_filename if doc else reg.title
     doc_type = "Policy" if doc else "Regulation"
 
@@ -655,6 +674,7 @@ def get_clause_detail(
     GET /clauses/{clause_id}
 
     Returns clause_id, document_id, clause_number, section, title, text, page_number, metadata.
+    Enforces tenant authorization when clause originates from a private organization document.
     """
     from app.db.qdrant import get_client as get_qdrant_client
     from app.services.vector_store import COLLECTION_USER
@@ -665,6 +685,8 @@ def get_clause_detail(
     title = None
     doc_id = None
     sec = None
+    clause_org_id = None
+    is_global = False
 
     try:
         client = get_qdrant_client()
@@ -683,6 +705,8 @@ def get_clause_detail(
             title = payload.get("title")
             doc_id = payload.get("document_id")
             sec = payload.get("type") or payload.get("domain")
+            clause_org_id = payload.get("organization_id")
+            is_global = payload.get("is_global", False)
 
         if not text:
             # 2. Scroll search by clause_id key
@@ -695,20 +719,54 @@ def get_clause_detail(
                 title = payload.get("title")
                 doc_id = payload.get("document_id")
                 sec = payload.get("type") or payload.get("domain")
+                clause_org_id = payload.get("organization_id")
+                is_global = payload.get("is_global", False)
     except Exception as exc:
         logger.warning("Qdrant lookup notice for clause_id=%s: %s", clause_id, exc)
 
     if not text:
         try:
             records = run_query(
-                "MATCH (c) WHERE c.id = $clause_id RETURN coalesce(c.text, c.name, c.title) AS text, coalesce(c.title, c.name) AS title LIMIT 1",
+                "MATCH (c) WHERE c.id = $clause_id RETURN coalesce(c.text, c.name, c.title) AS text, coalesce(c.title, c.name) AS title, c.organization_id AS org_id, c.is_global AS is_global LIMIT 1",
                 {"clause_id": clause_id},
             )
             if records and records[0].get("text"):
                 text = records[0].get("text")
                 title = records[0].get("title")
+                clause_org_id = records[0].get("org_id")
+                is_global = records[0].get("is_global", False)
         except Exception as exc:
             logger.warning("Neo4j lookup notice for clause_id=%s: %s", clause_id, exc)
+
+    # Infer document ID from structured clause identifier if not already extracted
+    if not doc_id:
+        clean_cid = clause_id[4:] if clause_id.startswith("pol:") else clause_id
+        doc_part = clean_cid.split("_clause_")[0].split("_")[0]
+        try:
+            doc_id = str(uuid.UUID(doc_part))
+        except (ValueError, TypeError):
+            pass
+
+    # Enforce multi-tenant access restriction for private clauses
+    if doc_id:
+        try:
+            d_uuid = uuid.UUID(str(doc_id))
+            doc_record = db.get(Document, d_uuid)
+            if doc_record and doc_record.organization_id:
+                _validate_organization_ownership(db, doc_record.organization_id, current_user.id)
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    if clause_org_id and not is_global:
+        try:
+            c_org_uuid = uuid.UUID(str(clause_org_id))
+            _validate_organization_ownership(db, c_org_uuid, current_user.id)
+        except HTTPException:
+            raise
+        except Exception:
+            pass
 
     return {
         "clause_id": clause_id,

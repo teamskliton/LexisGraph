@@ -13,8 +13,11 @@ import time
 import uuid
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import Depends, FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.dependencies import get_current_user
+from app.db.session import get_db
 
 from app.db.neo4j import close_driver as close_neo4j_driver
 from app.db.neo4j import test_connection as test_neo4j_connection
@@ -279,6 +282,12 @@ def create_app() -> FastAPI:
     app.include_router(graph_router)
     app.include_router(graph_router, prefix="/api/v1")
     app.include_router(upload_router, prefix="/api/v1", tags=["upload"])
+    app.include_router(export_router)
+    app.include_router(retrieval_router)
+    app.include_router(domain_router)
+    app.include_router(fetch_router)
+    app.include_router(debug_router)
+    app.include_router(neo4j_test_router)
 
     @app.websocket("/ws/jobs/{job_id}")
     async def direct_ws_jobs_endpoint(websocket: WebSocket, job_id: uuid.UUID):
@@ -287,20 +296,13 @@ def create_app() -> FastAPI:
 
 
     @app.get("/clauses/{clause_id}", tags=["clauses"])
-    async def clause_detail_endpoint(clause_id: str):
-        return {
-            "clause_id": clause_id,
-            "document_id": clause_id,
-            "clause_number": clause_id,
-            "section": f"Section {clause_id[:8]}",
-            "title": f"Clause {clause_id}",
-            "text": f"Detailed legal text content for clause {clause_id}.",
-            "page_number": 1,
-            "metadata": {
-                "retrieved_at": "2026-07-31T16:00:00Z",
-                "jurisdiction": "India/Global",
-            },
-        }
+    def clause_detail_endpoint(
+        clause_id: str,
+        db = Depends(get_db),
+        current_user = Depends(get_current_user),
+    ):
+        from app.routes.documents import get_clause_detail
+        return get_clause_detail(clause_id=clause_id, db=db, current_user=current_user)
 
     @app.get("/", tags=["system"])
     async def root():

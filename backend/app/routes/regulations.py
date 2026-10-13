@@ -17,6 +17,8 @@ from app.db.models import User, Organization
 from app.db.session import get_db
 from app.services import regulation_service
 
+from app.core.rbac_dependencies import get_user_org_role, is_org_analyst_or_admin
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/regulations", tags=["regulations"])
@@ -77,6 +79,13 @@ def list_regulations(
     """
     Return all shared global regulations in the repository, showing link status for the specified organization.
     """
+    if organization_id:
+        user_role = get_user_org_role(db, current_user.id, organization_id)
+        if not user_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to organization regulations context",
+            )
     return regulation_service.list_global_regulations(
         db,
         organization_id=organization_id,
@@ -99,6 +108,13 @@ def search_regulations(
     """
     Perform semantic keyword and vector search over global regulations.
     """
+    if organization_id:
+        user_role = get_user_org_role(db, current_user.id, organization_id)
+        if not user_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to organization regulations context",
+            )
     results = regulation_service.list_global_regulations(db, organization_id=organization_id, search_query=q)
     return results[:limit]
 
@@ -119,6 +135,12 @@ def link_regulation(
     org = db.get(Organization, data.organization_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    if not is_org_analyst_or_admin(db, current_user.id, data.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only compliance analysts or organization administrators can link regulations.",
+        )
 
     link = regulation_service.link_regulation_to_organization(
         db,
@@ -155,6 +177,12 @@ def unlink_regulation(
     org = db.get(Organization, data.organization_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    if not is_org_analyst_or_admin(db, current_user.id, data.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only compliance analysts or organization administrators can unlink regulations.",
+        )
 
     success = regulation_service.unlink_regulation_from_organization(
         db,

@@ -1,7 +1,9 @@
 from asyncio import to_thread
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 import logging
 
+from app.core.dependencies import get_current_user
+from app.db.models.user import User
 from app.services.scraper import (
     fetch_barandbench_data,
     fetch_and_process_external_data,
@@ -15,12 +17,26 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _require_fetch_analyst_or_admin(user: User) -> None:
+    if getattr(user, "is_superuser", False):
+        return
+    role_str = str(getattr(user, "role", "")).upper()
+    if any(allowed in role_str for allowed in ("ADMIN", "ANALYST", "MANAGER", "SUPER_ADMIN")):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Only Compliance Analysts and Administrators are authorized to trigger external scrapers.",
+    )
+
+
 @router.get("/fetch")
 async def fetch_data(
     source: str = Query("all", pattern="^(gazette|news|livelaw|barandbench|all)$"),
     max_items: int = Query(10, ge=1, le=25),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Fetch external legal updates, preprocess, and store in MongoDB."""
+    _require_fetch_analyst_or_admin(current_user)
     try:
         response: dict[str, dict] = {}
 
@@ -40,7 +56,7 @@ async def fetch_data(
             barandbench_records = await to_thread(fetch_barandbench_data, max_items)
             response["barandbench"] = await to_thread(ingest_external_records, barandbench_records, "barandbench")
 
-        logger.info("External fetch completed for source=%s", source)
+        logger.info("External fetch completed for source=%s by user=%s", source, current_user.id)
         return {
             "message": "External data fetched, preprocessed, and stored.",
             "source": source,
@@ -55,8 +71,12 @@ async def fetch_data(
 
 
 @router.get("/fetch-now")
-async def fetch_now(max_items: int = Query(10, ge=1, le=25)) -> dict:
+async def fetch_now(
+    max_items: int = Query(10, ge=1, le=25),
+    current_user: User = Depends(get_current_user),
+) -> dict:
     """Manually trigger full external ingestion pipeline."""
+    _require_fetch_analyst_or_admin(current_user)
     try:
         result = await to_thread(fetch_and_process_external_data, max_items)
         return {

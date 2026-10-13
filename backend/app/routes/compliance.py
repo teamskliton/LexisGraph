@@ -47,6 +47,8 @@ def compliance_check() -> dict:
         raise HTTPException(status_code=500, detail="Compliance check failed") from exc
 
 
+from fastapi import Header
+
 @router.get(
     "/compliance/overview",
     response_model=ComplianceOverviewResponse,
@@ -59,6 +61,8 @@ def compliance_check() -> dict:
 )
 def get_compliance_overview(
     organization_id: Optional[uuid.UUID] = Query(None, description="Optional Organization UUID to filter overview metrics"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ComplianceOverviewResponse:
@@ -66,21 +70,29 @@ def get_compliance_overview(
     Retrieves organization-scoped operational compliance metrics, attention required findings,
     user-assigned work, recent activity, and latest reports directly from PostgreSQL records.
     """
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
     target_org: Optional[Organization] = None
 
-    if organization_id:
-        target_org = db.get(Organization, organization_id)
+    if target_org_id:
+        target_org = db.get(Organization, target_org_id)
         if not target_org:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Organization with ID '{organization_id}' not found.",
+                detail=f"Organization with ID '{target_org_id}' not found.",
             )
 
         # Verify access authorization
         is_creator = target_org.created_by == current_user.id
         is_active_member = db.scalar(
             select(func.count(OrganizationMember.id)).where(
-                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.organization_id == target_org_id,
                 OrganizationMember.user_id == current_user.id,
                 OrganizationMember.status == MemberStatus.ACTIVE,
             )
@@ -488,6 +500,8 @@ def get_compliance_calendar(
     assigned_to_me: bool = Query(False, description="Filter deadlines assigned to authenticated user"),
     overdue_only: bool = Query(False, description="Filter overdue deadlines only"),
     severity: Optional[str] = Query(None, description="Filter by severity level"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ComplianceCalendarResponse:
@@ -495,19 +509,27 @@ def get_compliance_calendar(
     Returns organization-scoped compliance remediation deadlines for calendar & timeline views.
     Only findings with a valid remediation_due_date and non-RESOLVED status are surfaced.
     """
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
     target_org: Optional[Organization] = None
 
-    if organization_id:
-        target_org = db.get(Organization, organization_id)
+    if target_org_id:
+        target_org = db.get(Organization, target_org_id)
         if not target_org:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Organization with ID '{organization_id}' not found.",
+                detail=f"Organization with ID '{target_org_id}' not found.",
             )
         is_creator = target_org.created_by == current_user.id
         is_active_member = db.scalar(
             select(func.count(OrganizationMember.id)).where(
-                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.organization_id == target_org_id,
                 OrganizationMember.user_id == current_user.id,
                 OrganizationMember.status == MemberStatus.ACTIVE,
             )

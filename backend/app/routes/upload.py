@@ -22,8 +22,16 @@ import logging
 import traceback
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
+import uuid
+from typing import Optional
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Header, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user
+from app.db.models import User, Organization
+from app.db.models.rbac import OrganizationMember, MemberStatus
+from app.db.session import get_db
+from app.routes.reports import verify_user_organization_access
 from app.services.graph_builder import build_graph
 from app.services.preprocessing import build_processed_document, validate_pipeline_output
 from app.services.vector_store import store_clauses_in_qdrant
@@ -50,6 +58,7 @@ def _run_pipeline(
     filename: str,
     file_hash: str,
     saved_path: str,
+    organization_id: Optional[str] = None,
 ) -> None:
     """Execute the full processing pipeline synchronously inside a worker thread.
 
@@ -120,6 +129,8 @@ def _run_pipeline(
             document_id=file_hash,  # legacy route has no PG UUID — use hash
             title=processed_document.get("title", filename),
             domain=processed_document.get("domain", "IT"),
+            organization_id=organization_id,
+            document_type="POLICY",
         )
         logger.info(
             "[PIPELINE] Stage 5/6 complete: qdrant_points=%s hash=%s",
@@ -134,6 +145,7 @@ def _run_pipeline(
             processed_document,
             pg_document_id=file_hash,
             source_type="user",
+            org_id=organization_id,
         )
         logger.info(
             "[PIPELINE] Stage 6/6 complete: graph=%s", graph_result,
@@ -159,23 +171,50 @@ def _run_pipeline(
 async def upload_document(
     file: UploadFile,
     background_tasks: BackgroundTasks,
+    organization_id: Optional[uuid.UUID] = Form(None),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-Id"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> dict:
     """Upload a user document and immediately accept the request.
 
-    The HTTP response is returned as soon as the raw file is saved to disk
-    and a duplicate check passes. All heavy processing (text extraction,
-    clause embedding, MongoDB storage, graph build) is deferred to a
-    background task and never blocks the caller.
-
-    Returns
-    -------
-    202 Accepted
-        ``processing_status`` is ``"accepted"`` — the pipeline has been
-        enqueued and will run asynchronously. Monitor server logs for
-        progress and failure details.
+    Enforces authenticated user and active organization workspace ownership.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
+
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        try:
+            target_org_id = uuid.UUID(str(x_workspace_id or x_organization_id).strip())
+        except (ValueError, TypeError):
+            pass
+
+    if target_org_id:
+        if not verify_user_organization_access(db, current_user.id, target_org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have authorization to upload to this organization.",
+            )
+    else:
+        from sqlalchemy import select
+        target_org_id = db.scalar(
+            select(OrganizationMember.organization_id).where(
+                OrganizationMember.user_id == current_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            ).order_by(OrganizationMember.joined_at.desc()).limit(1)
+        )
+        if not target_org_id:
+            target_org_id = db.scalar(
+                select(Organization.id).where(Organization.created_by == current_user.id).limit(1)
+            )
+
+    if not target_org_id:
+        raise HTTPException(
+            status_code=400,
+            detail="An active organization workspace is required for uploading documents.",
+        )
 
     try:
         # ── Step 1: read & validate ──────────────────────────────────────────
@@ -213,6 +252,7 @@ async def upload_document(
             filename=file.filename,
             file_hash=file_hash,
             saved_path=saved_path,
+            organization_id=str(target_org_id),
         )
         logger.info(
             "[UPLOAD] Pipeline enqueued: filename=%s hash=%s", file.filename, file_hash,

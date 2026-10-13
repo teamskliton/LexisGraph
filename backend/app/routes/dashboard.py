@@ -88,66 +88,66 @@ class DashboardStatsResponse(BaseModel):
     recent_reports: List[RecentReportItem]
 
 
+from app.core.workspace_context import WorkspaceContext, get_active_workspace_context
+from app.db.models.regulation import OrganizationRegulation
+
+
 @router.get(
     "/stats",
     response_model=DashboardStatsResponse,
-    summary="Get aggregated live dashboard statistics",
+    summary="Get workspace-scoped live dashboard statistics",
 )
 def get_dashboard_stats(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ws: WorkspaceContext = Depends(get_active_workspace_context),
 ) -> DashboardStatsResponse:
     """
-    Computes real-time live user-specific dashboard metrics directly from PostgreSQL database records.
-    Calculates KPI totals, activity streams, score distributions, risk level breakdown, reports over time, org averages, and recent reports for current user.
+    Computes real-time live dashboard metrics scoped STRICTLY to the active workspace.
+    Derives all KPIs, activity, score distribution, risk breakdown, and reports
+    exclusively from the authorized workspace context.
     """
-    # 1. Organization IDs accessible by current user (created or active membership)
+    target_org_id = ws.organization_id
+    current_user = ws.user
+
+    # Total user accessible workspaces count for metadata
     from app.db.models.rbac import OrganizationMember, MemberStatus
 
-    member_org_ids = db.scalars(
-        select(OrganizationMember.organization_id).where(
+    total_orgs = db.scalar(
+        select(func.count(OrganizationMember.id)).where(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.status == MemberStatus.ACTIVE,
         )
-    ).all()
-    created_org_ids = db.scalars(
-        select(Organization.id).where(Organization.created_by == current_user.id)
-    ).all()
-    user_org_ids = list(set(member_org_ids) | set(created_org_ids))
+    ) or 1
 
-    total_orgs = len(user_org_ids)
-    total_regs = db.scalar(select(func.count(Regulation.id))) or 0
+    # Total regulations linked to this workspace
+    linked_reg_count = db.scalar(
+        select(func.count(OrganizationRegulation.id)).where(
+            OrganizationRegulation.organization_id == target_org_id,
+            OrganizationRegulation.enabled == True,
+        )
+    ) or 0
+    global_reg_count = db.scalar(select(func.count(Regulation.id))) or 0
+    total_regs = linked_reg_count if linked_reg_count > 0 else global_reg_count
 
-    if user_org_ids:
-        total_pols = db.scalar(
-            select(func.count(Document.id)).where(
-                Document.document_type == DocumentType.POLICY,
-                (Document.organization_id.in_(user_org_ids) | (Document.uploaded_by == current_user.id)),
-            )
-        ) or 0
-        all_reports = db.scalars(
-            select(ComplianceReport).where(
-                (ComplianceReport.organization_id.in_(user_org_ids) | (ComplianceReport.created_by == current_user.id)),
-                ComplianceReport.is_deleted == False,
-            )
-        ).all()
-    else:
-        total_pols = db.scalar(
-            select(func.count(Document.id)).where(
-                Document.document_type == DocumentType.POLICY,
-                Document.uploaded_by == current_user.id,
-            )
-        ) or 0
-        all_reports = db.scalars(
-            select(ComplianceReport).where(
-                ComplianceReport.created_by == current_user.id,
-                ComplianceReport.is_deleted == False,
-            )
-        ).all()
+    # Total policies strictly belonging to this workspace
+    total_pols = db.scalar(
+        select(func.count(Document.id)).where(
+            Document.document_type == DocumentType.POLICY,
+            Document.organization_id == target_org_id,
+        )
+    ) or 0
+
+    # All reports strictly belonging to this workspace
+    all_reports = db.scalars(
+        select(ComplianceReport).where(
+            ComplianceReport.organization_id == target_org_id,
+            ComplianceReport.is_deleted == False,
+        )
+    ).all()
 
     total_reports = len(all_reports)
 
-    # Calculate average compliance score across accessible reports
+    # Calculate average compliance score across workspace reports
     scores = [r.overall_score for r in all_reports if r.overall_score is not None]
     if scores:
         normalized_scores = [s * 100 if (s <= 1.0 and s > 0) else s for s in scores]
@@ -163,7 +163,7 @@ def get_dashboard_stats(
         average_compliance_score=avg_score,
     )
 
-    # 2. Score Distribution & Risk Breakdown
+    # Score Distribution & Risk Breakdown (scoped to this workspace)
     excellent_c = 0
     good_c = 0
     needs_review_c = 0
@@ -178,7 +178,6 @@ def get_dashboard_stats(
         sc = rep.overall_score
         if sc is not None:
             val = sc * 100 if (sc <= 1.0 and sc > 0) else sc
-            # Distribution
             if val >= 90:
                 excellent_c += 1
             elif val >= 80:
@@ -188,7 +187,6 @@ def get_dashboard_stats(
             else:
                 high_risk_c += 1
 
-            # Risk Breakdown
             if val >= 85:
                 low_r += 1
             elif val >= 70:
@@ -212,7 +210,7 @@ def get_dashboard_stats(
         critical=critical_r,
     )
 
-    # 3. Reports Over Time (Monthly grouping)
+    # Reports Over Time for this workspace
     over_time_map: Dict[str, int] = {}
     for rep in all_reports:
         dt = rep.created_at
@@ -224,79 +222,51 @@ def get_dashboard_stats(
         for lbl, cnt in list(over_time_map.items())[-6:]
     ]
 
-    # 4. Average Score Per Organization (accessible organizations)
-    if user_org_ids:
-        user_orgs = db.scalars(
-            select(Organization).where(Organization.id.in_(user_org_ids))
-        ).all()
-    else:
-        user_orgs = []
-    org_name_map = {str(o.id): o.name for o in user_orgs}
-
-    org_scores_list: List[OrgScoreAnalyticsItem] = []
-    for org in user_orgs:
-        org_reports = [r for r in all_reports if r.organization_id == org.id and r.overall_score is not None]
-        if org_reports:
-            org_scores_vals = [r.overall_score * 100 if (r.overall_score <= 1.0 and r.overall_score > 0) else r.overall_score for r in org_reports]
-            org_avg = round(sum(org_scores_vals) / len(org_scores_vals), 1)
-        else:
-            org_avg = 0.0
-
-        org_scores_list.append(
-            OrgScoreAnalyticsItem(
-                id=str(org.id),
-                name=org.name,
-                avg_score=org_avg,
-                report_count=len(org_reports),
-            )
+    # Workspace score analytics item
+    org_scores = [
+        OrgScoreAnalyticsItem(
+            id=str(ws.organization.id),
+            name=ws.organization.name,
+            avg_score=avg_score,
+            report_count=total_reports,
         )
+    ]
 
-    org_scores_list.sort(key=lambda x: x.avg_score, reverse=True)
-    org_scores = org_scores_list[:5]
-
-    if user_org_ids:
-        recent_report_objs = db.scalars(
-            select(ComplianceReport)
-            .where(
-                (ComplianceReport.organization_id.in_(user_org_ids) | (ComplianceReport.created_by == current_user.id)),
-                ComplianceReport.is_deleted == False,
-            )
-            .order_by(ComplianceReport.created_at.desc())
-            .limit(5)
-        ).all()
-    else:
-        recent_report_objs = db.scalars(
-            select(ComplianceReport)
-            .where(
-                ComplianceReport.created_by == current_user.id,
-                ComplianceReport.is_deleted == False,
-            )
-            .order_by(ComplianceReport.created_at.desc())
-            .limit(5)
-        ).all()
+    # Recent reports strictly belonging to this workspace
+    recent_report_objs = db.scalars(
+        select(ComplianceReport)
+        .where(
+            ComplianceReport.organization_id == target_org_id,
+            ComplianceReport.is_deleted == False,
+        )
+        .order_by(ComplianceReport.created_at.desc())
+        .limit(5)
+    ).all()
 
     recent_reports: List[RecentReportItem] = []
     for r in recent_report_objs:
-        org_name = org_name_map.get(str(r.organization_id), "Organization")
         score_val = None
         if r.overall_score is not None:
-            score_val = round(r.overall_score * 100 if (r.overall_score <= 1.0 and r.overall_score > 0) else r.overall_score, 1)
+            score_val = round(
+                r.overall_score * 100 if (r.overall_score <= 1.0 and r.overall_score > 0) else r.overall_score,
+                1,
+            )
 
         status_str = r.status.value if hasattr(r.status, "value") else str(r.status)
         recent_reports.append(
             RecentReportItem(
                 id=str(r.id),
                 name=f"Compliance Check ({str(r.id)[:6]})",
-                organization_name=org_name,
+                organization_name=ws.organization.name,
                 compliance_score=score_val,
                 created_at=r.created_at.isoformat() if r.created_at else datetime.utcnow().isoformat(),
                 status=status_str,
             )
         )
 
-    # 6. Recent Activity Feed (real-time activities from Activity table for current_user, limit 20)
-    from app.services.activity_service import get_user_activities
-    db_activities = get_user_activities(db, current_user.id, limit=20)
+    # Recent Activity Feed strictly scoped to this workspace
+    from app.services.activity_service import get_organization_activities
+    db_activities = get_organization_activities(db, target_org_id, limit=20)
     recent_activity = [
         ActivityItem(
             id=str(act.id),

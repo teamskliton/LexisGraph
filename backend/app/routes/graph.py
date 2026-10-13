@@ -2,7 +2,7 @@ from asyncio import to_thread
 import logging
 
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -55,7 +55,9 @@ def _validate_org_access(db: Session, organization_id: uuid.UUID, current_user: 
 
 
 def _require_analyst_or_admin(current_user: User | None) -> None:
-    if current_user is None or getattr(current_user, "is_superuser", False):
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if getattr(current_user, "is_superuser", False):
         return
     role_str = str(getattr(current_user, "role", "")).upper()
     if any(allowed in role_str for allowed in ("ADMIN", "ANALYST", "MANAGER")):
@@ -72,7 +74,11 @@ class KnowledgeGraphRequest(BaseModel):
 
 
 @router.get("/graph/root")
-async def graph_root(build_id: str | None = Query(default=None)) -> dict:
+async def graph_root(
+    build_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     try:
         return await to_thread(get_graph_root, build_id)
     except ValueError as exc:
@@ -83,7 +89,21 @@ async def graph_root(build_id: str | None = Query(default=None)) -> dict:
 
 
 @router.get("/graph/document/{document_id}")
-async def graph_document(document_id: str, build_id: str | None = Query(default=None), limit: int = Query(30, ge=1, le=30)) -> dict:
+async def graph_document(
+    document_id: str,
+    build_id: str | None = Query(default=None),
+    limit: int = Query(30, ge=1, le=30),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        doc_uuid = uuid.UUID(document_id)
+        from app.db.models.document import Document
+        doc = db.get(Document, doc_uuid)
+        if doc and doc.organization_id:
+            _validate_org_access(db, doc.organization_id, current_user)
+    except (ValueError, TypeError):
+        pass
     try:
         return await to_thread(get_document_view, document_id, build_id, limit)
     except ValueError as exc:
@@ -94,7 +114,25 @@ async def graph_document(document_id: str, build_id: str | None = Query(default=
 
 
 @router.get("/graph/clause/{clause_id}")
-async def graph_clause(clause_id: str, build_id: str | None = Query(default=None), limit: int = Query(3, ge=1, le=3)) -> dict:
+async def graph_clause(
+    clause_id: str,
+    build_id: str | None = Query(default=None),
+    limit: int = Query(3, ge=1, le=3),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.db.neo4j import run_query
+    try:
+        records = run_query(
+            "MATCH (c) WHERE c.id = $clause_id RETURN c.organization_id AS org_id, c.is_global AS is_global LIMIT 1",
+            {"clause_id": clause_id},
+        )
+        if records and records[0].get("org_id") and not records[0].get("is_global"):
+            _validate_org_access(db, uuid.UUID(str(records[0]["org_id"])), current_user)
+    except HTTPException:
+        raise
+    except Exception:
+        pass
     try:
         return await to_thread(get_clause_view, clause_id, build_id, limit)
     except (ValueError, RuntimeError) as exc:
@@ -122,7 +160,13 @@ async def graph_clause(clause_id: str, build_id: str | None = Query(default=None
 
 
 @router.get("/graph/regulation/{regulation_id}")
-async def graph_regulation(regulation_id: str, build_id: str | None = Query(default=None), limit: int = Query(5, ge=1, le=5)) -> dict:
+async def graph_regulation(
+    regulation_id: str,
+    build_id: str | None = Query(default=None),
+    limit: int = Query(5, ge=1, le=5),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     try:
         return await to_thread(get_regulation_view, regulation_id, build_id, limit)
     except ValueError as exc:
@@ -133,7 +177,10 @@ async def graph_regulation(regulation_id: str, build_id: str | None = Query(defa
 
 
 @router.get("/graph-documents")
-async def graph_documents() -> dict:
+async def graph_documents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     try:
         return await to_thread(list_graph_documents)
     except Exception as exc:  # noqa: BLE001
@@ -175,7 +222,9 @@ async def reset_knowledge_graph_endpoint(
 
 
 @router.get("/graph-history")
-async def graph_history() -> dict:
+async def graph_history(
+    current_user: User = Depends(get_current_user),
+) -> dict:
     try:
         return await to_thread(list_knowledge_graph_history)
     except Exception as exc:  # noqa: BLE001
@@ -186,7 +235,7 @@ async def graph_history() -> dict:
 @router.post("/graph-history/{build_id}/activate")
 async def activate_graph_history(
     build_id: str,
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     _require_analyst_or_admin(current_user)
     try:
@@ -201,7 +250,7 @@ async def activate_graph_history(
 @router.delete("/graph-history/{build_id}")
 async def delete_graph_history(
     build_id: str,
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     _require_analyst_or_admin(current_user)
     try:
@@ -213,7 +262,7 @@ async def delete_graph_history(
 
 @router.post("/build-graph")
 async def build_graph_endpoint(
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Build deduplication-safe Document/Clause graph in Neo4j."""
     _require_analyst_or_admin(current_user)
@@ -238,7 +287,7 @@ async def build_graph_endpoint(
 
 @router.post("/build-similarity")
 async def build_similarity_endpoint(
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Create SIMILAR_TO relationships between clause nodes."""
     _require_analyst_or_admin(current_user)
@@ -272,9 +321,18 @@ async def graph_view(
     finding_id: str | None = Query(default=None),
     document_id: str | None = Query(default=None),
     regulation_id: str | None = Query(default=None),
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
+    if not organization_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            organization_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
     if not organization_id and current_user:
         from app.db.models.rbac import OrganizationMember, MemberStatus
         from sqlalchemy import or_, select
@@ -294,10 +352,38 @@ async def graph_view(
         if user_org:
             organization_id = user_org.id
 
-    if organization_id:
-        if not current_user:
-            raise HTTPException(status_code=401, detail="Authentication required for organization graph access")
-        _validate_org_access(db, organization_id, current_user)
+    if not organization_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Active workspace or organization ID is required for graph exploration",
+        )
+
+    _validate_org_access(db, organization_id, current_user)
+
+    # Validate document_id ownership if provided
+    if document_id:
+        from app.db.models.document import Document
+        try:
+            doc_uuid = uuid.UUID(str(document_id).replace("pol:", "").strip())
+            doc = db.query(Document).filter(Document.id == doc_uuid).first()
+            if not doc or doc.organization_id != organization_id:
+                raise HTTPException(status_code=403, detail="Document does not belong to active workspace")
+        except ValueError:
+            pass
+
+    # Validate finding_id ownership if provided
+    if finding_id:
+        from app.compliance.models import ComplianceReport, ReportFinding
+        try:
+            raw_fid = str(finding_id).replace("finding:", "").strip()
+            finding_uuid = uuid.UUID(raw_fid)
+            finding = db.query(ReportFinding).filter(ReportFinding.id == finding_uuid).first()
+            if finding:
+                report = db.query(ComplianceReport).filter(ComplianceReport.id == finding.report_id).first()
+                if not report or report.organization_id != organization_id:
+                    raise HTTPException(status_code=403, detail="Finding does not belong to active workspace")
+        except ValueError:
+            pass
 
     try:
         return await to_thread(

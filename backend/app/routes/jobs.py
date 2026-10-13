@@ -124,8 +124,10 @@ def _authenticate_ws_token(token: str | None, db: Session, job_id: uuid.UUID) ->
     if not job:
         raise ValueError(f"ComplianceJob {job_id} not found.")
 
-    if job.created_by != user.id and job.organization.created_by != user.id:
-        raise ValueError("User does not own or have access to this compliance job.")
+    from app.routes.reports import verify_user_organization_access
+    if not getattr(user, "is_superuser", False):
+        if job.created_by != user.id and not verify_user_organization_access(db, user.id, job.organization_id):
+            raise ValueError("User does not own or have access to this compliance job.")
 
     return user
 

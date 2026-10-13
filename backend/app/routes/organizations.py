@@ -92,6 +92,16 @@ def create_organization(
         created_by=current_user.id,
     )
     db.add(org)
+    db.flush()
+
+    # Automatically grant creator the active Admin membership
+    creator_member = OrganizationMember(
+        organization_id=org.id,
+        user_id=current_user.id,
+        role=UserRole.ADMIN,
+        status=MemberStatus.ACTIVE,
+    )
+    db.add(creator_member)
     db.commit()
     db.refresh(org)
     
@@ -100,6 +110,7 @@ def create_organization(
     log_activity(
         db,
         user_id=current_user.id,
+        organization_id=org.id,
         event_type="ORGANIZATION_CREATED",
         title="Created Organization",
         description=f"Added '{org.name}' to workspace",

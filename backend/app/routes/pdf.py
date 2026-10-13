@@ -31,11 +31,16 @@ router = APIRouter(tags=["pdf"])
     summary="Download PDF compliance report",
     description="Loads stored report from PostgreSQL and generates a downloadable PDF document.",
 )
+@router.get(
+    "/pdf/report/{report_id}",
+    summary="Download PDF compliance report (alias)",
+    include_in_schema=False,
+)
 def download_report_pdf(
     report_id: uuid.UUID,
     db: Session = Depends(get_db),
     service: ReportService = Depends(get_report_service),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> Response:
     """
     Export an existing compliance report as an A4 PDF document.
@@ -45,7 +50,7 @@ def download_report_pdf(
     try:
         report = service.get_report(db, report_id)
         from app.routes.reports import verify_user_organization_access
-        if current_user and not verify_user_organization_access(db, current_user.id, report.organization_id):
+        if not verify_user_organization_access(db, current_user.id, report.organization_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to download this organization's report PDF.",
@@ -76,15 +81,15 @@ def download_report_pdf(
         )
 
     # 3. Log Activity
-    user_id = current_user.id if current_user else report.created_by
     log_activity(
         db,
-        user_id=user_id,
+        user_id=current_user.id,
+        organization_id=report.organization_id,
         event_type="PDF_DOWNLOADED",
         title="Downloaded PDF Report",
         description=f"Exported compliance report document '{report_id}'",
         icon_type="download",
-        extra_data={"report_id": str(report_id)},
+        extra_data={"report_id": str(report_id), "organization_id": str(report.organization_id)},
     )
 
     # 4. Return downloadable PDF response
