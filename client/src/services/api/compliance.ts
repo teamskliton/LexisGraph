@@ -350,9 +350,12 @@ export interface TeamWorkloadItem {
   open_count: number;
   in_review_count: number;
   remediation_count: number;
+  overdue_count?: number;
   resolved_count: number;
+  active_count?: number;
   total_assigned: number;
 }
+
 
 export interface ReportExposureItem {
   report_id: string;
@@ -465,9 +468,12 @@ export interface ComplianceOverviewData {
     matched_policy_text?: string | null;
     assigned_to?: string | null;
     assignee?: { id: string; full_name: string; email: string } | null;
+    remediation_due_date?: string | null;
+    is_overdue?: boolean;
     comments_count?: number;
     created_at: string;
     updated_at: string;
+
   }>;
   recent_activity: Array<{
     id: string;

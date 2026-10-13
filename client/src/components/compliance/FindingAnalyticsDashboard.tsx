@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
@@ -10,22 +10,22 @@ import {
   ShieldCheck,
   ShieldX,
   AlertTriangle,
-  RefreshCw,
   Clock,
   CheckCircle,
-  AlertOctagon,
-  RotateCcw,
   FileCheck2,
   Calendar,
   Layers,
-  ArrowRight,
-  ExternalLink,
-  Info,
   ChevronRight,
   Activity,
-  AlertCircle,
   Sparkles,
+  Download,
+  Info,
+  Scale,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
   FileText,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,8 +35,8 @@ import {
   HighRiskFindingItem,
   AgingFindingItem,
 } from "@/services/api/findings";
+import { ReportExposureItem } from "@/services/api/compliance";
 import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
-import { ComplianceReportModal } from "./ComplianceReportModal";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,8 @@ import { cn } from "@/lib/utils";
 interface FindingAnalyticsDashboardProps {
   organizationId?: string;
   organizationName?: string;
+  reportExposure?: ReportExposureItem[];
+  onOpenFindingDrawer?: (item: FindingItem) => void;
 }
 
 type DateRangeOption = "7d" | "30d" | "90d" | "this_year" | "all";
@@ -53,25 +55,26 @@ type DateRangeOption = "7d" | "30d" | "90d" | "this_year" | "all";
 export function FindingAnalyticsDashboard({
   organizationId,
   organizationName,
+  reportExposure,
+  onOpenFindingDrawer,
 }: FindingAnalyticsDashboardProps) {
   const router = useRouter();
 
   // Filter state
   const [dateRange, setDateRange] = useState<DateRangeOption>("30d");
-  const [selectedSeverity, setSelectedSeverity] = useState<string>("ALL");
-  const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
+
+  // Attention Queue Tab (By Risk vs By Age)
+  const [attentionView, setAttentionView] = useState<"RISK" | "AGE">("RISK");
 
   // Data & loading state
   const [analyticsData, setAnalyticsData] = useState<FindingAnalyticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  // Drawer state for inspecting high-risk / aging findings directly
-  const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
-  // Compliance Report Modal State (Sprint 7.14)
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  // Fallback local drawer state
+  const [localFinding, setLocalFinding] = useState<FindingItem | null>(null);
+  const [isLocalDrawerOpen, setIsLocalDrawerOpen] = useState(false);
 
   // Fetch analytics data
   const fetchAnalytics = useCallback(async () => {
@@ -93,8 +96,6 @@ export function FindingAnalyticsDashboard({
       const data = await findingsService.getAnalytics({
         organization_id: activeOrgId,
         date_range: dateRange,
-        severity: selectedSeverity !== "ALL" ? selectedSeverity : undefined,
-        status: selectedStatus !== "ALL" ? selectedStatus : undefined,
       });
       setAnalyticsData(data);
     } catch (err: any) {
@@ -106,7 +107,7 @@ export function FindingAnalyticsDashboard({
     } finally {
       setIsLoading(false);
     }
-  }, [organizationId, dateRange, selectedSeverity, selectedStatus]);
+  }, [organizationId, dateRange]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -125,8 +126,8 @@ export function FindingAnalyticsDashboard({
     router.push(`/compliance/my-work?${searchParams.toString()}`);
   };
 
-  const handleOpenDrawer = (item: HighRiskFindingItem | AgingFindingItem) => {
-    setSelectedFinding({
+  const handleOpenFinding = (item: HighRiskFindingItem | AgingFindingItem) => {
+    const findingObj: FindingItem = {
       id: item.id,
       report_id: "",
       status: "NON_COMPLIANT",
@@ -135,38 +136,174 @@ export function FindingAnalyticsDashboard({
       lifecycle_status: item.lifecycle_status,
       reasoning: (item as HighRiskFindingItem).reasoning || undefined,
       created_at: item.created_at,
-    });
-    setIsDrawerOpen(true);
+    };
+
+    if (onOpenFindingDrawer) {
+      onOpenFindingDrawer(findingObj);
+    } else {
+      setLocalFinding(findingObj);
+      setIsLocalDrawerOpen(true);
+    }
+  };
+
+  // Export Analytics CSV
+  const handleExportAnalytics = async () => {
+    const activeOrgId =
+      organizationId ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("selected_organization_id") || undefined
+        : undefined);
+
+    if (!activeOrgId) return;
+
+    setIsExporting(true);
+    try {
+      const result = await findingsService.exportFindings(activeOrgId, {});
+      const url = window.URL.createObjectURL(result.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename || `lexisgraph-analytics-${dateRange}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success(`Exported ${result.count || "all"} findings successfully.`);
+    } catch (err) {
+      console.error("Export error:", err);
+      toast.error("Failed to export analytics findings.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const summary = analyticsData?.health_summary;
   const remediationPerf = analyticsData?.remediation_performance;
 
+  // Compute Core Metrics
+  const totalFindings = summary?.total_findings || 0;
+  const resolvedCount = summary?.resolved || 0;
+  const activeCount =
+    (summary?.open_findings || 0) +
+    (summary?.in_review || 0) +
+    (summary?.in_remediation || 0) +
+    (summary?.reassessment_required || 0);
+
+  const resolutionRate =
+    totalFindings > 0 ? Math.round((resolvedCount / totalFindings) * 100) : 0;
+
+  // Trend Chart Calculations
+  const trendPoints = useMemo(() => {
+    const createdMap = new Map<string, { period: string; label: string; created: number; resolved: number }>();
+
+    analyticsData?.open_finding_trend?.forEach((pt) => {
+      createdMap.set(pt.period, {
+        period: pt.period,
+        label: pt.label || pt.period,
+        created: pt.created_count,
+        resolved: 0,
+      });
+    });
+
+    analyticsData?.resolution_trend?.forEach((pt) => {
+      if (createdMap.has(pt.period)) {
+        const item = createdMap.get(pt.period)!;
+        item.resolved = pt.resolved_count;
+      } else {
+        createdMap.set(pt.period, {
+          period: pt.period,
+          label: pt.label || pt.period,
+          created: 0,
+          resolved: pt.resolved_count,
+        });
+      }
+    });
+
+    return Array.from(createdMap.values()).sort((a, b) => a.period.localeCompare(b.period));
+  }, [analyticsData?.open_finding_trend, analyticsData?.resolution_trend]);
+
+  const createdTotal = useMemo(
+    () => trendPoints.reduce((acc, p) => acc + p.created, 0),
+    [trendPoints]
+  );
+  const resolvedTotal = useMemo(
+    () => trendPoints.reduce((acc, p) => acc + p.resolved, 0),
+    [trendPoints]
+  );
+  const netChange = createdTotal - resolvedTotal;
+
+  // Dynamic SVG Chart Max Scale
+  const maxTrendVal = useMemo(() => {
+    let maxVal = 1;
+    trendPoints.forEach((p) => {
+      if (p.created > maxVal) maxVal = p.created;
+      if (p.resolved > maxVal) maxVal = p.resolved;
+    });
+    return Math.max(maxVal, 5);
+  }, [trendPoints]);
+
+  // Deterministic Risk Assessment
+  const riskAssessment = useMemo(() => {
+    if (!summary || totalFindings === 0) {
+      return {
+        level: "LOW_RISK",
+        label: "Low Risk",
+        badgeClass: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+        message: "No active regulatory gaps detected in this workspace.",
+        primaryDriver: "Zero compliance violations identified.",
+      };
+    }
+
+    if (summary.critical_count > 0) {
+      return {
+        level: "HIGH_RISK",
+        label: "High Risk",
+        badgeClass: "bg-rose-500/10 text-rose-600 border-rose-500/30",
+        message: `${summary.critical_count} critical-severity gap${summary.critical_count > 1 ? "s require" : " requires"} urgent remediation before statutory audit review.`,
+        primaryDriver: "Critical severity non-compliance clauses.",
+      };
+    }
+
+    if (summary.high_count > 0 || resolutionRate < 40) {
+      return {
+        level: "MEDIUM_RISK",
+        label: "Medium Risk",
+        badgeClass: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+        message: `High-severity findings account for the primary compliance gaps across tracked policies. ${activeCount} findings remain active.`,
+        primaryDriver: "High severity gaps pending review or remediation.",
+      };
+    }
+
+    return {
+      level: "LOW_RISK",
+      label: "Low Risk",
+      badgeClass: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+      message: `Active compliance findings are largely resolved (${resolutionRate}% resolution rate). Remaining items are low-to-medium priority.`,
+      primaryDriver: "Stable operational resolution throughput.",
+    };
+  }, [summary, totalFindings, activeCount, resolutionRate]);
+
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-300">
       {/* ── 1. Controls & Filter Bar ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
-        <div>
+        <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-              Analytics & Compliance Health
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5" /> Finding Analytics & Health
             </span>
             <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
-              Sprint 7.11
+              Workspace Isolated
             </Badge>
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl mt-0.5">
-            Finding Intelligence & Risk Trends
-          </h2>
           <p className="text-xs text-muted-foreground">
-            Deterministic compliance posture, remediation throughput, reassessment status, and risk distributions for{" "}
-            <strong>{organizationName || "Active Organization"}</strong>.
+            Analyze finding distributions, remediation performance, and compliance risk trends for{" "}
+            <strong>{organizationName || "Active Workspace"}</strong>.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Date Range Selector */}
-          <div className="flex items-center rounded-lg border border-border/60 bg-card p-1 shadow-2xs">
+          <div className="flex items-center rounded-xl border border-border/60 bg-card p-1 shadow-2xs">
             {(
               [
                 { label: "7 Days", value: "7d" },
@@ -181,7 +318,7 @@ export function FindingAnalyticsDashboard({
                 type="button"
                 onClick={() => setDateRange(opt.value)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer",
+                  "rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer",
                   dateRange === opt.value
                     ? "bg-primary text-primary-foreground shadow-2xs"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
@@ -195,24 +332,22 @@ export function FindingAnalyticsDashboard({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setIsReportModalOpen(true)}
-            className="gap-1.5 text-xs font-semibold cursor-pointer border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10"
+            onClick={handleExportAnalytics}
+            disabled={isExporting || isLoading}
+            className="gap-1.5 text-xs font-semibold cursor-pointer border-border hover:bg-muted"
           >
-            <FileText className="h-3.5 w-3.5" />
-            <span>Generate Report</span>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchAnalytics}
-            disabled={isLoading}
-            className="gap-1.5 text-xs cursor-pointer"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
-            <span>Refresh</span>
+            <Download className="h-3.5 w-3.5" />
+            <span>{isExporting ? "Exporting..." : "Export Analytics"}</span>
           </Button>
         </div>
+      </div>
+
+      {/* Snapshot vs Timeframe Notice */}
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground px-1 -mt-4">
+        <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+        <span>
+          <strong>Current Snapshot</strong> totals reflect active workspace records. <strong>Periodic Trends</strong> reflect activity within the selected {dateRange === "all" ? "complete history" : dateRange}.
+        </span>
       </div>
 
       {/* ── 2. Error Banner ── */}
@@ -228,255 +363,189 @@ export function FindingAnalyticsDashboard({
             onClick={fetchAnalytics}
             className="text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
           >
-            Retry Analytics
+            <RotateCcw className="h-3.5 w-3.5 mr-1" /> Retry Analytics
           </Button>
         </Card>
       )}
 
       {/* ── 3. Compliance Health Executive Summary Card ── */}
       {!isLoading && summary && (
-        <Card className="border border-primary/30 bg-primary/5 p-5 sm:p-6 space-y-4 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary/20 pb-3">
+        <Card className="border border-primary/20 bg-card p-5 sm:p-6 space-y-4 shadow-sm dark:shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-primary text-primary-foreground shadow-md">
-                <Sparkles className="h-4 w-4" />
+              <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                <Sparkles className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-foreground">Compliance Health Summary</h3>
                 <p className="text-xs text-muted-foreground">
-                  Synthesized status derived deterministically from {summary.total_findings} Finding records.
+                  Synthesized risk evaluation derived deterministically from {totalFindings} findings.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {summary.critical_count > 0 ? (
-                <Badge className="bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40 text-xs px-2.5 py-1 font-bold">
-                  {summary.critical_count} Critical Gap{summary.critical_count > 1 ? "s" : ""}
-                </Badge>
-              ) : (
-                <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 text-xs px-2.5 py-1 font-bold">
-                  Zero Critical Gaps
-                </Badge>
-              )}
-            </div>
+            <Badge variant="outline" className={cn("text-xs px-2.5 py-1 font-bold", riskAssessment.badgeClass)}>
+              {riskAssessment.label}
+            </Badge>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {summary.summary_bullets.map((bullet, idx) => (
-              <div
-                key={idx}
-                className="flex items-start gap-2.5 p-3 rounded-lg border border-border/40 bg-background/60 text-xs"
-              >
-                <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <span className="text-foreground/90 font-medium">{bullet}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="space-y-1 p-3.5 rounded-xl bg-background border border-border/60">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Executive Risk Assessment</span>
+              <p className="text-foreground leading-relaxed font-medium">
+                {riskAssessment.message}
+              </p>
+            </div>
+
+            <div className="space-y-1 p-3.5 rounded-xl bg-background border border-border/60">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Primary Risk Driver</span>
+              <p className="text-foreground leading-relaxed font-medium">
+                {riskAssessment.primaryDriver}
+              </p>
+              <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-muted-foreground">
+                <span>Critical: <strong className="text-rose-500">{summary.critical_count}</strong></span>
+                <span>•</span>
+                <span>High: <strong className="text-amber-500">{summary.high_count}</strong></span>
+                <span>•</span>
+                <span>Resolution Rate: <strong className="text-emerald-500">{resolutionRate}%</strong></span>
               </div>
-            ))}
+            </div>
           </div>
         </Card>
       )}
 
-      {/* ── 4. Core KPI Stat Cards (7 Interactive Tiles) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      {/* ── 4. Compact Analytical Metrics (3 Cards Replacing 7 Repeated Cards) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {isLoading ? (
-          [...Array(7)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
+          [...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)
         ) : (
           <>
-            {/* 1. Total Findings */}
+            {/* Total Findings */}
             <Card
               onClick={() => handleNavigateToFindings({})}
-              className="p-3.5 border border-border/60 bg-card hover:border-primary/50 hover:bg-muted/30 transition-all cursor-pointer group shadow-2xs"
+              className="p-4 border border-border/60 bg-card hover:border-primary/40 transition-all cursor-pointer group rounded-2xl shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Total
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Total Findings
                 </span>
-                <Layers className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                <Layers className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
               <div className="mt-2 flex items-baseline justify-between">
                 <span className="text-2xl font-bold tabular-nums text-foreground font-mono">
-                  {summary?.total_findings || 0}
+                  {totalFindings}
                 </span>
-                <ChevronRight className="h-3 w-3 text-muted-foreground/50 group-hover:translate-x-0.5 transition-transform" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:translate-x-0.5 transition-transform" />
               </div>
-              <span className="text-[10px] text-muted-foreground block mt-0.5">All tracked Findings</span>
+              <span className="text-[11px] text-muted-foreground block mt-1">
+                All tracked findings across completed assessments
+              </span>
             </Card>
 
-            {/* 2. Open Findings */}
+            {/* Active Findings */}
             <Card
               onClick={() => handleNavigateToFindings({ lifecycle_status: "OPEN" })}
-              className="p-3.5 border border-blue-500/30 bg-blue-500/5 hover:border-blue-500 hover:bg-blue-500/10 transition-all cursor-pointer group shadow-2xs"
+              className="p-4 border border-amber-500/30 bg-amber-500/[0.03] hover:border-amber-500/60 transition-all cursor-pointer group rounded-2xl shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                  Open
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Active Findings
                 </span>
-                <ShieldAlert className="h-3.5 w-3.5 text-blue-500" />
-              </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400 font-mono">
-                  {summary?.open_findings || 0}
-                </span>
-                <ChevronRight className="h-3 w-3 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-              <span className="text-[10px] text-muted-foreground block mt-0.5">Awaiting resolution</span>
-            </Card>
-
-            {/* 3. In Review */}
-            <Card
-              onClick={() => handleNavigateToFindings({ lifecycle_status: "IN_REVIEW" })}
-              className="p-3.5 border border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10 transition-all cursor-pointer group shadow-2xs"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                  In Review
-                </span>
-                <Clock className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-bold tabular-nums text-primary font-mono">
-                  {summary?.in_review || 0}
-                </span>
-                <ChevronRight className="h-3 w-3 text-primary group-hover:translate-x-0.5 transition-transform" />
-              </div>
-              <span className="text-[10px] text-muted-foreground block mt-0.5">Reviewer queue</span>
-            </Card>
-
-            {/* 4. In Remediation */}
-            <Card
-              onClick={() => handleNavigateToFindings({ lifecycle_status: "REMEDIATION" })}
-              className="p-3.5 border border-amber-500/30 bg-amber-500/5 hover:border-amber-500 hover:bg-amber-500/10 transition-all cursor-pointer group shadow-2xs"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                  Remediation
-                </span>
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                <ShieldAlert className="h-4 w-4 text-amber-500" />
               </div>
               <div className="mt-2 flex items-baseline justify-between">
                 <span className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400 font-mono">
-                  {summary?.in_remediation || 0}
+                  {activeCount}
                 </span>
-                <ChevronRight className="h-3 w-3 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+                <ChevronRight className="h-4 w-4 text-amber-400/50 group-hover:translate-x-0.5 transition-transform" />
               </div>
-              <span className="text-[10px] text-muted-foreground block mt-0.5">Active fixing plans</span>
+              <span className="text-[11px] text-muted-foreground block mt-1">
+                Unresolved items requiring legal review or remediation
+              </span>
             </Card>
 
-            {/* 5. Needs Reassessment */}
-            <Card
-              onClick={() => handleNavigateToFindings({ lifecycle_status: "REASSESSMENT_REQUIRED" })}
-              className="p-3.5 border border-purple-500/30 bg-purple-500/5 hover:border-purple-500 hover:bg-purple-500/10 transition-all cursor-pointer group shadow-2xs"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
-                  Reassess
-                </span>
-                <FileCheck2 className="h-3.5 w-3.5 text-purple-500" />
-              </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-bold tabular-nums text-purple-600 dark:text-purple-400 font-mono">
-                  {summary?.reassessment_required || 0}
-                </span>
-                <ChevronRight className="h-3 w-3 text-purple-400 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-              <span className="text-[10px] text-muted-foreground block mt-0.5">Sprint 7.9 triggers</span>
-            </Card>
-
-            {/* 6. Reopened */}
-            <Card
-              onClick={() => handleNavigateToFindings({ lifecycle_status: "REOPENED" })}
-              className="p-3.5 border border-rose-500/30 bg-rose-500/5 hover:border-rose-500 hover:bg-rose-500/10 transition-all cursor-pointer group shadow-2xs"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                  Reopened
-                </span>
-                <RotateCcw className="h-3.5 w-3.5 text-rose-500" />
-              </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-bold tabular-nums text-rose-600 dark:text-rose-400 font-mono">
-                  {summary?.reopened_count || 0}
-                </span>
-                <ChevronRight className="h-3 w-3 text-rose-400 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-              <span className="text-[10px] text-muted-foreground block mt-0.5">Sprint 7.8 audits</span>
-            </Card>
-
-            {/* 7. Resolved */}
+            {/* Resolution Rate */}
             <Card
               onClick={() => handleNavigateToFindings({ lifecycle_status: "RESOLVED" })}
-              className="p-3.5 border border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500 hover:bg-emerald-500/10 transition-all cursor-pointer group shadow-2xs"
+              className="p-4 border border-emerald-500/30 bg-emerald-500/[0.03] hover:border-emerald-500/60 transition-all cursor-pointer group rounded-2xl shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  Resolved
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Resolution Rate
                 </span>
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                <CheckCircle className="h-4 w-4 text-emerald-500" />
               </div>
               <div className="mt-2 flex items-baseline justify-between">
                 <span className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400 font-mono">
-                  {summary?.resolved || 0}
+                  {resolutionRate}%
                 </span>
-                <ChevronRight className="h-3 w-3 text-emerald-400 group-hover:translate-x-0.5 transition-transform" />
+                <ChevronRight className="h-4 w-4 text-emerald-400/50 group-hover:translate-x-0.5 transition-transform" />
               </div>
-              <span className="text-[10px] text-muted-foreground block mt-0.5">Verified & closed</span>
+              <span className="text-[11px] text-muted-foreground block mt-1">
+                {resolvedCount} of {totalFindings} findings verified and closed
+              </span>
             </Card>
           </>
         )}
       </div>
 
-      {/* ── 5. Status & Severity Visual Distribution ── */}
+      {/* ── 5. Status & Severity Visual Distribution (Proportional Fix) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status Distribution */}
-        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
+        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-sm rounded-2xl">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
               <BarChart3 className="h-4 w-4 text-primary" /> Finding Status Distribution
             </span>
             <span className="text-[10px] text-muted-foreground font-mono">
-              Total: {summary?.total_findings || 0}
+              Total: {totalFindings}
             </span>
           </div>
 
           {isLoading ? (
             <div className="space-y-3">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
             </div>
           ) : !analyticsData?.status_distribution || analyticsData.status_distribution.length === 0 ? (
             <p className="text-xs text-muted-foreground italic py-6 text-center">No status distribution data.</p>
           ) : (
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {analyticsData.status_distribution.map((item) => {
+                const count = item.count;
+                // Proportional width calculation — 0% for zero count, never full-width!
+                const pct = totalFindings > 0 ? Number(((count / totalFindings) * 100).toFixed(1)) : 0;
+
                 let colorClass = "bg-blue-500";
                 if (item.status === "RESOLVED") colorClass = "bg-emerald-500";
                 if (item.status === "REMEDIATION") colorClass = "bg-amber-500";
                 if (item.status === "IN_REVIEW") colorClass = "bg-primary";
                 if (item.status === "REASSESSMENT_REQUIRED") colorClass = "bg-purple-500";
                 if (item.status === "REOPENED") colorClass = "bg-rose-500";
-                if (item.status === "REJECTED") colorClass = "bg-slate-500";
+                if (item.status === "REJECTED") colorClass = "bg-slate-400";
 
                 return (
                   <div
                     key={item.status}
                     onClick={() => handleNavigateToFindings({ lifecycle_status: item.status })}
-                    className="group cursor-pointer space-y-1.5 p-2 rounded-lg hover:bg-muted/30 transition-colors"
+                    className="group cursor-pointer space-y-1.5 p-2 rounded-xl hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center justify-between text-xs font-medium">
                       <span className="text-foreground group-hover:text-primary transition-colors">
-                        {item.status.replace("_", " ")}
+                        {item.label || item.status.replace("_", " ")}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground font-mono text-[11px]">{item.percentage}%</span>
+                        <span className="text-muted-foreground font-mono text-[11px]">{pct}%</span>
                         <Badge variant="outline" className="font-mono text-[10px] font-bold">
-                          {item.count}
+                          {count}
                         </Badge>
                       </div>
                     </div>
+                    {/* Neutral empty track with strictly proportional fill */}
                     <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden">
                       <div
                         className={cn("h-full rounded-full transition-all duration-500", colorClass)}
-                        style={{ width: `${Math.max(item.percentage, item.count > 0 ? 3 : 0)}%` }}
+                        style={{ width: `${pct}%` }}
                       />
                     </div>
                   </div>
@@ -487,7 +556,7 @@ export function FindingAnalyticsDashboard({
         </Card>
 
         {/* Severity Distribution */}
-        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
+        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-sm rounded-2xl">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
               <ShieldAlert className="h-4 w-4 text-rose-500" /> Finding Severity Breakdown
@@ -497,14 +566,17 @@ export function FindingAnalyticsDashboard({
 
           {isLoading ? (
             <div className="space-y-3">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
             </div>
           ) : !analyticsData?.severity_distribution || analyticsData.severity_distribution.length === 0 ? (
             <p className="text-xs text-muted-foreground italic py-6 text-center">No severity distribution data.</p>
           ) : (
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {analyticsData.severity_distribution.map((item) => {
+                const count = item.count;
+                const pct = totalFindings > 0 ? Number(((count / totalFindings) * 100).toFixed(1)) : 0;
+
                 let colorClass = "bg-emerald-500";
                 let badgeClass = "text-emerald-600 border-emerald-500/30 bg-emerald-500/10";
                 if (item.severity === "CRITICAL") {
@@ -522,7 +594,7 @@ export function FindingAnalyticsDashboard({
                   <div
                     key={item.severity}
                     onClick={() => handleNavigateToFindings({ severity: item.severity })}
-                    className="group cursor-pointer space-y-1.5 p-2 rounded-lg hover:bg-muted/30 transition-colors"
+                    className="group cursor-pointer space-y-1.5 p-2 rounded-xl hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center justify-between text-xs font-medium">
                       <div className="flex items-center gap-2">
@@ -530,18 +602,19 @@ export function FindingAnalyticsDashboard({
                           {item.severity}
                         </Badge>
                         <span className="text-foreground group-hover:text-primary transition-colors">
-                          {item.severity} Impact Findings
+                          {item.label || item.severity} Impact Findings
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground font-mono text-[11px]">{item.percentage}%</span>
-                        <span className="font-bold text-foreground font-mono">{item.count}</span>
+                        <span className="text-muted-foreground font-mono text-[11px]">{pct}%</span>
+                        <span className="font-bold text-foreground font-mono">{count}</span>
                       </div>
                     </div>
+                    {/* Neutral empty track with strictly proportional fill */}
                     <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden">
                       <div
                         className={cn("h-full rounded-full transition-all duration-500", colorClass)}
-                        style={{ width: `${Math.max(item.percentage, item.count > 0 ? 3 : 0)}%` }}
+                        style={{ width: `${pct}%` }}
                       />
                     </div>
                   </div>
@@ -552,65 +625,96 @@ export function FindingAnalyticsDashboard({
         </Card>
       </div>
 
-      {/* ── 6. Trends & Remediation Performance Section ── */}
+      {/* ── 6. Finding Trends & Remediation Performance Section ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Compliance Finding Trends (Timeline) */}
-        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-border/40 pb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-              <TrendingUp className="h-4 w-4 text-primary" /> Finding Creation & Resolution Trends
-            </span>
-            <span className="text-[10px] text-muted-foreground font-mono">Cadence</span>
+        {/* Responsive Finding Trends (Chart) */}
+        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-sm rounded-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/40 pb-3">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <TrendingUp className="h-4 w-4 text-primary" /> Finding Trends
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Cadence of new gaps identified vs verified resolutions.
+              </p>
+            </div>
+
+            {/* Series Legend */}
+            <div className="flex items-center gap-3 text-[11px] font-medium">
+              <span className="flex items-center gap-1.5 text-blue-500">
+                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" /> Created
+              </span>
+              <span className="flex items-center gap-1.5 text-emerald-500">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Resolved
+              </span>
+            </div>
           </div>
 
           {isLoading ? (
-            <Skeleton className="h-40 w-full rounded-lg" />
-          ) : (!analyticsData?.open_finding_trend || analyticsData.open_finding_trend.length === 0) &&
-            (!analyticsData?.resolution_trend || analyticsData.resolution_trend.length === 0) ? (
-            <div className="py-10 text-center space-y-2">
+            <Skeleton className="h-52 w-full rounded-xl" />
+          ) : trendPoints.length === 0 ? (
+            <div className="py-12 text-center space-y-2">
               <Activity className="h-8 w-8 text-muted-foreground/40 mx-auto" />
               <p className="text-xs text-muted-foreground italic">
-                No historical trend points recorded in the selected date range ({dateRange}).
+                No activity recorded for this period ({dateRange}).
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
-                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">New Gaps Identified</span>
-                  <p className="text-lg font-bold text-foreground font-mono">
-                    {analyticsData?.open_finding_trend?.reduce((acc, p) => acc + p.created_count, 0) || 0}
-                  </p>
+              {/* Summary Stats Header */}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="p-2.5 rounded-xl bg-background border border-border/60">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Created in Period</span>
+                  <span className="text-base font-bold text-blue-500 font-mono">+{createdTotal}</span>
                 </div>
-                <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1">
-                  <span className="text-[10px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">
-                    Resolutions Verified
+                <div className="p-2.5 rounded-xl bg-background border border-border/60">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Resolved in Period</span>
+                  <span className="text-base font-bold text-emerald-500 font-mono">+{resolvedTotal}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-background border border-border/60">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Net Change</span>
+                  <span className={cn(
+                    "text-base font-bold font-mono flex items-center justify-center gap-0.5",
+                    netChange > 0 ? "text-rose-500" : netChange < 0 ? "text-emerald-500" : "text-muted-foreground"
+                  )}>
+                    {netChange > 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : netChange < 0 ? <ArrowDownRight className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                    {netChange > 0 ? `+${netChange}` : netChange}
                   </span>
-                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                    {analyticsData?.resolution_trend?.reduce((acc, p) => acc + p.resolved_count, 0) || 0}
-                  </p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                  Periodic Activity Breakdown
-                </span>
-                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-                  {analyticsData?.open_finding_trend?.map((pt) => {
-                    const matchRes = analyticsData?.resolution_trend?.find((r) => r.period === pt.period);
+              {/* Responsive SVG Bar Trend Chart */}
+              <div className="pt-2">
+                <div className="h-44 w-full flex items-end gap-2 sm:gap-3 px-2 border-b border-border/60 pb-2">
+                  {trendPoints.map((pt) => {
+                    const createdHeight = Math.max(Math.round((pt.created / maxTrendVal) * 100), pt.created > 0 ? 8 : 0);
+                    const resolvedHeight = Math.max(Math.round((pt.resolved / maxTrendVal) * 100), pt.resolved > 0 ? 8 : 0);
+
                     return (
-                      <div
-                        key={pt.period}
-                        className="flex items-center justify-between text-xs p-2 rounded-md bg-muted/30 border border-border/30"
-                      >
-                        <span className="font-mono text-muted-foreground">{pt.period}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-blue-500 font-mono">+{pt.created_count} created</span>
-                          <span className="text-emerald-500 font-mono">
-                            +{matchRes?.resolved_count || 0} resolved
-                          </span>
+                      <div key={pt.period} className="flex-1 flex flex-col items-center h-full justify-end group relative">
+                        {/* Tooltip on hover */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-12 z-20 pointer-events-none bg-popover text-popover-foreground text-[10px] p-1.5 rounded-md shadow-md border border-border whitespace-nowrap">
+                          <p className="font-bold">{pt.label}</p>
+                          <p className="text-blue-500">Created: +{pt.created}</p>
+                          <p className="text-emerald-500">Resolved: +{pt.resolved}</p>
                         </div>
+
+                        {/* Dual Bar Pair */}
+                        <div className="w-full flex items-end justify-center gap-1 h-32">
+                          <div
+                            className="w-1/2 max-w-[14px] bg-blue-500 rounded-t-sm transition-all duration-300 group-hover:brightness-110"
+                            style={{ height: `${createdHeight}%` }}
+                          />
+                          <div
+                            className="w-1/2 max-w-[14px] bg-emerald-500 rounded-t-sm transition-all duration-300 group-hover:brightness-110"
+                            style={{ height: `${resolvedHeight}%` }}
+                          />
+                        </div>
+
+                        {/* X-axis Label */}
+                        <span className="text-[10px] font-mono text-muted-foreground mt-2 truncate w-full text-center">
+                          {pt.label}
+                        </span>
                       </div>
                     );
                   })}
@@ -621,11 +725,16 @@ export function FindingAnalyticsDashboard({
         </Card>
 
         {/* Remediation Performance Metrics */}
-        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
+        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-sm rounded-2xl">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-              <Activity className="h-4 w-4 text-primary" /> Remediation Engine Performance
-            </span>
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <Activity className="h-4 w-4 text-primary" /> Remediation Performance
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Verification throughput and audit cycle performance.
+              </p>
+            </div>
             <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
               Auditable Cycles
             </Badge>
@@ -634,39 +743,43 @@ export function FindingAnalyticsDashboard({
           {isLoading ? (
             <div className="grid grid-cols-2 gap-3">
               {[...Array(4)].map((_, i) => (
-                <Skeleton key={i} className="h-20 rounded-lg" />
+                <Skeleton key={i} className="h-20 rounded-xl" />
               ))}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3.5">
               {/* Avg cycles */}
-              <div className="p-3.5 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+              <div className="p-3.5 rounded-xl border border-border/60 bg-background space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Average Cycles
                 </span>
                 <p className="text-xl font-bold font-mono text-foreground">
-                  {remediationPerf?.average_cycles_per_resolved != null
+                  {remediationPerf?.average_cycles_per_resolved != null && remediationPerf.average_cycles_per_resolved > 0
                     ? `${remediationPerf.average_cycles_per_resolved}x`
                     : "1.0x"}
                 </p>
-                <span className="text-[10px] text-muted-foreground">Per resolved Finding</span>
+                <span className="text-[10px] text-muted-foreground">Per resolved finding</span>
               </div>
 
               {/* Success Rate */}
-              <div className="p-3.5 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+              <div className="p-3.5 rounded-xl border border-border/60 bg-background space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                   1st Cycle Success
                 </span>
                 <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                  {remediationPerf?.remediation_success_rate || 100}%
+                  {remediationPerf?.resolved_first_cycle_count && remediationPerf.resolved_first_cycle_count > 0
+                    ? `${remediationPerf.remediation_success_rate || 100}%`
+                    : "Not enough data"}
                 </p>
                 <span className="text-[10px] text-muted-foreground">
-                  {remediationPerf?.resolved_first_cycle_count || 0} resolved on 1st submission
+                  {remediationPerf?.resolved_first_cycle_count
+                    ? `${remediationPerf.resolved_first_cycle_count} resolved on 1st submission`
+                    : "Requires completed cycles"}
                 </span>
               </div>
 
               {/* Rejected count */}
-              <div className="p-3.5 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+              <div className="p-3.5 rounded-xl border border-border/60 bg-background space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
                   Rejected Cycles
                 </span>
@@ -677,7 +790,7 @@ export function FindingAnalyticsDashboard({
               </div>
 
               {/* Multi-cycle count */}
-              <div className="p-3.5 rounded-xl border border-border/60 bg-muted/20 space-y-1">
+              <div className="p-3.5 rounded-xl border border-border/60 bg-background space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                   Multi-Cycle Fixes
                 </span>
@@ -691,71 +804,54 @@ export function FindingAnalyticsDashboard({
         </Card>
       </div>
 
-      {/* ── 7. High-Risk Findings & Aging Findings Queues ── */}
+      {/* ── 7. Regulatory Exposure & Findings Requiring Attention ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* High Risk Unresolved Findings */}
-        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
+        {/* Regulatory Exposure (Moved from Operations to Analytics) */}
+        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-sm rounded-2xl">
           <div className="flex items-center justify-between border-b border-border/40 pb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-              <ShieldX className="h-4 w-4 text-rose-500" /> High-Risk Unresolved Findings
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <Scale className="h-4 w-4 text-primary" /> Regulatory Exposure
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Statutory exposure aggregated by regulation for this workspace.
+              </p>
+            </div>
+            <span className="text-[10px] font-mono text-muted-foreground">
+              {reportExposure?.length || 0} Assessed
             </span>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => handleNavigateToFindings({ severity: "CRITICAL" })}
-              className="text-xs text-muted-foreground hover:text-foreground cursor-pointer gap-1"
-            >
-              <span>View All Critical</span>
-              <ChevronRight className="h-3 w-3" />
-            </Button>
           </div>
 
-          {isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-14 w-full rounded-lg" />
-              <Skeleton className="h-14 w-full rounded-lg" />
-            </div>
-          ) : !analyticsData?.high_risk_findings || analyticsData.high_risk_findings.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic py-6 text-center">
-              No high or critical risk unresolved findings.
+          {!reportExposure || reportExposure.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic py-8 text-center">
+              No regulatory exposure data available for this workspace.
             </p>
           ) : (
-            <div className="space-y-2.5">
-              {analyticsData.high_risk_findings.slice(0, 5).map((f) => (
+            <div className="space-y-3">
+              {reportExposure.map((exp) => (
                 <div
-                  key={f.id}
-                  onClick={() => handleOpenDrawer(f)}
-                  className="p-3 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                  key={exp.report_id}
+                  onClick={() => router.push(`/compliance/reports/${exp.report_id}`)}
+                  className="p-3 rounded-xl border border-border/60 bg-background hover:bg-muted/30 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
                 >
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[10px] font-bold uppercase",
-                          f.severity === "CRITICAL"
-                            ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
-                            : "bg-orange-500/10 text-orange-600 border-orange-500/30"
-                        )}
-                      >
-                        {f.severity}
-                      </Badge>
-                      <span className="text-xs font-bold text-foreground font-mono">
-                        {f.clause_id || `ID #${f.id.slice(0, 8)}`}
-                      </span>
-                      {f.is_reopened && (
-                        <Badge className="bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40 text-[9px]">
-                          Reopened
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {f.reasoning || "Compliance gap requires mitigation"}
+                  <div className="space-y-0.5 min-w-0 flex-1">
+                    <h5 className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                      {exp.regulation_title || `Report #${exp.report_id.slice(0, 8)}`}
+                    </h5>
+                    <p className="text-[10px] text-muted-foreground font-mono truncate">
+                      Policy: {exp.policy_filename || "Policy Document"}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-mono text-muted-foreground">{f.age_days}d old</span>
+                    <Badge variant="outline" className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 border-amber-500/30">
+                      {exp.open_count} Open
+                    </Badge>
+                    {exp.high_critical_count > 0 && (
+                      <Badge variant="outline" className="text-[10px] font-bold bg-rose-500/10 text-rose-600 border-rose-500/30">
+                        {exp.high_critical_count} High/Crit
+                      </Badge>
+                    )}
                     <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>
@@ -764,93 +860,159 @@ export function FindingAnalyticsDashboard({
           )}
         </Card>
 
-        {/* Aging Findings (Oldest Open) */}
-        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-border/40 pb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-amber-500" /> Aging Finding Queue
-            </span>
-            <span className="text-[10px] text-muted-foreground font-mono">Oldest Open Items</span>
+        {/* Consolidated: Findings Requiring Attention (By Risk / By Age Toggle) */}
+        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-sm rounded-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/40 pb-3">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <ShieldAlert className="h-4 w-4 text-rose-500" /> Findings Requiring Attention
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                High-impact gaps prioritized by severity or aging duration.
+              </p>
+            </div>
+
+            {/* Toggle: By Risk vs By Age */}
+            <div className="flex items-center rounded-lg border border-border/60 bg-background p-0.5">
+              <button
+                type="button"
+                onClick={() => setAttentionView("RISK")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all cursor-pointer",
+                  attentionView === "RISK"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                By Risk
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttentionView("AGE")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all cursor-pointer",
+                  attentionView === "AGE"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                By Age
+              </button>
+            </div>
           </div>
 
           {isLoading ? (
             <div className="space-y-3">
-              <Skeleton className="h-14 w-full rounded-lg" />
-              <Skeleton className="h-14 w-full rounded-lg" />
+              <Skeleton className="h-14 w-full rounded-xl" />
+              <Skeleton className="h-14 w-full rounded-xl" />
             </div>
-          ) : !analyticsData?.aging_findings || analyticsData.aging_findings.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic py-6 text-center">No open aging findings found.</p>
-          ) : (
-            <div className="space-y-2.5">
-              {analyticsData.aging_findings.slice(0, 5).map((f) => (
-                <div
-                  key={f.id}
-                  onClick={() => handleOpenDrawer(f)}
-                  className="p-3 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
-                >
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-foreground font-mono">
-                        {f.clause_id || `ID #${f.id.slice(0, 8)}`}
-                      </span>
-                      <Badge variant="outline" className="text-[10px] font-semibold">
-                        {f.lifecycle_status.replace("_", " ")}
-                      </Badge>
-                      {f.is_reopened && (
-                        <Badge className="bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40 text-[9px]">
-                          Reopened
+          ) : attentionView === "RISK" ? (
+            !analyticsData?.high_risk_findings || analyticsData.high_risk_findings.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic py-8 text-center">
+                No high or critical risk unresolved findings.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {analyticsData.high_risk_findings.slice(0, 5).map((f) => (
+                  <div
+                    key={f.id}
+                    onClick={() => handleOpenFinding(f)}
+                    className="p-3 rounded-xl border border-border/60 bg-background hover:bg-muted/30 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-bold uppercase",
+                            f.severity === "CRITICAL"
+                              ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                              : "bg-orange-500/10 text-orange-600 border-orange-500/30"
+                          )}
+                        >
+                          {f.severity}
                         </Badge>
-                      )}
+                        <span className="text-xs font-semibold text-foreground truncate">
+                          {f.clause_id ? `Clause ${f.clause_id}` : "Regulatory Non-Compliance Gap"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        {f.reasoning || "Statutory compliance gap requires immediate mitigation."}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-muted-foreground font-mono truncate">
-                      Created: {format(new Date(f.created_at), "dd MMM yyyy")}
-                    </p>
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] font-bold font-mono",
-                        f.age_days > 30
-                          ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
-                          : "bg-amber-500/10 text-amber-600 border-amber-500/30"
-                      )}
-                    >
-                      {f.age_days} days open
-                    </Badge>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] font-mono text-muted-foreground">{f.age_days}d open</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
+          ) : (
+            !analyticsData?.aging_findings || analyticsData.aging_findings.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic py-8 text-center">
+                No open aging findings found.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {analyticsData.aging_findings.slice(0, 5).map((f) => (
+                  <div
+                    key={f.id}
+                    onClick={() => handleOpenFinding(f)}
+                    className="p-3 rounded-xl border border-border/60 bg-background hover:bg-muted/30 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-foreground truncate">
+                          {f.clause_id ? `Clause ${f.clause_id}` : "Aging Compliance Gap"}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-semibold">
+                          {f.lifecycle_status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">
+                        Created: {format(new Date(f.created_at), "dd MMM yyyy")}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] font-bold font-mono",
+                          f.age_days > 30
+                            ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                            : "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                        )}
+                      >
+                        {f.age_days}d open
+                      </Badge>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </Card>
       </div>
 
-      {/* ── 8. Finding Detail Drawer Modal ── */}
-      {selectedFinding && (
+      {/* ── Slide-over Finding Detail Drawer (Fallback) ── */}
+      {localFinding && (
         <FindingDetailDrawer
-          finding={selectedFinding}
-          isOpen={isDrawerOpen}
+          finding={localFinding}
+          isOpen={isLocalDrawerOpen}
           onClose={() => {
-            setIsDrawerOpen(false);
-            setSelectedFinding(null);
+            setIsLocalDrawerOpen(false);
+            setLocalFinding(null);
           }}
           onFindingUpdated={() => {
             fetchAnalytics();
           }}
+          organizationId={organizationId}
         />
       )}
-
-      {/* ── Compliance Report Generation Modal (Sprint 7.14) ── */}
-      <ComplianceReportModal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        organizationId={organizationId}
-        organizationName={organizationName}
-        initialDateRange={dateRange}
-      />
     </div>
   );
 }

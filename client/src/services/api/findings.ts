@@ -477,27 +477,32 @@ export interface ComplianceHealthSummary {
 
 export interface StatusDistributionItem {
   status: string;
+  label?: string;
   count: number;
-  percentage: number;
+  percentage?: number;
 }
 
 export interface SeverityDistributionItem {
   severity: string;
+  label?: string;
   count: number;
-  percentage: number;
+  percentage?: number;
 }
 
 export interface FindingTrendPoint {
   period: string;
+  label?: string;
   created_count: number;
-  date: string;
+  date?: string;
 }
 
 export interface ResolutionTrendPoint {
   period: string;
+  label?: string;
   resolved_count: number;
-  date: string;
+  date?: string;
 }
+
 
 export interface RemediationPerformanceMetrics {
   average_cycles_per_resolved: number;

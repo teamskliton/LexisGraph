@@ -228,12 +228,15 @@ class StatusDistributionItem(BaseModel):
     status: str
     label: str
     count: int
+    percentage: float = 0.0
 
 
 class SeverityDistributionItem(BaseModel):
     severity: str
     label: str
     count: int
+    percentage: float = 0.0
+
 
 
 class FindingTrendPoint(BaseModel):

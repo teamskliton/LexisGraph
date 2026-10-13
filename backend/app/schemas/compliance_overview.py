@@ -34,8 +34,11 @@ class TeamWorkloadItem(BaseModel):
     open_count: int = Field(0, description="Open findings count")
     in_review_count: int = Field(0, description="In Review findings count")
     remediation_count: int = Field(0, description="In Remediation findings count")
+    overdue_count: int = Field(0, description="Overdue findings count")
     resolved_count: int = Field(0, description="Resolved findings count")
+    active_count: int = Field(0, description="Active unresolved findings count (open + review + remediation)")
     total_assigned: int = Field(0, description="Total assigned findings count")
+
 
 
 class ReportExposureItem(BaseModel):

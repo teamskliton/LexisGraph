@@ -371,6 +371,7 @@ def get_finding_analytics(
     base_where = [
         ComplianceReport.organization_id == target_org_id,
         ReportFinding.report_id == ComplianceReport.id,
+        or_(ComplianceReport.is_deleted == False, ComplianceReport.is_deleted.is_(None)),
     ]
     if policy_document_id:
         base_where.append(ComplianceReport.policy_document_id == policy_document_id)
@@ -445,22 +446,29 @@ def get_finding_analytics(
         summary_bullets=summary_bullets,
     )
 
+    def _calc_pct(c: int) -> float:
+        return round((c / total_findings) * 100.0, 1) if total_findings > 0 else 0.0
+
+    open_c = status_map.get("OPEN", 0)
+    rejected_c = status_map.get("REJECTED", 0) + status_map.get("POTENTIAL_FALSE_POSITIVE", 0)
+
     status_distribution = [
-        StatusDistributionItem(status="OPEN", label="Open", count=status_map.get("OPEN", 0)),
-        StatusDistributionItem(status="IN_REVIEW", label="Under Review", count=in_review),
-        StatusDistributionItem(status="REMEDIATION", label="In Remediation", count=in_remediation),
-        StatusDistributionItem(status="REASSESSMENT_REQUIRED", label="Needs Reassessment", count=reassessment_required),
-        StatusDistributionItem(status="RESOLVED", label="Resolved", count=resolved),
-        StatusDistributionItem(status="REOPENED", label="Reopened", count=reopened_count),
-        StatusDistributionItem(status="REJECTED", label="False Positive / Rejected", count=status_map.get("REJECTED", 0) + status_map.get("POTENTIAL_FALSE_POSITIVE", 0)),
+        StatusDistributionItem(status="OPEN", label="Open", count=open_c, percentage=_calc_pct(open_c)),
+        StatusDistributionItem(status="IN_REVIEW", label="Under Review", count=in_review, percentage=_calc_pct(in_review)),
+        StatusDistributionItem(status="REMEDIATION", label="In Remediation", count=in_remediation, percentage=_calc_pct(in_remediation)),
+        StatusDistributionItem(status="REASSESSMENT_REQUIRED", label="Needs Reassessment", count=reassessment_required, percentage=_calc_pct(reassessment_required)),
+        StatusDistributionItem(status="RESOLVED", label="Resolved", count=resolved, percentage=_calc_pct(resolved)),
+        StatusDistributionItem(status="REOPENED", label="Reopened", count=reopened_count, percentage=_calc_pct(reopened_count)),
+        StatusDistributionItem(status="REJECTED", label="False Positive / Rejected", count=rejected_c, percentage=_calc_pct(rejected_c)),
     ]
 
     severity_distribution = [
-        SeverityDistributionItem(severity="CRITICAL", label="Critical", count=critical_count),
-        SeverityDistributionItem(severity="HIGH", label="High", count=high_count),
-        SeverityDistributionItem(severity="MEDIUM", label="Medium", count=medium_count),
-        SeverityDistributionItem(severity="LOW", label="Low", count=low_count),
+        SeverityDistributionItem(severity="CRITICAL", label="Critical", count=critical_count, percentage=_calc_pct(critical_count)),
+        SeverityDistributionItem(severity="HIGH", label="High", count=high_count, percentage=_calc_pct(high_count)),
+        SeverityDistributionItem(severity="MEDIUM", label="Medium", count=medium_count, percentage=_calc_pct(medium_count)),
+        SeverityDistributionItem(severity="LOW", label="Low", count=low_count, percentage=_calc_pct(low_count)),
     ]
+
 
     # 5. Open Finding & Resolution Trends (Database Timestamps)
     finding_created_dates = db.scalars(

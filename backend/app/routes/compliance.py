@@ -319,6 +319,19 @@ def get_compliance_overview(
         u_review = sum(1 for f in u_findings if (f.lifecycle_status or "OPEN").upper() == "IN_REVIEW")
         u_remediation = sum(1 for f in u_findings if (f.lifecycle_status or "OPEN").upper() == "REMEDIATION")
         u_resolved = sum(1 for f in u_findings if (f.lifecycle_status or "OPEN").upper() == "RESOLVED")
+        u_active = u_open + u_review + u_remediation
+
+        u_overdue = 0
+        for f in u_findings:
+            if (f.lifecycle_status or "OPEN").upper() == "RESOLVED":
+                continue
+            due_dt = (
+                f.remediation_due_date.replace(tzinfo=timezone.utc)
+                if (f.remediation_due_date and f.remediation_due_date.tzinfo is None)
+                else f.remediation_due_date
+            )
+            if due_dt and due_dt < now_utc:
+                u_overdue += 1
 
         team_workload_resp.append(
             TeamWorkloadItem(
@@ -329,10 +342,13 @@ def get_compliance_overview(
                 open_count=u_open,
                 in_review_count=u_review,
                 remediation_count=u_remediation,
+                overdue_count=u_overdue,
                 resolved_count=u_resolved,
+                active_count=u_active,
                 total_assigned=len(u_findings),
             )
         )
+
 
     # 6. Unassigned Findings
     unassigned_resp: List[FindingItemResponse] = [
