@@ -41,10 +41,17 @@ export const DocumentsHeader = memo(function DocumentsHeader({
           </button>
           <ChevronRight className="h-3 w-3 shrink-0" />
           <button
-            onClick={() => router.push("/organizations")}
+            onClick={() => {
+              const orgId = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
+              if (orgId) {
+                router.push(`/organizations/${orgId}`);
+              } else {
+                router.push("/dashboard");
+              }
+            }}
             className="hover:text-foreground transition-colors cursor-pointer"
           >
-            Organizations
+            Organization Workspace
           </button>
           <ChevronRight className="h-3 w-3 shrink-0" />
           <span className="font-medium text-foreground">Documents</span>

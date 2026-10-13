@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Eye, FileCheck, Copy, Check, Inbox, ShieldAlert, Download, Loader2 } from "lucide-react";
+import { Eye, FileCheck, Copy, Check, Inbox, ShieldAlert, Download, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { reportService } from "@/services/reportService";
 
@@ -266,10 +266,21 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
-                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-primary border-primary/30"
+                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-primary border-primary/30 hover:bg-primary/10"
+                        title="View Findings Workspace"
                       >
                         <ShieldAlert className="h-3.5 w-3.5 text-primary" />
                         <span>Findings</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/compliance/reports/${reportId}/recommendations`)}
+                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                        title="View Recommendations Workspace"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                        <span>Recs</span>
                       </Button>
                       <Button
                         variant="outline"
