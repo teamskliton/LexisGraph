@@ -22,9 +22,11 @@ import {
   ArrowUpDown,
   Filter,
   Sparkles,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { api } from "@/services/api";
 import { reportService } from "@/services/reportService";
 import type { ReportItemResponse } from "@/types/report";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -98,9 +100,25 @@ export function OrganizationReportsWorkspace({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [riskFilter, setRiskFilter] = useState<string>("ALL");
+  const [regulationFilter, setRegulationFilter] = useState<string>("ALL");
+  const [regulations, setRegulations] = useState<{ id: string; title: string; original_filename?: string }[]>([]);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "highest_score" | "lowest_score">("newest");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api.get("/documents/regulations")
+      .then((res) => {
+        if (active && res?.data) {
+          setRegulations(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Fetch reports for current organization strictly
   const fetchOrgReports = useCallback(async () => {
@@ -192,6 +210,14 @@ export function OrganizationReportsWorkspace({
         if (riskFilter !== "ALL") {
           const risk = (r.risk_level || "").toUpperCase();
           if (risk !== riskFilter.toUpperCase()) {
+            return false;
+          }
+        }
+
+        // Regulation (Regs) Filter
+        if (regulationFilter !== "ALL") {
+          const rId = r.regulation_id || r.regulation_document_id;
+          if (rId !== regulationFilter) {
             return false;
           }
         }
@@ -393,6 +419,24 @@ export function OrganizationReportsWorkspace({
             <option value="HIGH">High Risk</option>
             <option value="CRITICAL">Critical Risk</option>
           </select>
+
+          {/* Regulation (Regs) Filter */}
+          <div className="flex items-center gap-1">
+            <BookOpen className="h-3 w-3 text-muted-foreground hidden sm:block" />
+            <select
+              value={regulationFilter}
+              onChange={(e) => setRegulationFilter(e.target.value)}
+              className="h-8 px-2.5 text-xs rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer max-w-[150px] truncate"
+              title="Filter by Regulation"
+            >
+              <option value="ALL">All Regs</option>
+              {regulations.map((reg) => (
+                <option key={reg.id} value={reg.id}>
+                  {reg.title || reg.original_filename || reg.id.substring(0, 8)}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Sort Order */}
           <select

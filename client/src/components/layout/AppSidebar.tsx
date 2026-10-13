@@ -18,6 +18,7 @@ import {
 import { OrganizationDialog } from "@/components/features/organizations/OrganizationDialog";
 import { formatRoleLabel } from "@/utils/role-utils";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -46,7 +47,19 @@ import {
   Sparkles,
   Command,
   ArrowUpRight,
-  FolderOpen,
+  Shield,
+  BookOpen,
+  Zap,
+  Blocks,
+  LayoutTemplate,
+  PenSquare,
+  Bot,
+  Tag,
+  Info,
+  Globe,
+  Calendar,
+  Pencil,
+  Home,
 } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -60,6 +73,7 @@ export interface NavSubItem {
   label: string;
   href: string;
   icon?: React.ElementType;
+  isActive?: (pathname: string) => boolean;
 }
 
 export interface NavItemDef {
@@ -70,6 +84,7 @@ export interface NavItemDef {
   badge?: string | number;
   exact?: boolean;
   children?: NavSubItem[];
+  isActive?: (pathname: string) => boolean;
 }
 
 export interface RecentPageItem {
@@ -94,11 +109,15 @@ function WorkspaceSwitcher({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const { permissions } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [showInfo, setShowInfo] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -147,6 +166,10 @@ function WorkspaceSwitcher({
       window.dispatchEvent(new Event("organization_changed"));
     }
     toast.success(`Switched to ${org.name}`);
+    if (pathname.startsWith("/organizations")) {
+      router.push(`/organizations/${org.id}`);
+    }
+    onNavigate?.();
   };
 
   const handleCreate = async (data: OrganizationCreate | OrganizationUpdate) => {
@@ -166,14 +189,28 @@ function WorkspaceSwitcher({
     }
   };
 
-  const initials = currentOrg?.name
-    ? currentOrg.name
-        .split(" ")
-        .slice(0, 2)
-        .map((w) => w[0])
-        .join("")
-        .toUpperCase()
-    : "LG";
+  const handleEdit = async (data: OrganizationCreate | OrganizationUpdate) => {
+    if (!currentOrg) return;
+    setIsSubmitting(true);
+    try {
+      const updated = await organizationsService.updateOrganization(
+        currentOrg.id,
+        data as OrganizationUpdate
+      );
+      toast.success(`Organization '${updated.name}' updated!`);
+      setIsEditOpen(false);
+      await loadOrgs();
+      setCurrentOrg(updated);
+    } catch {
+      toast.error("Failed to update organization.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const firstLetter = currentOrg?.name
+    ? currentOrg.name.trim().charAt(0).toUpperCase()
+    : "S";
 
   return (
     <>
@@ -181,96 +218,357 @@ function WorkspaceSwitcher({
         <button
           onClick={() => setIsOpen((v) => !v)}
           className={cn(
-            "w-full flex items-center gap-2 rounded-lg p-1.5 transition-all duration-150 group",
-            "hover:bg-[var(--sidebar-accent)]/70 text-[var(--sidebar-foreground)] focus:outline-none",
-            collapsed && "justify-center px-1"
+            "w-full flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 transition-all duration-150 group cursor-pointer",
+            "bg-[#151619] hover:bg-[#1e1f24] border border-[#27282d] text-white focus:outline-none shadow-xs",
+            collapsed && "justify-center px-1.5 py-1.5"
           )}
           title={collapsed ? currentOrg?.name ?? "Workspace" : undefined}
           aria-expanded={isOpen}
           id="workspace-switcher-trigger"
         >
-          <NaturalAvatar
-            name={currentOrg?.name ?? "LexisGraph"}
-            src={currentOrg?.logo_url}
-            shape="rounded"
-            maxInitials={2}
-            className="w-6 h-6 rounded-md text-[10px] shrink-0 shadow-2xs ring-1 ring-black/5 dark:ring-white/10"
-          />
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Emerald rounded square initial badge */}
+            <div className="w-5 h-5 rounded-[5px] bg-[#10b981] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+              {firstLetter}
+            </div>
+
+            {!collapsed && (
+              <span className="text-[12.5px] font-semibold text-white/90 truncate text-left">
+                {currentOrg?.name ?? "My Workspace"}
+              </span>
+            )}
+          </div>
 
           {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-[12px] font-semibold leading-none text-[var(--sidebar-foreground)] truncate">
-                  {currentOrg?.name ?? "Select Workspace"}
-                </p>
-                <p className="text-[10px] text-[var(--sidebar-muted)] mt-0.5 leading-none truncate">
-                  Workspace
-                </p>
-              </div>
-              <ChevronsUpDown className="w-3.5 h-3.5 text-[var(--sidebar-muted)] shrink-0 group-hover:text-[var(--sidebar-foreground)] transition-colors opacity-70" />
-            </>
+            <ChevronDown
+              className={cn(
+                "w-3.5 h-3.5 text-zinc-400 shrink-0 opacity-70 group-hover:opacity-100 transition-transform duration-150",
+                isOpen && "rotate-180"
+              )}
+            />
           )}
         </button>
 
         {isOpen && (
           <div
             className={cn(
-              "absolute z-50 w-60 mt-1 py-1.5 rounded-xl border border-[var(--sidebar-border)] bg-[var(--sidebar)] shadow-2xl backdrop-blur-md animate-in fade-in-50 zoom-in-95 duration-100",
+              "absolute z-50 w-[305px] mt-1.5 p-3 rounded-2xl border border-[#28292e] bg-[#16171a] shadow-2xl backdrop-blur-xl animate-in fade-in-50 zoom-in-95 duration-100",
               collapsed ? "left-full top-0 ml-2" : "left-0 top-full"
             )}
           >
-            <div className="px-3 py-1 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--sidebar-muted)]">
-                Workspaces
-              </span>
-              <span className="text-[10px] text-[var(--sidebar-muted)] font-mono">
-                {organizations.length}
-              </span>
-            </div>
-            <div className="border-b border-[var(--sidebar-border)]/60 my-1" />
-
-            <div className="max-h-56 overflow-y-auto py-0.5" style={{ scrollbarWidth: "thin" }}>
-              {organizations.map((org) => {
-                const active = org.id === currentOrg?.id;
-                return (
+            {/* Top Workspace Header */}
+            <div className="flex items-center gap-3 px-1 py-1">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-xl flex items-center justify-center shrink-0 shadow-md ring-1 ring-white/10">
+                {firstLetter}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-bold text-white truncate leading-snug">
+                  {currentOrg?.name ?? "My Workspace"}
+                </p>
+                <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug truncate">
+                  2 members • Free Forever •{" "}
                   <button
-                    key={org.id}
-                    onClick={() => selectOrg(org)}
-                    className={cn(
-                      "w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors group text-left",
-                      active
-                        ? "text-[var(--sidebar-primary)] bg-[var(--sidebar-accent)]/80 font-medium"
-                        : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/40"
-                    )}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toast.info("Workspace plan is currently Free Forever.");
+                    }}
+                    className="text-zinc-300 hover:text-white cursor-pointer underline font-medium"
                   >
-                    <NaturalAvatar
-                      name={org.name}
-                      src={org.logo_url}
-                      shape="rounded"
-                      maxInitials={2}
-                      className="w-5 h-5 rounded-md text-[9px] shrink-0"
-                    />
-                    <span className="flex-1 truncate">{org.name}</span>
-                    {active && <Check className="w-3.5 h-3.5 shrink-0 text-[var(--sidebar-primary)]" />}
+                    Upgrade
                   </button>
-                );
-              })}
+                </p>
+              </div>
             </div>
 
-            {permissions.canCreateOrganization && (
+            {/* Quick Action Buttons: Settings, People, Info */}
+            <div className="grid grid-cols-3 gap-1.5 mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/settings");
+                  onNavigate?.();
+                }}
+                className="h-8.5 rounded-lg border border-[#2a2b30] bg-[#1f2025] hover:bg-[#28292f] hover:border-[#383a42] text-xs font-medium text-zinc-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              >
+                <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Settings</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/team");
+                  onNavigate?.();
+                }}
+                className="h-8.5 rounded-lg border border-[#2a2b30] bg-[#1f2025] hover:bg-[#28292f] hover:border-[#383a42] text-xs font-medium text-zinc-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              >
+                <Users className="w-3.5 h-3.5 text-zinc-400" />
+                <span>People</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowInfo((v) => !v)}
+                className={cn(
+                  "h-8.5 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs",
+                  showInfo
+                    ? "border-[#10b981]/50 bg-[#10b981]/15 text-[#10b981] font-semibold"
+                    : "border-[#2a2b30] bg-[#1f2025] hover:bg-[#28292f] hover:border-[#383a42] text-zinc-200"
+                )}
+              >
+                <Info className="w-3.5 h-3.5" />
+                <span>Info</span>
+              </button>
+            </div>
+
+            {/* Overview Organization Info Card from Overview Header */}
+            {showInfo && (
+              <div className="mt-2.5 p-3 rounded-xl border border-[#2a2b30] bg-[#1b1c21] space-y-2.5 animate-in fade-in-50 duration-150">
+                {/* Score & Status Row */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#222329] border border-[#2e2f36]">
+                    <span className="text-[9.5px] uppercase font-bold tracking-wider text-zinc-400">
+                      Score
+                    </span>
+                    <span className="text-xs font-bold text-white tabular-nums">
+                      82%
+                    </span>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                    <ShieldAlert className="w-3 h-3" />
+                    Needs Review
+                  </span>
+                </div>
+
+                {/* Industry, Website & Updated Date */}
+                <div className="space-y-1 text-[11px] text-zinc-400">
+                  <div className="flex items-center gap-1.5 text-zinc-300 font-medium truncate">
+                    <Building2 className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span className="truncate">
+                      {currentOrg?.industry || "Information Technology & Software Services"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-zinc-400 truncate">
+                    <Globe className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                    <a
+                      href={
+                        currentOrg?.website?.startsWith("http")
+                          ? currentOrg.website
+                          : `https://${currentOrg?.website || "www.technovasolutions.com"}`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:text-primary transition-colors truncate underline-offset-2 hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {(currentOrg?.website || "www.technovasolutions.com").replace(/^https?:\/\//, "")}
+                    </a>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-zinc-500 text-[10px]">
+                    <Calendar className="w-3 h-3 text-zinc-500 shrink-0" />
+                    <span>
+                      Updated{" "}
+                      {currentOrg?.updated_at
+                        ? format(new Date(currentOrg.updated_at), "MMM d, yyyy")
+                        : "Sep 16, 2026"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <p className="text-[11px] text-zinc-400 leading-relaxed line-clamp-3 pt-0.5 border-t border-[#26272c]">
+                  {currentOrg?.description ||
+                    "TechNova Solutions Pvt. Ltd. is an IT and software services company focused on enterprise software development, cloud computing, digital transformation, data management, and cybersecurity. The company provides technology..."}
+                </p>
+
+                {/* Action Buttons: Run Analysis, Upload Policy, Edit Org */}
+                <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-[#26272c]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      router.push("/compliance");
+                      onNavigate?.();
+                    }}
+                    className="h-7 px-1 rounded-md bg-[#0284c7] hover:bg-[#0369a1] text-white text-[10.5px] font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs truncate"
+                    title="Run Analysis"
+                  >
+                    <Zap className="w-3 h-3 shrink-0" />
+                    <span className="truncate">Analysis</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      router.push("/policies");
+                      onNavigate?.();
+                    }}
+                    className="h-7 px-1 rounded-md bg-[#222329] hover:bg-[#2b2c34] border border-[#2f3038] text-zinc-300 text-[10.5px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer truncate"
+                    title="Upload Policy"
+                  >
+                    <Upload className="w-3 h-3 shrink-0" />
+                    <span className="truncate">Upload</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      setIsEditOpen(true);
+                    }}
+                    className="h-7 px-1 rounded-md bg-[#222329] hover:bg-[#2b2c34] border border-[#2f3038] text-zinc-300 text-[10.5px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer truncate"
+                    title="Edit Organization"
+                  >
+                    <Pencil className="w-3 h-3 shrink-0" />
+                    <span className="truncate">Edit</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Divider */}
+            <div className="border-t border-[#232429] my-2.5" />
+
+            {/* Manage Section */}
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-medium text-zinc-400 px-2 py-0.5 select-none">
+                Manage
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/compliance");
+                  onNavigate?.();
+                }}
+                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-xs font-normal text-zinc-300 hover:text-white hover:bg-[#222329] cursor-pointer transition-colors text-left"
+              >
+                <Blocks className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Apps</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/policies");
+                  onNavigate?.();
+                }}
+                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-xs font-normal text-zinc-300 hover:text-white hover:bg-[#222329] cursor-pointer transition-colors text-left"
+              >
+                <LayoutTemplate className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span>Templates</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/settings");
+                  onNavigate?.();
+                }}
+                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-xs font-normal text-zinc-300 hover:text-white hover:bg-[#222329] cursor-pointer transition-colors text-left"
+              >
+                <PenSquare className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span>Custom Fields</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/compliance");
+                  onNavigate?.();
+                }}
+                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-xs font-normal text-zinc-300 hover:text-white hover:bg-[#222329] cursor-pointer transition-colors text-left"
+              >
+                <Bot className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span>Automations</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/findings");
+                  onNavigate?.();
+                }}
+                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-xs font-normal text-zinc-300 hover:text-white hover:bg-[#222329] cursor-pointer transition-colors text-left"
+              >
+                <Tag className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span>Tag Manager</span>
+                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#23213d] text-[#818cf8] border border-[#35325c]">
+                  New
+                </span>
+              </button>
+            </div>
+
+            {/* Switch Workspace Section (if multiple organizations exist) */}
+            {organizations.length > 1 && (
               <>
-                <div className="border-t border-[var(--sidebar-border)]/60 my-1" />
+                <div className="border-t border-[#232429] my-2" />
+                <p className="text-[11px] font-medium text-zinc-400 px-2 py-0.5 select-none">
+                  Switch Workspace
+                </p>
+                <div
+                  className="max-h-36 overflow-y-auto py-0.5 space-y-0.5"
+                  style={{ scrollbarWidth: "thin" }}
+                >
+                  {organizations.map((org) => {
+                    const active = org.id === currentOrg?.id;
+                    const orgInitial = org.name ? org.name.trim().charAt(0).toUpperCase() : "W";
+                    return (
+                      <button
+                        key={org.id}
+                        type="button"
+                        onClick={() => selectOrg(org)}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs transition-colors text-left cursor-pointer",
+                          active
+                            ? "bg-[#10b981]/15 text-[#10b981] font-semibold"
+                            : "text-zinc-300 hover:bg-[#222329] hover:text-white"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "w-5 h-5 rounded-[5px] flex items-center justify-center font-bold text-[10px] shrink-0",
+                            active ? "bg-[#10b981] text-white" : "bg-zinc-800 text-zinc-400"
+                          )}
+                        >
+                          {orgInitial}
+                        </div>
+                        <span className="flex-1 truncate">{org.name}</span>
+                        {active && <Check className="w-3.5 h-3.5 shrink-0 text-[#10b981]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Bottom Create Workspace Button */}
+            {permissions.canCreateOrganization && (
+              <div className="border-t border-[#232429] mt-2 pt-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setIsOpen(false);
                     setIsCreateOpen(true);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-[var(--sidebar-primary)] hover:bg-[var(--sidebar-accent)]/40 transition-colors font-medium"
+                  className="w-full h-8.5 rounded-lg border border-[#2a2b30] bg-[#1c1d21] hover:bg-[#25262c] hover:border-[#383a42] text-xs font-medium text-zinc-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                 >
-                  <Plus className="w-3.5 h-3.5 shrink-0" />
-                  <span>Create Organization</span>
+                  <Plus className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Create Workspace</span>
                 </button>
-              </>
+              </div>
             )}
           </div>
         )}
@@ -280,6 +578,14 @@ function WorkspaceSwitcher({
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
         onSubmit={handleCreate}
+        isLoading={isSubmitting}
+      />
+
+      <OrganizationDialog
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        onSubmit={handleEdit}
+        organization={currentOrg ?? undefined}
         isLoading={isSubmitting}
       />
     </>
@@ -476,23 +782,32 @@ function CommandSearchModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
+  const activeOrgId =
+    typeof window !== "undefined"
+      ? localStorage.getItem("selected_organization_id")
+      : null;
+  const orgWorkspaceHref = activeOrgId
+    ? `/organizations/${activeOrgId}`
+    : "/organizations";
+
   const allActions = useMemo(
     () => [
-      { label: "Dashboard", href: "/dashboard", group: "Pages", icon: LayoutDashboard },
-      { label: "Compliance Analysis", href: "/compliance", group: "Pages", icon: ShieldCheck },
+      { label: "Dashboard (Overview)", href: "/dashboard", group: "Pages", icon: LayoutDashboard },
+      { label: "Policies", href: "/policies", group: "Home", icon: Shield },
+      { label: "Regulations", href: "/regulations", group: "Home", icon: BookOpen },
+      { label: "Analyses", href: "/compliance/history", group: "Home", icon: Zap },
+      { label: "Knowledge Graph", href: "/knowledge-graph", group: "Home", icon: Network },
+      { label: "Audit Reports", href: "/reports", group: "Home", icon: BarChart3 },
+      { label: "Team Members", href: "/team", group: "Home", icon: Users },
+      { label: "Workspace Settings", href: "/settings", group: "Home", icon: Settings },
+      { label: "Compliance Analysis", href: "/compliance", group: "Compliance", icon: ShieldCheck },
       { label: "New Compliance Run", href: "/compliance/new", group: "Quick Actions", icon: PlusCircle },
-      { label: "Compliance History", href: "/compliance/history", group: "Pages", icon: History },
-      { label: "All Findings & Remediation", href: "/findings", group: "Pages", icon: ShieldAlert },
-      { label: "Documents Library", href: "/documents", group: "Pages", icon: FileText },
+      { label: "Compliance History", href: "/compliance/history", group: "Compliance", icon: History },
+      { label: "All Findings & Remediation", href: "/findings", group: "Compliance", icon: ShieldAlert },
       { label: "Upload New Document", href: "/upload", group: "Quick Actions", icon: Upload },
-      { label: "Knowledge Graph", href: "/knowledge-graph", group: "Pages", icon: Network },
       { label: "AI Legal Assistant", href: "/ai-assistant", group: "Pages", icon: MessageSquare },
-      { label: "Audit Reports", href: "/reports", group: "Pages", icon: BarChart3 },
-      { label: "Organizations", href: "/organizations", group: "Admin", icon: Building2 },
-      { label: "Team Members", href: "/team", group: "Admin", icon: Users },
-      { label: "Workspace Settings", href: "/settings", group: "Admin", icon: Settings },
     ],
-    []
+    [orgWorkspaceHref]
   );
 
   const filtered = useMemo(() => {
@@ -600,16 +915,24 @@ function NavItemRow({
   const Icon = item.icon;
   const hasChildren = item.children && item.children.length > 0;
 
-  const isExactActive = item.exact
+  const isExactActive = item.isActive
+    ? item.isActive(pathname)
+    : item.exact
     ? pathname === item.href
     : pathname === item.href || pathname.startsWith(item.href + "/");
 
   // Accordion state: auto-expand if any child is active
   const isChildActive = useMemo(() => {
     return Boolean(
-      item.children?.some(
-        (c) => pathname === c.href || pathname.startsWith(c.href + "/")
-      )
+      item.children?.some((c) => {
+        if (c.isActive) return c.isActive(pathname);
+        return (
+          pathname === c.href ||
+          (c.href !== "/compliance" &&
+            c.href !== "/organizations" &&
+            pathname.startsWith(c.href + "/"))
+        );
+      })
     );
   }, [item.children, pathname]);
 
@@ -662,7 +985,12 @@ function NavItemRow({
       <div className="flex items-center group">
         <Link
           href={item.href}
-          onClick={onNavigate}
+          onClick={(e) => {
+            if (hasChildren) {
+              setExpanded((v) => !v);
+            }
+            onNavigate?.();
+          }}
           className={cn(
             "group relative flex-1 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-150 select-none focus:outline-none",
             isActive
@@ -720,9 +1048,12 @@ function NavItemRow({
       {hasChildren && expanded && (
         <div className="ml-5 pl-2.5 border-l border-[var(--sidebar-border)]/60 space-y-0.5 py-0.5">
           {item.children!.map((sub) => {
-            const isSubActive =
-              pathname === sub.href ||
-              (sub.href !== "/compliance" && pathname.startsWith(sub.href + "/"));
+            const isSubActive = sub.isActive
+              ? sub.isActive(pathname)
+              : pathname === sub.href ||
+                (sub.href !== "/compliance" &&
+                  sub.href !== "/organizations" &&
+                  pathname.startsWith(sub.href + "/"));
             const SubIcon = sub.icon;
             return (
               <Link
@@ -807,7 +1138,15 @@ function RecentItemsSection({
     try {
       const raw = localStorage.getItem("lexisgraph_recent_pages");
       if (raw) {
-        setRecents(JSON.parse(raw));
+        const parsed: RecentPageItem[] = JSON.parse(raw);
+        // Sanitize: remove any invalid or unresolved dynamic bracket paths like [jobId]
+        const clean = (Array.isArray(parsed) ? parsed : []).filter(
+          (item) => item?.href && !item.href.includes("[") && !item.href.includes("]")
+        );
+        setRecents(clean);
+        if (clean.length !== parsed.length) {
+          localStorage.setItem("lexisgraph_recent_pages", JSON.stringify(clean));
+        }
       }
     } catch {
       /* ignore */
@@ -817,8 +1156,16 @@ function RecentItemsSection({
   // Record current page visit
   useEffect(() => {
     if (typeof window === "undefined" || !pathname) return;
-    // Only track authenticated application pages
-    if (pathname === "/login" || pathname === "/register" || pathname === "/") return;
+    // Only track authenticated application pages & ignore unresolved dynamic bracket paths
+    if (
+      pathname === "/login" ||
+      pathname === "/register" ||
+      pathname === "/" ||
+      pathname.includes("[") ||
+      pathname.includes("]")
+    ) {
+      return;
+    }
 
     const pageLabels: Record<string, string> = {
       "/dashboard": "Dashboard",
@@ -827,11 +1174,13 @@ function RecentItemsSection({
       "/compliance/history": "Analysis History",
       "/findings": "All Findings",
       "/documents": "Documents",
+      "/policies": "Policy Center",
+      "/regulations": "Regulation Library",
       "/upload": "Upload Document",
       "/knowledge-graph": "Knowledge Graph",
       "/ai-assistant": "AI Assistant",
       "/reports": "Reports",
-      "/organizations": "Organizations",
+      "/organizations": "Home",
       "/team": "Team Management",
       "/settings": "Settings",
       "/notifications": "Notifications",
@@ -840,6 +1189,7 @@ function RecentItemsSection({
     let title = pageLabels[pathname];
     if (!title) {
       if (pathname.startsWith("/reports/")) title = "Report Details";
+      else if (pathname.startsWith("/organizations/")) title = "Organization Workspace";
       else if (pathname.startsWith("/compliance/")) title = "Compliance Run";
       else if (pathname.startsWith("/findings/")) title = "Finding Detail";
       else return;
@@ -848,8 +1198,10 @@ function RecentItemsSection({
     try {
       const raw = localStorage.getItem("lexisgraph_recent_pages");
       const list: RecentPageItem[] = raw ? JSON.parse(raw) : [];
-      const filtered = list.filter((item) => item.href !== pathname);
-      const updated = [{ title, href: pathname, timestamp: Date.now() }, ...filtered].slice(0, 4);
+      const cleanList = list.filter(
+        (item) => item?.href && !item.href.includes("[") && !item.href.includes("]") && item.href !== pathname
+      );
+      const updated = [{ title, href: pathname, timestamp: Date.now() }, ...cleanList].slice(0, 4);
       localStorage.setItem("lexisgraph_recent_pages", JSON.stringify(updated));
       setRecents(updated);
     } catch {
@@ -885,21 +1237,23 @@ function RecentItemsSection({
 
       {isOpen && (
         <div className="px-2 space-y-0.5">
-          {recents.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavigate}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1 text-[12px] font-medium transition-colors truncate",
-                  isActive
-                    ? "text-[var(--sidebar-primary)] bg-[var(--sidebar-accent)]/50 font-semibold"
-                    : "text-[var(--sidebar-muted)] hover:text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/30"
-                )}
-                title={item.title}
-              >
+          {recents
+            .filter((item) => item?.href && !item.href.includes("[") && !item.href.includes("]"))
+            .map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onNavigate}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2 py-1 text-[12px] font-medium transition-colors truncate",
+                    isActive
+                      ? "text-[var(--sidebar-primary)] bg-[var(--sidebar-accent)]/50 font-semibold"
+                      : "text-[var(--sidebar-muted)] hover:text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/30"
+                  )}
+                  title={item.title}
+                >
                 <Clock className="w-3 h-3 shrink-0 opacity-60" />
                 <span className="truncate">{item.title}</span>
               </Link>
@@ -957,27 +1311,116 @@ export function AppSidebar({
     user?.email?.slice(0, 2).toUpperCase() ??
     "U";
 
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(() => {
+    return typeof window !== "undefined"
+      ? localStorage.getItem("selected_organization_id")
+      : null;
+  });
+
+  useEffect(() => {
+    const handleOrgChanged = () => {
+      const stored =
+        typeof window !== "undefined"
+          ? localStorage.getItem("selected_organization_id")
+          : null;
+      setActiveOrgId(stored);
+    };
+    window.addEventListener("organization_changed", handleOrgChanged);
+    window.addEventListener("storage", handleOrgChanged);
+
+    if (!activeOrgId) {
+      organizationsService
+        .getOrganizations()
+        .then((orgs) => {
+          if (orgs && orgs.length > 0) {
+            const stored =
+              localStorage.getItem("selected_organization_id") || orgs[0].id;
+            setActiveOrgId(stored);
+            localStorage.setItem("selected_organization_id", stored);
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener("organization_changed", handleOrgChanged);
+      window.removeEventListener("storage", handleOrgChanged);
+    };
+  }, [activeOrgId]);
+
+  const orgWorkspaceHref = activeOrgId
+    ? `/organizations/${activeOrgId}`
+    : "/organizations";
+
   // Navigation Items according to IA specifications
-  const workspaceNav: NavItemDef[] = useMemo(
-    () => [
+  const workspaceNav: NavItemDef[] = useMemo(() => {
+    const orgSubItems: NavSubItem[] = [
       {
-        id: "dashboard",
         label: "Dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
-        exact: true,
+        isActive: (p) => p === "/dashboard",
       },
       {
-        id: "organizations",
-        label: "Organizations",
-        href: "/organizations",
-        icon: Building2,
+        label: "Policies",
+        href: "/policies",
+        icon: Shield,
+        isActive: (p) => p === "/policies" || p === "/documents",
       },
       {
-        id: "documents",
-        label: "Documents",
-        href: "/documents",
-        icon: FileText,
+        label: "Regulations",
+        href: "/regulations",
+        icon: BookOpen,
+        isActive: (p) =>
+          p === "/regulations" ||
+          (p === "/documents" &&
+            (typeof window !== "undefined" && window.location.search.includes("tab=REGULATIONS"))),
+      },
+      {
+        label: "Analyses",
+        href: "/compliance/history",
+        icon: Zap,
+        isActive: (p) => p === "/compliance/history",
+      },
+      {
+        label: "Knowledge Graph",
+        href: "/knowledge-graph",
+        icon: Network,
+        isActive: (p) => p === "/knowledge-graph" || p.startsWith("/knowledge-graph/"),
+      },
+      {
+        label: "Reports",
+        href: "/reports",
+        icon: BarChart3,
+        isActive: (p) => p === "/reports" || p.startsWith("/reports/"),
+      },
+    ];
+
+    if (isAdmin || permissions.canManageMembers) {
+      orgSubItems.push({
+        label: "Team",
+        href: "/team",
+        icon: Users,
+        isActive: (p) => p === "/team" || p === "/dashboard/users",
+      });
+    }
+
+    if (isAdmin || permissions.canManageOrganization) {
+      orgSubItems.push({
+        label: "Settings",
+        href: "/settings",
+        icon: Settings,
+        isActive: (p) => p === "/settings" || p === "/dashboard/settings",
+      });
+    }
+
+    return [
+      {
+        id: "home",
+        label: "Home",
+        href: "/dashboard",
+        icon: Home,
+        children: orgSubItems,
       },
       {
         id: "compliance",
@@ -991,55 +1434,24 @@ export function AppSidebar({
         ],
       },
       {
-        id: "knowledge-graph",
-        label: "Knowledge Graph",
-        href: "/knowledge-graph",
-        icon: Network,
-      },
-      {
         id: "ai-assistant",
         label: "AI Assistant",
         href: "/ai-assistant",
         icon: MessageSquare,
       },
-    ],
-    []
-  );
+    ];
+  }, [isAdmin, permissions.canManageMembers, permissions.canManageOrganization]);
 
   const managementNav: NavItemDef[] = useMemo(() => {
-    const items: NavItemDef[] = [
+    return [
       {
         id: "findings",
         label: "Findings",
         href: "/findings",
         icon: ShieldAlert,
       },
-      {
-        id: "reports",
-        label: "Reports",
-        href: "/reports",
-        icon: BarChart3,
-      },
     ];
-
-    if (isAdmin || permissions.canManageMembers) {
-      items.push({
-        id: "team",
-        label: "Team",
-        href: "/team",
-        icon: Users,
-      });
-    }
-
-    items.push({
-      id: "settings",
-      label: "Settings",
-      href: "/settings",
-      icon: Settings,
-    });
-
-    return items;
-  }, [isAdmin, permissions.canManageMembers]);
+  }, []);
 
   const width = collapsed ? SIDEBAR_W_COLLAPSED : SIDEBAR_W_EXPANDED;
 

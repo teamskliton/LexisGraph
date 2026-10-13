@@ -1,12 +1,12 @@
 // OrganizationWorkspaceLayout — Master workspace layout shell for Organizations
-// Orchestrates Header, OrganizationWorkspaceTabs, and workspace content without route changes.
+// Orchestrates Header and workspace content directly without unnecessary tab navbars.
 
 "use client";
 
-import React, { memo, useState } from "react";
+import React, { memo } from "react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { OrganizationWorkspaceHeader } from "./OrganizationWorkspaceHeader";
-import { OrganizationWorkspaceTabs, OrganizationTab } from "./OrganizationWorkspaceTabs";
+import { OrganizationReportsWorkspace } from "./OrganizationReportsWorkspace";
 import type { Organization } from "@/services/api/organizations";
 
 interface OrganizationWorkspaceLayoutProps {
@@ -26,8 +26,6 @@ export const OrganizationWorkspaceLayout = memo(function OrganizationWorkspaceLa
   onEditOrg,
   children,
 }: OrganizationWorkspaceLayoutProps) {
-  const [activeTab, setActiveTab] = useState<OrganizationTab>("overview");
-
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background pb-16">
@@ -40,18 +38,14 @@ export const OrganizationWorkspaceLayout = memo(function OrganizationWorkspaceLa
           onEdit={onEditOrg}
         />
 
-        {/* Main Workspace Body: Tabs Bar Directly Below Header */}
+        {/* Main Workspace Body */}
         <main className="max-w-7xl mx-auto px-6 py-4">
           {children ? (
             children
           ) : (
-            <OrganizationWorkspaceTabs
-              organization={organization}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              complianceScore={complianceScore}
-              policyCount={policyCount}
-              reportCount={reportCount}
+            <OrganizationReportsWorkspace
+              organizationId={organization.id}
+              organizationName={organization.name}
             />
           )}
         </main>

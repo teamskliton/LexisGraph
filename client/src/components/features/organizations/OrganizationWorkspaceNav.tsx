@@ -1,5 +1,5 @@
 // OrganizationWorkspaceNav — Workspace sub-navigation component for Organization Workspace
-// Renders tabs/sidebar for Overview, Policies, Regulations, Compliance, Reports, Knowledge Graph, AI Assistant, Team, Settings.
+// Renders tabs for Overview, Reports, AI Assistant.
 
 "use client";
 
@@ -7,27 +7,15 @@ import React, { memo } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  Shield,
-  BookOpen,
-  Zap,
   BarChart3,
-  Network,
   Bot,
-  Users,
-  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceTab =
   | "overview"
-  | "policies"
-  | "regulations"
-  | "compliance"
   | "reports"
-  | "knowledge-graph"
-  | "ai-assistant"
-  | "team"
-  | "settings";
+  | "ai-assistant";
 
 interface OrganizationWorkspaceNavProps {
   activeTab: WorkspaceTab;
@@ -57,50 +45,16 @@ export const OrganizationWorkspaceNav = memo(function OrganizationWorkspaceNav({
       icon: <LayoutDashboard className="h-4 w-4" />,
     },
     {
-      id: "policies",
-      label: "Policies",
-      icon: <Shield className="h-4 w-4" />,
-      route: "/documents",
-    },
-    {
-      id: "regulations",
-      label: "Regulations",
-      icon: <BookOpen className="h-4 w-4" />,
-      route: "/documents",
-    },
-    {
-      id: "compliance",
-      label: "Compliance",
-      icon: <Zap className="h-4 w-4" />,
-      route: "/compliance",
-    },
-    {
       id: "reports",
       label: "Reports",
       icon: <BarChart3 className="h-4 w-4" />,
       route: "/reports",
     },
     {
-      id: "knowledge-graph",
-      label: "Knowledge Graph",
-      icon: <Network className="h-4 w-4" />,
-      route: "/knowledge-graph",
-    },
-    {
       id: "ai-assistant",
       label: "AI Assistant",
       icon: <Bot className="h-4 w-4 text-accent" />,
       badge: "AI",
-    },
-    {
-      id: "team",
-      label: "Team",
-      icon: <Users className="h-4 w-4" />,
-    },
-    {
-      id: "settings",
-      label: "Settings",
-      icon: <Settings className="h-4 w-4" />,
     },
   ];
 

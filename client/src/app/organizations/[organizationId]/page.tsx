@@ -99,8 +99,8 @@ function OrganizationWorkspaceContent({ organizationId }: { organizationId: stri
           The requested organization workspace could not be retrieved.
         </p>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.push("/organizations")} className="cursor-pointer">
-            Back to Organizations
+          <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")} className="cursor-pointer">
+            Back to Dashboard
           </Button>
           <Button size="sm" onClick={fetchOrganization} className="gap-1.5 cursor-pointer">
             <RefreshCw className="h-3.5 w-3.5" /> Try Again

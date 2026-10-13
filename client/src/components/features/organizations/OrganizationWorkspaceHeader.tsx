@@ -86,10 +86,10 @@ export const OrganizationWorkspaceHeader = memo(function OrganizationWorkspaceHe
             </button>
             <ChevronRight className="h-3 w-3 shrink-0" />
             <button
-              onClick={() => router.push("/organizations")}
+              onClick={() => router.push(`/organizations/${organization.id}`)}
               className="hover:text-foreground transition-colors cursor-pointer"
             >
-              Organizations
+              Organization Workspace
             </button>
             <ChevronRight className="h-3 w-3 shrink-0" />
             <span className="font-medium text-foreground truncate max-w-[200px]">
