@@ -11,7 +11,8 @@ import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-import { organizationsService, Organization } from "@/services/api/organizations";
+import { organizationsService, Organization, OrganizationCreate } from "@/services/api/organizations";
+import { OrganizationDialog } from "@/components/features/organizations/OrganizationDialog";
 import { documentService, validateFile, formatFileSize } from "@/services/document-service";
 import { DocumentType } from "@/types/document";
 
@@ -33,6 +34,9 @@ function UploadPageContent() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  const [isCreateOrgOpen, setIsCreateOrgOpen] = useState(false);
+  const [isSubmittingOrg, setIsSubmittingOrg] = useState(false);
+
   const [orgError, setOrgError] = useState<string | undefined>();
   const [typeError, setTypeError] = useState<string | undefined>();
   const [fileError, setFileError] = useState<string | null>(null);
@@ -52,6 +56,25 @@ function UploadPageContent() {
     };
     loadOrganizations();
   }, []);
+
+  const handleCreateOrg = async (data: OrganizationCreate) => {
+    try {
+      setIsSubmittingOrg(true);
+      const newOrg = await organizationsService.createOrganization(data);
+      toast.success(`Organization '${newOrg.name}' created!`);
+      setIsCreateOrgOpen(false);
+      setOrganizations((prev) => [...prev, newOrg]);
+      setOrganizationId(newOrg.id);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("selected_organization_id", newOrg.id);
+        window.dispatchEvent(new Event("organization_changed"));
+      }
+    } catch {
+      toast.error("Failed to create organization.");
+    } finally {
+      setIsSubmittingOrg(false);
+    }
+  };
 
   const handleFileSelect = (selected: File | null) => {
     setFile(selected);
@@ -176,8 +199,8 @@ function UploadPageContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push("/organizations")}
-                  className="mt-1 flex items-center gap-1.5"
+                  onClick={() => setIsCreateOrgOpen(true)}
+                  className="mt-1 flex items-center gap-1.5 cursor-pointer"
                 >
                   Create Organization
                 </Button>
@@ -241,6 +264,13 @@ function UploadPageContent() {
           </CardContent>
         </Card>
       </main>
+
+      <OrganizationDialog
+        open={isCreateOrgOpen}
+        onOpenChange={setIsCreateOrgOpen}
+        onSubmit={handleCreateOrg as any}
+        isLoading={isSubmittingOrg}
+      />
     </AppShell>
   );
 }

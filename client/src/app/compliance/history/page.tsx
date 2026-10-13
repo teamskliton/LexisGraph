@@ -19,15 +19,45 @@ function AnalysisHistoryContent() {
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
 
   useEffect(() => {
+    let active = true;
+
+    const syncOrg = (orgs: Organization[]) => {
+      const storedId =
+        typeof window !== "undefined"
+          ? localStorage.getItem("selected_organization_id")
+          : null;
+      const matched = (orgs || []).find((o) => o.id === storedId) || orgs[0] || null;
+      if (active) setSelectedOrg(matched);
+    };
+
     organizationsService
       .getOrganizations()
       .then((orgs) => {
-        setOrganizations(orgs);
-        if (orgs.length > 0) {
-          setSelectedOrg(orgs[0]);
-        }
+        if (!active) return;
+        setOrganizations(orgs || []);
+        syncOrg(orgs || []);
       })
       .catch(() => {});
+
+    const handleOrgChanged = () => {
+      organizationsService
+        .getOrganizations()
+        .then((orgs) => {
+          if (!active) return;
+          setOrganizations(orgs || []);
+          syncOrg(orgs || []);
+        })
+        .catch(() => {});
+    };
+
+    window.addEventListener("organization_changed", handleOrgChanged);
+    window.addEventListener("storage", handleOrgChanged);
+
+    return () => {
+      active = false;
+      window.removeEventListener("organization_changed", handleOrgChanged);
+      window.removeEventListener("storage", handleOrgChanged);
+    };
   }, []);
 
   return (
@@ -63,7 +93,13 @@ function AnalysisHistoryContent() {
                 value={selectedOrg?.id || ""}
                 onChange={(e) => {
                   const org = organizations.find((o) => o.id === e.target.value);
-                  if (org) setSelectedOrg(org);
+                  if (org) {
+                    setSelectedOrg(org);
+                    if (typeof window !== "undefined") {
+                      localStorage.setItem("selected_organization_id", org.id);
+                      window.dispatchEvent(new Event("organization_changed"));
+                    }
+                  }
                 }}
                 className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer font-medium focus:ring-1 focus:ring-primary"
               >

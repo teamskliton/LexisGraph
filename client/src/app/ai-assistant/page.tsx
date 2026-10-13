@@ -207,8 +207,26 @@ export function AIAssistantContent() {
   }, [activeOrgId, activeConvId]);
 
   useEffect(() => {
+    const handleOrgChange = () => {
+      // Abort any in-flight AI stream to prevent delayed responses from contaminating the new workspace
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        setIsSending(false);
+      }
+      // Reset conversation state & messages to ensure complete cross-workspace UI isolation
+      setActiveConvId("");
+      setConversations([]);
+      setMessagesMap({});
+      // Reset workspace-specific contextual selections
+      setSelectedPolicyId("");
+      setSelectedRegulationId("");
+      setSelectedReportId("");
+      setSelectedFindingId("");
+      loadWorkspaceContext();
+    };
+
     loadWorkspaceContext();
-    const handleOrgChange = () => loadWorkspaceContext();
     window.addEventListener("organization_changed", handleOrgChange);
     return () => window.removeEventListener("organization_changed", handleOrgChange);
   }, [loadWorkspaceContext]);
@@ -376,14 +394,17 @@ export function AIAssistantContent() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const requestOrgId = activeOrgId;
+
     try {
       await chatService.streamMessage(
         {
-          organization_id: activeOrgId,
+          organization_id: requestOrgId,
           question: framedQuery,
           conversation_id: currentConvId.startsWith("temp-") ? undefined : currentConvId,
         },
         (token: string) => {
+          if (activeOrgId !== requestOrgId) return;
           setMessagesMap((prev) => {
             const list = prev[currentConvId] || [];
             return {
@@ -395,6 +416,7 @@ export function AIAssistantContent() {
           });
         },
         (sources: SourceCitation[]) => {
+          if (activeOrgId !== requestOrgId) return;
           setMessagesMap((prev) => {
             const list = prev[currentConvId] || [];
             return {
@@ -406,6 +428,7 @@ export function AIAssistantContent() {
           });
         },
         (recs) => {
+          if (activeOrgId !== requestOrgId) return;
           setMessagesMap((prev) => {
             const list = prev[currentConvId] || [];
             return {
@@ -424,6 +447,7 @@ export function AIAssistantContent() {
           });
         },
         (doneData: { conversation_id: string }) => {
+          if (activeOrgId !== requestOrgId) return;
           setIsSending(false);
           const serverConvId = doneData.conversation_id;
 
@@ -445,6 +469,7 @@ export function AIAssistantContent() {
           refreshConversations();
         },
         (errText: string) => {
+          if (activeOrgId !== requestOrgId) return;
           setIsSending(false);
           toast.error(errText || "LexisGraph could not complete this analysis right now.");
 

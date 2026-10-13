@@ -11,13 +11,26 @@ export const api = axios.create({
   },
 });
 
-// Interceptor to inject JWT token into requests
+// Interceptor to inject JWT token and active workspace ID into requests
 api.interceptors.request.use(
   (config) => {
     const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    if (typeof window !== "undefined") {
+      const activeOrgId = localStorage.getItem("selected_organization_id");
+      if (activeOrgId) {
+        if (!config.headers["X-Workspace-Id"]) {
+          config.headers["X-Workspace-Id"] = activeOrgId;
+        }
+        if (!config.headers["X-Organization-Id"]) {
+          config.headers["X-Organization-Id"] = activeOrgId;
+        }
+      }
+    }
+
     return config;
   },
   (error) => {

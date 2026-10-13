@@ -101,6 +101,12 @@ export const chatService = {
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(payload.organization_id
+          ? {
+              "X-Workspace-Id": payload.organization_id,
+              "X-Organization-Id": payload.organization_id,
+            }
+          : {}),
       },
       body: JSON.stringify(payload),
       signal,

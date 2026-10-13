@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { AppShell } from "@/components/layout/AppShell";
@@ -14,7 +14,10 @@ import { ReportsTable } from "@/components/reports/ReportsTable";
 import { ReportCard } from "@/components/reports/ReportCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card } from "@/components/ui/card";
 import { BrandLogo } from "@/components/ui/brand-logo";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import {
   RefreshCw,
   AlertTriangle,
@@ -24,6 +27,10 @@ import {
   LayoutGrid,
   List,
   PlusCircle,
+  Calendar,
+  BarChart3,
+  ShieldAlert,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -68,8 +75,24 @@ function ReportsPageContent() {
       router.replace(`/compliance/reports/${reportQueryId}`);
     } else if (orgQueryId) {
       setFilters((prev) => ({ ...prev, organizationId: orgQueryId }));
+    } else {
+      const stored = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
+      if (stored) {
+        setFilters((prev) => ({ ...prev, organizationId: stored }));
+      }
     }
   }, [reportQueryId, orgQueryId, router]);
+
+  useEffect(() => {
+    const handleOrgChange = () => {
+      const stored = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
+      if (stored) {
+        setFilters((prev) => ({ ...prev, organizationId: stored }));
+      }
+    };
+    window.addEventListener("organization_changed", handleOrgChange);
+    return () => window.removeEventListener("organization_changed", handleOrgChange);
+  }, []);
 
   // Dropdown filter options
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
@@ -171,11 +194,73 @@ function ReportsPageContent() {
     }
   };
 
+  // Derived Summary Metrics (Matching screenshot)
+  const metrics = useMemo(() => {
+    if (!reports || reports.length === 0) {
+      return {
+        total: 0,
+        latestScore: null as number | null,
+        latestReportDate: "",
+        averageScore: null as number | null,
+        requiringReviewCount: 0,
+      };
+    }
+
+    const total = totalItems || reports.length;
+
+    // Latest report (by created_at)
+    const sortedByDate = [...reports].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    const latest = sortedByDate[0];
+    const latestScore =
+      latest?.overall_score != null
+        ? Math.round(latest.overall_score <= 1.0 ? latest.overall_score * 100 : latest.overall_score)
+        : null;
+    const latestReportDate = latest?.created_at
+      ? format(new Date(latest.created_at), "MMM d, yyyy")
+      : "";
+
+    // Average score across reports that have scores
+    const scoredReports = reports.filter((r) => r.overall_score != null);
+    const avg =
+      scoredReports.length > 0
+        ? Math.round(
+            scoredReports.reduce((acc, r) => {
+              const s = r.overall_score! <= 1.0 ? r.overall_score! * 100 : r.overall_score!;
+              return acc + s;
+            }, 0) / scoredReports.length
+          )
+        : null;
+
+    // Reports needing review (Critical or High risk, or score < 70)
+    const reviewCount = reports.filter((r) => {
+      const risk = (r.risk_level || "").toUpperCase();
+      const s = r.overall_score != null ? (r.overall_score <= 1.0 ? r.overall_score * 100 : r.overall_score) : null;
+      return risk === "CRITICAL" || risk === "HIGH" || (s != null && s < 70);
+    }).length;
+
+    return {
+      total,
+      latestScore,
+      latestReportDate,
+      averageScore: avg,
+      requiringReviewCount: reviewCount,
+    };
+  }, [reports, totalItems]);
+
+  const currentOrgName =
+    orgMap.get(filters.organizationId) ||
+    (filters.organizationId !== "ALL"
+      ? organizations.find((o) => o.id === filters.organizationId)?.name
+      : null) ||
+    "your organization";
+
   return (
     <AppShell>
       {/* ── Main Content Container ── */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-        {/* Page Header */}
+        {/* Page Header (Matching screenshot) */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-3">
@@ -184,10 +269,10 @@ function ReportsPageContent() {
               </div>
               <div>
                 <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-                  Report History
+                  Reports
                 </h1>
-                <p className="text-sm text-muted-foreground">
-                  View and access stored compliance reports instantly without recomputation.
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Review and manage compliance reports for {currentOrgName}.
                 </p>
               </div>
             </div>
@@ -200,7 +285,7 @@ function ReportsPageContent() {
                 variant={viewMode === "table" ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => setViewMode("table")}
-                className="h-7 px-2.5"
+                className="h-7 px-2.5 cursor-pointer"
                 title="Table View"
               >
                 <List className="h-4 w-4" />
@@ -209,7 +294,7 @@ function ReportsPageContent() {
                 variant={viewMode === "grid" ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => setViewMode("grid")}
-                className="h-7 px-2.5"
+                className="h-7 px-2.5 cursor-pointer"
                 title="Card Grid View"
               >
                 <LayoutGrid className="h-4 w-4" />
@@ -218,13 +303,89 @@ function ReportsPageContent() {
 
             <Button
               onClick={() => router.push("/compliance")}
-              className="flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="flex items-center gap-1.5 shadow-sm cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs"
             >
-              <PlusCircle className="h-4 w-4" />
-              <span>Run Check</span>
+              <Zap className="h-4 w-4" />
+              <span>Run New Analysis</span>
             </Button>
           </div>
         </div>
+
+        {/* ── Summary Metrics Bar (Upper side of screenshot) ── */}
+        {!isLoading && !error && reports.length > 0 && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Total Reports */}
+            <Card className="border border-border/60 bg-card p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Total Reports
+                </span>
+                <FileCheck className="h-4 w-4 text-primary" />
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-bold tabular-nums text-foreground">
+                  {metrics.total}
+                </span>
+                <span className="text-[10px] text-muted-foreground">Generated</span>
+              </div>
+            </Card>
+
+            {/* Latest Report */}
+            <Card className="border border-border/60 bg-card p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Latest Report
+                </span>
+                <Calendar className="h-4 w-4 text-sky-500" />
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-bold tabular-nums text-foreground">
+                  {metrics.latestScore != null ? `${metrics.latestScore}%` : "—"}
+                </span>
+                <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
+                  {metrics.latestReportDate || "No data"}
+                </span>
+              </div>
+            </Card>
+
+            {/* Average Compliance Score */}
+            <Card className="border border-border/60 bg-card p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Average Score
+                </span>
+                <BarChart3 className="h-4 w-4 text-emerald-500" />
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-bold tabular-nums text-emerald-500">
+                  {metrics.averageScore != null ? `${metrics.averageScore}%` : "—"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">Across analyses</span>
+              </div>
+            </Card>
+
+            {/* Reports Requiring Review */}
+            <Card className="border border-border/60 bg-card p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Needs Review
+                </span>
+                <ShieldAlert className="h-4 w-4 text-amber-500" />
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span
+                  className={cn(
+                    "text-2xl font-bold tabular-nums",
+                    metrics.requiringReviewCount > 0 ? "text-amber-500" : "text-foreground"
+                  )}
+                >
+                  {metrics.requiringReviewCount}
+                </span>
+                <span className="text-[10px] text-muted-foreground">High / Critical risk</span>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {/* Filters section (Backend Driven) */}
         <ReportFilters

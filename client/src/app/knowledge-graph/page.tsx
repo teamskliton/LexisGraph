@@ -97,7 +97,9 @@ function KnowledgeGraphContent() {
         if (active && orgs?.length > 0) {
           setOrganizations(orgs);
           if (!queryOrgId) {
-            setActiveOrgId(orgs[0].id);
+            const stored = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
+            const match = stored ? orgs.find((o) => o.id === stored) : null;
+            setActiveOrgId(match ? match.id : orgs[0].id);
           }
         }
       })
@@ -106,6 +108,17 @@ function KnowledgeGraphContent() {
       active = false;
     };
   }, [queryOrgId]);
+
+  useEffect(() => {
+    const handleOrgChange = () => {
+      const stored = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
+      if (stored) {
+        setActiveOrgId(stored);
+      }
+    };
+    window.addEventListener("organization_changed", handleOrgChange);
+    return () => window.removeEventListener("organization_changed", handleOrgChange);
+  }, []);
 
   const activeOrg = useMemo(
     () => organizations.find((o) => o.id === activeOrgId) || organizations[0],
