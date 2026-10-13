@@ -238,6 +238,34 @@ def update_organization(
     db.commit()
     db.refresh(org)
 
+    # Record security audit log and workspace activity
+    try:
+        from app.services.audit_service import log_audit_event
+        log_audit_event(
+            db,
+            user_id=current_user.id,
+            action="UPDATE_ORGANIZATION_SETTINGS",
+            organization_id=organization_id,
+            entity="ORGANIZATION",
+            entity_id=str(organization_id),
+        )
+    except Exception as audit_exc:
+        logger.warning("Failed to record audit log for organization settings update: %s", audit_exc)
+
+    try:
+        log_activity(
+            db,
+            user_id=current_user.id,
+            organization_id=org.id,
+            event_type="ORGANIZATION_UPDATED",
+            title="Updated Organization Settings",
+            description=f"Updated profile settings for '{org.name}'",
+            icon_type="building",
+            extra_data={"organization_id": str(org.id), "updated_fields": list(update_data.keys())},
+        )
+    except Exception as act_exc:
+        logger.warning("Failed to log activity for organization update: %s", act_exc)
+
     logger.info("Organization updated: id=%s by user=%s", org.id, current_user.id)
     return org
 
@@ -272,10 +300,27 @@ def delete_organization(
             detail="Only organization admins can delete an organization.",
         )
 
+    org_name = org.name
+
+    # Record security audit log before deletion (audit_logs has ondelete="SET NULL" on org FK)
+    try:
+        from app.services.audit_service import log_audit_event
+        log_audit_event(
+            db,
+            user_id=current_user.id,
+            action="DELETE_ORGANIZATION",
+            organization_id=organization_id,
+            entity="ORGANIZATION",
+            entity_id=str(organization_id),
+        )
+    except Exception as audit_exc:
+        logger.warning("Failed to record audit log for organization deletion: %s", audit_exc)
+
     db.delete(org)
     db.commit()
-    logger.info("Organization deleted: id=%s by user=%s", organization_id, current_user.id)
+    logger.info("Organization deleted: id=%s (%s) by user=%s", organization_id, org_name, current_user.id)
     return None
+
 
 
 # ---------------------------------------------------------------------------

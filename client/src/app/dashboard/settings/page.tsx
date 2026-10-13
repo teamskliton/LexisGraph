@@ -1,24 +1,26 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/layout/protected-route';
 import { AppShell } from '@/components/layout/AppShell';
-import { OrganizationSwitcher } from '@/components/layout/OrganizationSwitcher';
-import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { useAuth } from '@/context/auth-context';
 import {
   Settings,
   Building,
-  Sliders,
-  Shield,
+  Cpu,
   Save,
   Loader2,
-  Users,
   Trash2,
   AlertTriangle,
-  Key,
-  UserCheck,
+  RotateCcw,
+  CheckCircle2,
+  Globe,
+  Briefcase,
+  FileText,
+  ShieldAlert,
+  Info,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { organizationsService, Organization } from '@/services/api/organizations';
@@ -26,268 +28,663 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { formatRoleLabel, getRoleBadgeClass } from '@/utils/role-utils';
+import { Skeleton } from '@/components/ui/skeleton';
+import { formatRoleLabel } from '@/utils/role-utils';
 import { cn } from '@/lib/utils';
 
+const STANDARD_INDUSTRIES = [
+  'Information Technology & Services',
+  'Financial Services & Banking',
+  'Healthcare & Life Sciences',
+  'Legal Services & Regulatory Consulting',
+  'Manufacturing & Supply Chain',
+  'Telecommunications',
+  'Energy, Utilities & Mining',
+  'E-Commerce & Retail',
+  'Education & Research',
+  'Government & Public Sector',
+  'Other',
+];
+
 export function OrganizationSettingsContent() {
-  const { user, activeRole } = useAuth();
+  const { user, activeMembership, activeRole, isAdmin } = useAuth();
   const router = useRouter();
+
+  const activeOrgId =
+    activeMembership?.organization_id ||
+    (typeof window !== 'undefined' ? localStorage.getItem('selected_organization_id') : null);
 
   const [org, setOrg] = useState<Organization | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Form Fields
   const [name, setName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
-  const [industry, setIndustry] = useState<string>('');
+  const [selectedIndustry, setSelectedIndustry] = useState<string>('');
+  const [customIndustry, setCustomIndustry] = useState<string>('');
   const [website, setWebsite] = useState<string>('');
 
-  // AI & Preference Settings
-  const [preferredModel, setPreferredModel] = useState<string>('gemini-1.5-pro');
+  // Field-level validation errors
+  const [errors, setErrors] = useState<{ name?: string; website?: string }>({});
 
+  // Saving & Deletion states
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState<string>('');
+
+  // Determine permissions
+  const isOwner = Boolean(org && (org.created_by === user?.id || user?.is_superuser));
+  const canEdit = Boolean(isAdmin || isOwner);
+  const canDelete = Boolean(isOwner || isAdmin);
+
+  // Fetch organization details for activeOrgId
   const fetchOrgDetails = useCallback(async () => {
-    const orgId = typeof window !== 'undefined' ? localStorage.getItem('selected_organization_id') : null;
-    if (!orgId) return;
+    if (!activeOrgId) {
+      setIsLoading(false);
+      setOrg(null);
+      return;
+    }
+
     setIsLoading(true);
+    setFetchError(null);
+
     try {
-      const data = await organizationsService.getOrganizationById(orgId);
+      const data = await organizationsService.getOrganizationById(activeOrgId);
       setOrg(data);
       setName(data.name || '');
       setDescription(data.description || '');
-      setIndustry(data.industry || '');
       setWebsite(data.website || '');
-    } catch (err) {
+
+      const currentInd = data.industry || '';
+      if (STANDARD_INDUSTRIES.slice(0, -1).includes(currentInd)) {
+        setSelectedIndustry(currentInd);
+        setCustomIndustry('');
+      } else if (currentInd) {
+        setSelectedIndustry('Other');
+        setCustomIndustry(currentInd);
+      } else {
+        setSelectedIndustry('');
+        setCustomIndustry('');
+      }
+    } catch (err: any) {
       console.error('Failed loading organization details:', err);
+      const detail =
+        err?.response?.data?.detail ||
+        'Failed to load organization settings. Please try again.';
+      setFetchError(detail);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => {
     fetchOrgDetails();
+  }, [fetchOrgDetails]);
+
+  // Sync when workspace switches globally
+  useEffect(() => {
     const handleOrgChange = () => fetchOrgDetails();
     window.addEventListener('organization_changed', handleOrgChange);
     return () => window.removeEventListener('organization_changed', handleOrgChange);
   }, [fetchOrgDetails]);
 
-  const isOwner = org ? org.created_by === user?.id || user?.is_superuser : false;
+  // Derive resolved industry value
+  const effectiveIndustry =
+    selectedIndustry === 'Other' ? customIndustry.trim() : selectedIndustry;
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Dirty state tracking (compares against loaded org data)
+  const isDirty = useMemo(() => {
+    if (!org) return false;
+    const initialName = org.name || '';
+    const initialDesc = org.description || '';
+    const initialInd = org.industry || '';
+    const initialWeb = org.website || '';
+
+    return (
+      name.trim() !== initialName.trim() ||
+      description.trim() !== initialDesc.trim() ||
+      effectiveIndustry !== initialInd ||
+      website.trim() !== initialWeb.trim()
+    );
+  }, [org, name, description, effectiveIndustry, website]);
+
+  // Warn user before navigating away if form is dirty
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // Discard local edits and restore saved org values
+  const handleDiscardChanges = () => {
     if (!org) return;
+    setName(org.name || '');
+    setDescription(org.description || '');
+    setWebsite(org.website || '');
+    setErrors({});
+
+    const currentInd = org.industry || '';
+    if (STANDARD_INDUSTRIES.slice(0, -1).includes(currentInd)) {
+      setSelectedIndustry(currentInd);
+      setCustomIndustry('');
+    } else if (currentInd) {
+      setSelectedIndustry('Other');
+      setCustomIndustry(currentInd);
+    } else {
+      setSelectedIndustry('');
+      setCustomIndustry('');
+    }
+    toast.info('Reverted unsaved changes to saved organization profile.');
+  };
+
+  // Form validation
+  const validateForm = (): boolean => {
+    const newErrors: { name?: string; website?: string } = {};
+
+    if (!name.trim()) {
+      newErrors.name = 'Organization name is required.';
+    } else if (name.trim().length > 150) {
+      newErrors.name = 'Organization name cannot exceed 150 characters.';
+    }
+
+    if (website.trim()) {
+      const urlPattern = /^https?:\/\/.+/i;
+      if (!urlPattern.test(website.trim())) {
+        newErrors.website = 'Website must be a valid URL starting with http:// or https://';
+      } else if (website.trim().length > 255) {
+        newErrors.website = 'Website URL cannot exceed 255 characters.';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Save General Profile
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!org || !canEdit) return;
+
+    if (!validateForm()) {
+      toast.error('Please correct the validation errors before saving.');
+      return;
+    }
+
     setIsSaving(true);
     try {
-      await organizationsService.updateOrganization(org.id, {
-        name,
-        description,
-        industry,
-        website,
+      const updated = await organizationsService.updateOrganization(org.id, {
+        name: name.trim(),
+        description: description.trim() || undefined,
+        industry: effectiveIndustry || undefined,
+        website: website.trim() || undefined,
       });
-      toast.success('Organization settings updated successfully!');
-      fetchOrgDetails();
+
+      setOrg(updated);
+      toast.success(`Organization profile for '${updated.name}' saved successfully!`);
+      // Notify other components if org name changed
+      if (updated.name !== org.name) {
+        window.dispatchEvent(new Event('organization_changed'));
+      }
     } catch (err: any) {
-      console.error('Failed updating organization settings:', err);
-      toast.error(err?.response?.data?.detail || 'Failed to update organization settings.');
+      console.error('Failed updating organization profile:', err);
+      const detail =
+        err?.response?.data?.detail ||
+        'Failed to save organization settings. Please verify inputs and permissions.';
+      toast.error(detail);
     } finally {
       setIsSaving(false);
     }
   };
 
+  // Secure Delete Organization
   const handleDeleteOrg = async () => {
-    if (!org) return;
+    if (!org || !canDelete) return;
+
+    if (deleteConfirmationText.trim() !== org.name.trim()) {
+      toast.error(`Confirmation mismatch. Please type exactly '${org.name}'.`);
+      return;
+    }
+
     setIsDeleting(true);
     try {
-      await organizationsService.deleteOrganization(org.id);
-      toast.info(`Deleted organization '${org.name}'.`);
-      localStorage.removeItem('selected_organization_id');
-      window.dispatchEvent(new Event('organization_changed'));
-      router.push('/dashboard');
+      const deletedName = org.name;
+      const deletedId = org.id;
+      await organizationsService.deleteOrganization(deletedId);
+
+      // Clean up localStorage
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('selected_organization_id');
+        if (stored === deletedId) {
+          localStorage.removeItem('selected_organization_id');
+        }
+      }
+
+      // Check remaining workspaces
+      const remainingOrgs = await organizationsService.getOrganizations().catch(() => []);
+      const otherOrgs = remainingOrgs.filter((o) => o.id !== deletedId);
+
+      if (otherOrgs.length > 0) {
+        const nextOrg = otherOrgs[0];
+        localStorage.setItem('selected_organization_id', nextOrg.id);
+        window.dispatchEvent(new Event('organization_changed'));
+        toast.success(`Deleted '${deletedName}'. Switched to '${nextOrg.name}'.`);
+        router.push('/dashboard');
+      } else {
+        window.dispatchEvent(new Event('organization_changed'));
+        toast.success(`Deleted '${deletedName}'. No other workspaces remaining.`);
+        router.push('/dashboard');
+      }
     } catch (err: any) {
       console.error('Failed deleting organization:', err);
-      toast.error(err?.response?.data?.detail || 'Failed to delete organization.');
+      const detail =
+        err?.response?.data?.detail ||
+        'Failed to delete organization. You may not have administrative deletion rights.';
+      toast.error(detail);
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
+      setDeleteConfirmationText('');
     }
   };
 
-  if (isLoading || !org) {
+  // Loading Skeleton State
+  if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-muted-foreground gap-2">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-        <span className="text-xs">Loading organization settings...</span>
+      <div className="min-h-screen bg-background text-foreground p-6 space-y-6 max-w-4xl mx-auto">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-9 h-9 rounded-xl" />
+              <Skeleton className="w-48 h-7 rounded-lg" />
+            </div>
+            <Skeleton className="w-80 h-4 rounded-md ml-12" />
+          </div>
+          <Skeleton className="w-32 h-6 rounded-full self-start sm:self-center" />
+        </div>
+
+        {/* Profile Card Skeleton */}
+        <Card className="p-6 bg-card border-border rounded-2xl space-y-5">
+          <Skeleton className="w-56 h-5 rounded-md" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <Skeleton className="h-10 rounded-xl" />
+            <Skeleton className="h-10 rounded-xl" />
+            <Skeleton className="md:col-span-2 h-24 rounded-xl" />
+            <Skeleton className="md:col-span-2 h-10 rounded-xl" />
+          </div>
+          <div className="flex justify-end gap-3 pt-3 border-t border-border/50">
+            <Skeleton className="w-24 h-9 rounded-xl" />
+            <Skeleton className="w-32 h-9 rounded-xl" />
+          </div>
+        </Card>
+
+        {/* AI Card Skeleton */}
+        <Card className="p-6 bg-card border-border rounded-2xl space-y-4">
+          <Skeleton className="w-60 h-5 rounded-md" />
+          <Skeleton className="h-20 rounded-xl" />
+        </Card>
+
+        {/* Danger Zone Skeleton */}
+        <Card className="p-6 bg-rose-500/[0.04] border-rose-500/20 rounded-2xl space-y-3">
+          <Skeleton className="w-40 h-5 rounded-md" />
+          <Skeleton className="w-full h-12 rounded-xl" />
+        </Card>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-background text-foreground p-6 space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+  // Failed Fetch Error State
+  if (fetchError || !org) {
+    return (
+      <div className="min-h-screen bg-background text-foreground p-6 flex flex-col items-center justify-center max-w-xl mx-auto text-center gap-4">
+        <div className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
         <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold flex items-center gap-2 text-foreground">
-              <Settings className="w-6 h-6 text-primary" />
-              Organization Settings
-            </h1>
-            <OrganizationSwitcher onOrganizationChanged={fetchOrgDetails} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Configure company workspace profile, active security sessions, and AI compliance engine preferences.
+          <h2 className="text-lg font-bold text-foreground">
+            {fetchError ? 'Failed to Load Workspace Settings' : 'No Workspace Selected'}
+          </h2>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-md">
+            {fetchError ||
+              'Please select an active workspace from the global workspace switcher or create a new organization.'}
           </p>
         </div>
-
-        <div className="flex items-center gap-3 shrink-0">
-          <ThemeToggle />
+        <div className="flex items-center gap-3 pt-2">
           <Button
+            onClick={() => fetchOrgDetails()}
             variant="outline"
-            size="sm"
-            onClick={() => router.push('/team')}
-            className="bg-card border-border text-foreground hover:bg-muted text-xs h-9 gap-1.5 cursor-pointer"
+            className="border-border text-xs h-9 gap-1.5 cursor-pointer"
           >
-            <Users className="w-4 h-4 text-primary" />
-            Manage Team
+            <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retry
+          </Button>
+          <Button
+            onClick={() => router.push('/dashboard')}
+            className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 cursor-pointer"
+          >
+            Go to Dashboard
           </Button>
         </div>
       </div>
+    );
+  }
 
-      <form onSubmit={handleSaveSettings} className="space-y-6">
-        {/* Profile Card */}
-        <Card className="p-6 bg-card border-border rounded-2xl space-y-4 shadow-sm dark:shadow-xl">
-          <h2 className="text-sm font-bold text-foreground flex items-center gap-2 border-b border-border pb-3">
-            <Building className="w-4 h-4 text-primary" /> General Workspace Profile
-          </h2>
+  const activeOrgDisplayName = org.name || activeMembership?.organization_name || 'Active Workspace';
 
+  return (
+    <div className="min-h-screen bg-background text-foreground p-6 space-y-6 max-w-4xl mx-auto">
+      {/* ── Page Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+              <Settings className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                Organization Settings
+              </h1>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Manage workspace configuration for{' '}
+                <span className="font-semibold text-foreground">{activeOrgDisplayName}</span>.
+              </p>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground/80 pl-11">
+            Changes made here apply only to this organization.
+          </p>
+        </div>
+
+        {/* Compact Read-Only Role Context */}
+        <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+          <Badge
+            variant="outline"
+            className="text-[11px] px-3 py-1 border-border bg-card/60 text-muted-foreground font-medium flex items-center gap-1.5"
+          >
+            <span>Your role in this workspace:</span>
+            <span className="font-semibold text-foreground">
+              {formatRoleLabel(activeRole)}
+            </span>
+          </Badge>
+        </div>
+      </div>
+
+      {/* Non-Admin Read-Only Notice */}
+      {!canEdit && (
+        <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs">
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-semibold block">View-Only Workspace Access</span>
+            <p className="text-muted-foreground text-[11px] leading-relaxed">
+              You are signed in with view permissions. Only Organization Administrators can modify
+              workspace metadata, update company profile settings, or delete organizations.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 1: General Workspace Profile ── */}
+      <Card className="p-6 bg-card border-border rounded-2xl space-y-5 shadow-sm dark:shadow-xl">
+        <div className="flex items-center justify-between border-b border-border pb-3.5">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Building className="w-4 h-4 text-primary" /> General Workspace Profile
+            </h2>
+            <p className="text-[11px] text-muted-foreground">
+              Core company profile, legal entity details, and compliance boundary information.
+            </p>
+          </div>
+
+          {isDirty && (
+            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30">
+              Unsaved Changes
+            </Badge>
+          )}
+        </div>
+
+        <form onSubmit={handleSaveProfile} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">Organization Name</label>
+            {/* Organization Name */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>
+                  Organization Name <span className="text-rose-500">*</span>
+                </span>
+                <span className="text-[10px] text-muted-foreground font-normal">Required</span>
+              </label>
               <Input
                 type="text"
-                required
+                disabled={!canEdit || isSaving}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="bg-background border-border text-xs h-9 text-foreground"
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+                }}
+                placeholder="e.g. TechNova Solutions Pvt. Ltd."
+                className={cn(
+                  'bg-background border-border text-xs h-9 text-foreground rounded-xl',
+                  errors.name && 'border-rose-500 focus-visible:ring-rose-500'
+                )}
               />
+              {errors.name && (
+                <p className="text-[11px] text-rose-500 font-medium">{errors.name}</p>
+              )}
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">Industry</label>
-              <Input
-                type="text"
-                placeholder="e.g. Financial Services, Healthcare, IT"
-                value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                className="bg-background border-border text-xs h-9 text-foreground"
-              />
+            {/* Industry */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Briefcase className="w-3 h-3 text-muted-foreground" /> Industry
+                </span>
+                <span className="text-[10px] text-muted-foreground font-normal">Classification</span>
+              </label>
+              <select
+                disabled={!canEdit || isSaving}
+                value={selectedIndustry}
+                onChange={(e) => setSelectedIndustry(e.target.value)}
+                className="w-full bg-background border border-border text-foreground text-xs h-9 rounded-xl px-3 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <option value="">Select an industry...</option>
+                {STANDARD_INDUSTRIES.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
+                ))}
+              </select>
+
+              {/* Custom Industry Input when 'Other' is selected */}
+              {selectedIndustry === 'Other' && (
+                <div className="pt-1.5">
+                  <Input
+                    type="text"
+                    disabled={!canEdit || isSaving}
+                    value={customIndustry}
+                    onChange={(e) => setCustomIndustry(e.target.value)}
+                    placeholder="Specify custom industry classification"
+                    className="bg-background border-border text-xs h-9 text-foreground rounded-xl"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">Description</label>
-              <Input
-                type="text"
-                placeholder="Brief summary of company business and compliance scope"
+            {/* Description (Multiline Textarea) */}
+            <div className="md:col-span-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <FileText className="w-3 h-3 text-muted-foreground" /> Workspace Description
+                </label>
+                <span className="text-[10px] text-muted-foreground">
+                  {description.length} / 500 characters
+                </span>
+              </div>
+              <textarea
+                disabled={!canEdit || isSaving}
+                rows={3}
+                maxLength={500}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="bg-background border-border text-xs h-9 text-foreground"
+                placeholder="Brief summary of company business domain, compliance scope, and regulatory jurisdiction..."
+                className="w-full bg-background border border-border text-foreground text-xs rounded-xl p-3 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed resize-none transition-colors"
               />
+              <p className="text-[10px] text-muted-foreground">
+                Optional business scope provided to AI reasoning engines during regulatory clause gap analysis.
+              </p>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">Website URL</label>
-              <Input
-                type="url"
-                placeholder="https://company.com"
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-                className="bg-background border-border text-xs h-9 text-foreground"
-              />
+            {/* Website URL */}
+            <div className="md:col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Globe className="w-3 h-3 text-muted-foreground" /> Website URL
+                </span>
+                <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+              </label>
+              <div className="relative">
+                <Input
+                  type="url"
+                  disabled={!canEdit || isSaving}
+                  value={website}
+                  onChange={(e) => {
+                    setWebsite(e.target.value);
+                    if (errors.website) setErrors((prev) => ({ ...prev, website: undefined }));
+                  }}
+                  placeholder="https://technova.com"
+                  className={cn(
+                    'bg-background border-border text-xs h-9 text-foreground rounded-xl pl-8',
+                    errors.website && 'border-rose-500 focus-visible:ring-rose-500'
+                  )}
+                />
+                <Globe className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+              {errors.website && (
+                <p className="text-[11px] text-rose-500 font-medium">{errors.website}</p>
+              )}
             </div>
           </div>
-        </Card>
 
-        {/* Security & Authentication Info */}
-        <Card className="p-6 bg-card border-border rounded-2xl space-y-4 shadow-sm dark:shadow-xl">
-          <h2 className="text-sm font-bold text-foreground flex items-center gap-2 border-b border-border pb-3">
-            <Key className="w-4 h-4 text-primary" /> Active Session & Authentication
-          </h2>
+          {/* Section Action Footer */}
+          {canEdit && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border">
+              <span className="text-[11px] text-muted-foreground order-2 sm:order-1">
+                {isDirty ? 'You have unsaved changes in this profile.' : 'Profile is up to date.'}
+              </span>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="space-y-1">
-              <span className="text-muted-foreground font-semibold block">Authenticated User</span>
-              <div className="flex items-center gap-2 text-foreground font-semibold">
-                <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
-                {user?.full_name} ({user?.email})
+              <div className="flex items-center gap-2.5 order-1 sm:order-2 w-full sm:w-auto justify-end">
+                {isDirty && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDiscardChanges}
+                    disabled={isSaving}
+                    className="text-xs h-9 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    Discard Changes
+                  </Button>
+                )}
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={!isDirty || isSaving}
+                  className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 px-5 rounded-xl shadow-md shadow-primary/10 gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                      Saving Profile...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5 mr-1" />
+                      Save Profile
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
+          )}
+        </form>
+      </Card>
 
-            <div className="space-y-1">
-              <span className="text-muted-foreground font-semibold block">Role Status</span>
-              <div>
-                <Badge className={cn("text-[10px] uppercase font-mono", getRoleBadgeClass(activeRole))}>
-                  {user?.is_superuser ? 'Superuser Admin' : isOwner ? `Owner (${formatRoleLabel(activeRole)})` : formatRoleLabel(activeRole)}
-                </Badge>
-              </div>
-            </div>
+      {/* ── Section 2: AI Analysis Preferences ── */}
+      <Card className="p-6 bg-card border-border rounded-2xl space-y-4 shadow-sm dark:shadow-xl">
+        <div className="flex items-center justify-between border-b border-border pb-3.5">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-primary" /> AI Analysis Preferences
+            </h2>
+            <p className="text-[11px] text-muted-foreground">
+              Configure the default AI analysis settings for this workspace.
+            </p>
           </div>
-        </Card>
 
-        {/* AI & Compliance Engine Preferences */}
-        <Card className="p-6 bg-card border-border rounded-2xl space-y-4 shadow-sm dark:shadow-xl">
-          <h2 className="text-sm font-bold text-foreground flex items-center gap-2 border-b border-border pb-3">
-            <Sliders className="w-4 h-4 text-primary" /> Compliance Engine & AI Model Preferences
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">Preferred Reasoning Engine</label>
-              <select
-                value={preferredModel}
-                onChange={(e) => setPreferredModel(e.target.value)}
-                className="w-full bg-background border border-border text-foreground text-xs h-9 rounded-xl px-3"
-              >
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Recommended for Statutory Audits)</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Fast Clause Matching)</option>
-                <option value="gpt-4o">GPT-4o (Strict Regulatory Audit)</option>
-              </select>
-            </div>
-          </div>
-        </Card>
-
-        {/* Save CTA */}
-        <div className="flex justify-end pt-2">
-          <Button
-            type="submit"
-            disabled={isSaving}
-            className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-9 px-6 rounded-xl shadow-lg shadow-primary/20 cursor-pointer"
-          >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-1.5" /> Save Changes</>}
-          </Button>
+          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+            System Managed
+          </Badge>
         </div>
-      </form>
 
-      {/* Danger Zone */}
-      {isOwner && (
-        <Card className="p-6 bg-rose-500/10 border-rose-500/30 rounded-2xl space-y-4 mt-8">
-          <h2 className="text-sm font-bold text-rose-500 flex items-center gap-2 border-b border-rose-500/20 pb-3">
-            <AlertTriangle className="w-4 h-4 text-rose-500" /> Danger Zone
-          </h2>
+        <div className="space-y-3 pt-1">
+          <div className="p-4 rounded-xl bg-background border border-border/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                Default Analysis Engine: Automatic Reasoning Pipeline
+              </span>
+              <Badge variant="outline" className="text-[10px] font-mono border-border text-muted-foreground">
+                Hybrid GraphRAG + Gemini / OpenRouter
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              LexisGraph utilizes an automated multi-stage pipeline: semantic vector search (Qdrant),
+              structural knowledge graph reasoning (Neo4j), and high-precision LLM clause evaluation
+              with resilient failover. Reasoning models are calibrated centrally to ensure deterministic
+              accuracy and audit fidelity across all workspaces.
+            </p>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground/90 flex items-center gap-1.5 pt-1">
+            <Info className="w-3.5 h-3.5 text-primary shrink-0" />
+            Individual compliance analyses evaluate workspace-specific policy documents against global regulations with automated clause matching.
+          </p>
+        </div>
+      </Card>
+
+      {/* ── Section 3: Danger Zone ── */}
+      {canDelete && (
+        <Card className="p-6 bg-rose-500/[0.04] dark:bg-rose-950/20 border border-rose-500/30 rounded-2xl space-y-4 mt-8">
+          <div className="flex items-center justify-between border-b border-rose-500/20 pb-3">
+            <h2 className="text-sm font-bold text-rose-500 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-500" /> Danger Zone
+            </h2>
+            <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/30">
+              Irreversible
+            </Badge>
+          </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <h3 className="text-xs font-semibold text-foreground">Delete Organization</h3>
-              <p className="text-[11px] text-muted-foreground max-w-md">
-                Permanently delete this organization, including associated policy documents, compliance reports, and audit logs. This operation cannot be undone.
+              <p className="text-[11px] text-muted-foreground max-w-xl leading-relaxed">
+                Delete this workspace and its associated organization-specific data, subject to applicable retention requirements. This action may be irreversible.
               </p>
             </div>
 
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowDeleteConfirm(true)}
-              className="border-rose-500/50 text-rose-500 hover:bg-rose-500/10 text-xs h-9 px-4 shrink-0 cursor-pointer"
+              onClick={() => {
+                setDeleteConfirmationText('');
+                setShowDeleteConfirm(true);
+              }}
+              className="border-rose-500/40 text-rose-500 hover:bg-rose-500/10 hover:text-rose-600 text-xs h-9 px-4 shrink-0 cursor-pointer rounded-xl"
             >
               <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Organization
             </Button>
@@ -295,28 +692,65 @@ export function OrganizationSettingsContent() {
         </Card>
       )}
 
-      {/* Confirm Delete Modal */}
-      {showDeleteConfirm && (
+      {/* ── Secure Deletion Confirmation Modal ── */}
+      {showDeleteConfirm && org && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-foreground flex items-center gap-2 text-rose-500">
-              <AlertTriangle className="w-5 h-5 text-rose-500" /> Delete {org.name}?
-            </h3>
+          <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20 shrink-0">
+                <ShieldAlert className="w-6 h-6 text-rose-500" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">
+                  Delete {org.name}?
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  This action may permanently remove this organization&apos;s private policies, compliance reports, findings, analysis history, and member access. Other organizations and shared global regulations will remain unaffected.
+                </p>
+              </div>
+            </div>
 
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Are you sure you want to permanently delete <span className="font-semibold text-foreground">{org.name}</span>? All documents, compliance reports, and team access will be permanently destroyed.
-            </p>
+            <div className="p-3.5 rounded-xl bg-background border border-border/80 space-y-2">
+              <label className="text-xs font-semibold text-foreground block">
+                To confirm, please type <span className="font-mono text-rose-500 select-all font-bold">{org.name}</span> below:
+              </label>
+              <Input
+                type="text"
+                autoFocus
+                disabled={isDeleting}
+                value={deleteConfirmationText}
+                onChange={(e) => setDeleteConfirmationText(e.target.value)}
+                placeholder={`Type "${org.name}" to confirm`}
+                className="bg-card border-border text-xs h-9 text-foreground rounded-xl"
+              />
+            </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)} className="text-xs h-8 text-muted-foreground cursor-pointer">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isDeleting}
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmationText('');
+                }}
+                className="text-xs h-8 text-muted-foreground cursor-pointer"
+              >
                 Cancel
               </Button>
               <Button
+                size="sm"
                 onClick={handleDeleteOrg}
-                disabled={isDeleting}
-                className="bg-rose-600 hover:bg-rose-500 text-white text-xs h-8 px-4 cursor-pointer"
+                disabled={isDeleting || deleteConfirmationText.trim() !== org.name.trim()}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs h-8 px-4 rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-rose-600/20"
               >
-                {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirm Deletion'}
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Deleting...
+                  </>
+                ) : (
+                  'Delete Organization'
+                )}
               </Button>
             </div>
           </div>
@@ -327,10 +761,13 @@ export function OrganizationSettingsContent() {
 }
 
 export default function OrganizationSettingsPage() {
+  const { activeMembership } = useAuth();
+  const activeOrgId = activeMembership?.organization_id;
+
   return (
     <ProtectedRoute>
       <AppShell>
-        <OrganizationSettingsContent />
+        <OrganizationSettingsContent key={activeOrgId || 'no-org'} />
       </AppShell>
     </ProtectedRoute>
   );
