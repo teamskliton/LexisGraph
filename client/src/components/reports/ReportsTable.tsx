@@ -1,11 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { ReportItemResponse } from "@/types/report";
 import { ReportStatusBadge } from "./ReportStatusBadge";
-import { ReportScoreBadge } from "./ReportScoreBadge";
 import {
   Table,
   TableBody,
@@ -16,13 +15,34 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Eye, FileCheck, Copy, Check, Inbox, ShieldAlert, Download, Loader2, Sparkles } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Eye,
+  FileCheck,
+  Copy,
+  Check,
+  Inbox,
+  ShieldAlert,
+  Download,
+  Loader2,
+  Sparkles,
+  MoreVertical,
+  Trash2,
+  BookOpen,
+  FileText,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { reportService } from "@/services/reportService";
 
 interface ReportsTableProps {
   reports: ReportItemResponse[];
-  orgMap?: Map<string, string>;
   isLoading: boolean;
   onViewReport: (reportId: string) => void;
   onDeleteReport?: (reportId: string) => void;
@@ -34,32 +54,46 @@ export const ReportsTableSkeleton: React.FC = () => {
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40">
-            <TableHead className="w-[12%]">Report ID</TableHead>
-            <TableHead className="w-[15%]">Organization</TableHead>
-            <TableHead className="w-[12%]">Regulation</TableHead>
-            <TableHead className="w-[12%]">Policy</TableHead>
-            <TableHead className="w-[12%]">Overall Score</TableHead>
-            <TableHead className="w-[10%]">Risk Level</TableHead>
-            <TableHead className="w-[10%]">Status</TableHead>
-            <TableHead className="w-[7%]">Time</TableHead>
-            <TableHead className="w-[10%]">Created Date</TableHead>
-            <TableHead className="w-[10%] text-right">Actions</TableHead>
+            <TableHead className="min-w-[200px]">Report</TableHead>
+            <TableHead className="min-w-[220px]">Analysis Scope</TableHead>
+            <TableHead className="w-[130px] min-w-[125px]">Compliance</TableHead>
+            <TableHead className="w-[110px] min-w-[105px]">Status</TableHead>
+            <TableHead className="w-[110px] min-w-[105px]">Generated</TableHead>
+            <TableHead className="w-[115px] min-w-[115px] text-right pr-4">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {Array.from({ length: 5 }).map((_, index) => (
             <TableRow key={index}>
-              <TableCell><Skeleton className="h-5 w-24 font-mono" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-28" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-24 font-mono" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-24 font-mono" /></TableCell>
-              <TableCell><Skeleton className="h-6 w-20 rounded-md" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-              <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-12" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-              <TableCell className="text-right">
-                <Skeleton className="h-8 w-24 ml-auto rounded-md" />
+              <TableCell>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-5 w-44" />
+                  <Skeleton className="h-3.5 w-24 font-mono" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-10" />
+                  <Skeleton className="h-5 w-14 rounded" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+              <TableCell className="text-right pr-4">
+                <div className="flex items-center justify-end gap-1.5">
+                  <Skeleton className="h-8 w-16 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -71,21 +105,20 @@ export const ReportsTableSkeleton: React.FC = () => {
 
 export const ReportsTable: React.FC<ReportsTableProps> = ({
   reports,
-  orgMap = new Map(),
   isLoading,
   onViewReport,
   onDeleteReport,
 }) => {
   const router = useRouter();
-  const [copiedId, setCopiedId] = React.useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  const handleDownloadPdf = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDownloadPdf = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (downloadingId === id) return;
     setDownloadingId(id);
     try {
-      toast.info("Downloading PDF report...");
+      toast.info("Generating and downloading PDF report...");
       await reportService.downloadReportPdf(id);
       toast.success("PDF report downloaded.");
     } catch (err: any) {
@@ -105,6 +138,15 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const confirmDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this compliance report? This action cannot be undone.")) {
+      if (onDeleteReport) {
+        onDeleteReport(id);
+      }
+    }
+  };
+
   if (isLoading) {
     return <ReportsTableSkeleton />;
   }
@@ -115,72 +157,100 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
           <Inbox className="h-7 w-7 text-primary" />
         </div>
-        <h3 className="text-lg font-semibold text-foreground">No reports found</h3>
+        <h3 className="text-lg font-semibold text-foreground">No compliance reports yet</h3>
         <p className="text-sm text-muted-foreground max-w-sm">
-          No compliance reports match your current filters or search terms. Try adjusting your filters.
+          Run your first compliance analysis to generate a report, or adjust your search filters.
         </p>
+        <Button
+          onClick={() => router.push("/compliance")}
+          className="mt-2 text-xs font-semibold cursor-pointer"
+          size="sm"
+        >
+          Run Your First Analysis
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-[12%]">Report ID</TableHead>
-              <TableHead className="w-[15%]">Organization</TableHead>
-              <TableHead className="w-[12%]">Regulation</TableHead>
-              <TableHead className="w-[12%]">Policy</TableHead>
-              <TableHead className="w-[12%]">Overall Score</TableHead>
-              <TableHead className="w-[10%]">Risk Level</TableHead>
-              <TableHead className="w-[10%]">Status</TableHead>
-              <TableHead className="w-[7%]">Processing Time</TableHead>
-              <TableHead className="w-[10%]">Created Date</TableHead>
-              <TableHead className="w-[10%] text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {reports.map((report) => {
-              const reportId = report?.id || "";
-              const orgId = report?.organization_id || "";
-              const regId = report?.regulation_document_id || (report as any)?.regulation_id || "";
-              const polId = report?.policy_document_id || "";
-              const status = report?.report_status || (report as any)?.status || "PENDING";
-              const riskLevel = report?.risk_level || "MEDIUM";
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <TableHead className="min-w-[200px]">Report</TableHead>
+            <TableHead className="min-w-[220px]">Analysis Scope</TableHead>
+            <TableHead className="w-[130px] min-w-[125px]">Compliance</TableHead>
+            <TableHead className="w-[110px] min-w-[105px]">Status</TableHead>
+            <TableHead className="w-[110px] min-w-[105px]">Generated</TableHead>
+            <TableHead className="w-[115px] min-w-[115px] text-right pr-4">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {reports.map((report) => {
+            const reportId = report?.id || "";
+            const status = report?.report_status || (report as any)?.status || "PENDING";
+            const isCompleted = status === "COMPLETED";
+            const riskLevel = (report?.risk_level || "MEDIUM").toUpperCase();
 
-              const orgName =
-                orgMap.get(orgId) ||
-                (orgId ? `Org: ${orgId.substring(0, 8)}...` : "N/A");
+            // Compliance score computation
+            const rawScore = report.overall_score;
+            const scorePercent =
+              rawScore != null
+                ? Math.round(rawScore <= 1.0 && rawScore > 0 ? rawScore * 100 : rawScore)
+                : null;
 
-              const formattedDate = report?.created_at
-                ? format(new Date(report.created_at), "MMM d, yyyy")
-                : "—";
+            // Human-readable titles resolved from backend
+            const reportTitle =
+              report?.report_title ||
+              (report?.created_at
+                ? `Compliance Assessment — ${format(new Date(report.created_at), "MMM d, yyyy")}`
+                : "Compliance Assessment");
 
-              const processingTime =
-                report?.processing_time_seconds !== null &&
-                  report?.processing_time_seconds !== undefined
-                  ? `${report.processing_time_seconds.toFixed(1)}s`
-                  : "—";
+            const regTitle =
+              report?.regulation_name ||
+              (report?.regulation_document_id
+                ? `Regulation (${report.regulation_document_id.substring(0, 8)})`
+                : "Regulation Standard");
 
-              return (
-                <TableRow
-                  key={reportId}
-                  className="hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => onViewReport(reportId)}
-                >
-                  {/* Report ID */}
-                  <TableCell className="font-mono text-xs">
-                    <div className="flex items-center gap-1.5 group">
-                      <FileCheck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span title={reportId} className="font-medium text-foreground">
-                        {reportId ? `${reportId.substring(0, 8)}...` : "N/A"}
+            const polTitle =
+              report?.policy_name ||
+              (report?.policy_document_id
+                ? `Policy (${report.policy_document_id.substring(0, 8)})`
+                : "Policy Document");
+
+            const formattedDate = report?.created_at
+              ? format(new Date(report.created_at), "MMM d, yyyy")
+              : "—";
+
+            const fullDateTime = report?.created_at
+              ? format(new Date(report.created_at), "PPPpp")
+              : "";
+
+            return (
+              <TableRow
+                key={reportId}
+                className="hover:bg-muted/30 transition-colors cursor-pointer"
+                onClick={() => onViewReport(reportId)}
+              >
+                {/* 1. Report: Human title + Short ID */}
+                <TableCell className="align-middle py-3 min-w-[200px]">
+                  <div className="space-y-1">
+                    <div
+                      className="font-semibold text-sm text-foreground hover:text-primary transition-colors line-clamp-1 max-w-[260px]"
+                      title={reportTitle}
+                    >
+                      {reportTitle}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono group">
+                      <FileCheck className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                      <span title={reportId}>
+                        #{reportId ? reportId.substring(0, 8) : "N/A"}
                       </span>
                       {reportId && (
                         <button
+                          type="button"
                           onClick={(e) => handleCopyId(reportId, e)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 rounded"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
                           title="Copy full Report ID"
                         >
                           {copiedId === reportId ? (
@@ -191,135 +261,156 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                         </button>
                       )}
                     </div>
-                  </TableCell>
+                  </div>
+                </TableCell>
 
-                  {/* Organization */}
-                  <TableCell className="text-sm font-medium text-foreground">
-                    <span className="truncate block max-w-[180px]" title={orgName}>
-                      {orgName}
+                {/* 2. Analysis Scope: Policy & Regulation */}
+                <TableCell className="align-middle py-3 min-w-[220px]">
+                  <div className="space-y-1 text-xs">
+                    <div
+                      className="flex items-center gap-1.5 text-foreground font-medium line-clamp-1 max-w-[280px]"
+                      title={`Policy: ${polTitle}`}
+                    >
+                      <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span className="truncate">{polTitle}</span>
+                    </div>
+                    <div
+                      className="flex items-center gap-1.5 text-muted-foreground line-clamp-1 max-w-[280px]"
+                      title={`Regulation: ${regTitle}`}
+                    >
+                      <BookOpen className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+                      <span className="truncate">{regTitle}</span>
+                    </div>
+                  </div>
+                </TableCell>
+
+                {/* 3. Compliance: Score + Risk Level (No duplicate 'High Risk' label) */}
+                <TableCell className="align-middle py-3 w-[130px] min-w-[125px] whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm tabular-nums text-foreground">
+                      {scorePercent != null ? `${scorePercent}%` : "—"}
                     </span>
-                  </TableCell>
-
-                  {/* Regulation */}
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    <span title={regId}>
-                      {regId ? `${regId.substring(0, 8)}...` : "N/A"}
-                    </span>
-                  </TableCell>
-
-                  {/* Policy */}
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    <span title={polId}>
-                      {polId ? `${polId.substring(0, 8)}...` : "N/A"}
-                    </span>
-                  </TableCell>
-
-                  {/* Overall Score */}
-                  <TableCell>
-                    <ReportScoreBadge score={report.overall_score} />
-                  </TableCell>
-
-                  {/* Risk Level */}
-                  <TableCell>
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider ${riskLevel === "LOW"
-                          ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/30"
-                          : riskLevel === "HIGH"
-                            ? "bg-orange-500/10 text-orange-600 border border-orange-500/30"
-                            : riskLevel === "CRITICAL"
-                              ? "bg-red-500/10 text-red-600 border border-red-500/30"
-                              : "bg-amber-500/10 text-amber-600 border border-amber-500/30"
-                        }`}
+                      className={cn(
+                        "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider",
+                        riskLevel === "LOW" &&
+                          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30",
+                        riskLevel === "HIGH" &&
+                          "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30",
+                        riskLevel === "CRITICAL" &&
+                          "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30",
+                        riskLevel === "MEDIUM" &&
+                          "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                      )}
                     >
                       {riskLevel}
                     </span>
-                  </TableCell>
+                  </div>
+                </TableCell>
 
-                  {/* Status */}
-                  <TableCell>
-                    <ReportStatusBadge status={status} />
-                  </TableCell>
+                {/* 4. Status */}
+                <TableCell className="align-middle py-3 w-[110px] min-w-[105px]">
+                  <ReportStatusBadge status={status} />
+                </TableCell>
 
-                  {/* Processing Time */}
-                  <TableCell className="text-sm text-muted-foreground font-mono">
-                    {processingTime}
-                  </TableCell>
-
-                  {/* Created Date */}
-                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                {/* 5. Generated Date */}
+                <TableCell className="align-middle py-3 w-[110px] min-w-[105px]">
+                  <span
+                    className="text-xs text-muted-foreground whitespace-nowrap"
+                    title={fullDateTime}
+                  >
                     {formattedDate}
-                  </TableCell>
+                  </span>
+                </TableCell>
 
-                  {/* Actions */}
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onViewReport(reportId)}
-                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>View</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
-                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-primary border-primary/30 hover:bg-primary/10"
-                        title="View Findings Workspace"
-                      >
-                        <ShieldAlert className="h-3.5 w-3.5 text-primary" />
-                        <span>Findings</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push(`/compliance/reports/${reportId}/recommendations`)}
-                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                        title="View Recommendations Workspace"
-                      >
-                        <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                        <span>Recs</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => handleDownloadPdf(reportId, e)}
-                        disabled={downloadingId === reportId}
-                        className="gap-1.5 h-8 font-medium cursor-pointer text-xs"
-                        title="Download PDF Report"
-                      >
-                        {downloadingId === reportId ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Download className="h-3.5 w-3.5" />
-                        )}
-                        <span>PDF</span>
-                      </Button>
-                      {onDeleteReport && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onDeleteReport(reportId)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                          title="Delete Report"
+                {/* 6. Actions: Primary View Report + Three-dot dropdown */}
+                <TableCell className="align-middle py-3 text-right pr-4 w-[115px] min-w-[115px]">
+                  <div
+                    className="flex items-center justify-end gap-1.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onViewReport(reportId)}
+                      className="h-8 px-2.5 font-medium cursor-pointer text-xs"
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1" />
+                      <span>View</span>
+                    </Button>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 cursor-pointer text-muted-foreground hover:text-foreground shrink-0"
+                            title="More Actions"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                            <span className="sr-only">More actions</span>
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            router.push(`/compliance/reports/${reportId}/findings`)
+                          }
+                          className="cursor-pointer gap-2"
                         >
-                          <Inbox className="h-3.5 w-3.5 hidden" />
-                          <span className="sr-only">Delete</span>
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+                          <ShieldAlert className="h-4 w-4 text-primary" />
+                          <span>View Findings</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          onClick={() =>
+                            router.push(
+                              `/compliance/reports/${reportId}/recommendations`
+                            )
+                          }
+                          className="cursor-pointer gap-2"
+                        >
+                          <Sparkles className="h-4 w-4 text-amber-500" />
+                          <span>View Recommendations</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          onClick={(e) => handleDownloadPdf(reportId, e)}
+                          disabled={!isCompleted || downloadingId === reportId}
+                          className="cursor-pointer gap-2"
+                        >
+                          {downloadingId === reportId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 text-sky-400" />
+                          )}
+                          <span>Download PDF</span>
+                        </DropdownMenuItem>
+
+                        {onDeleteReport && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => confirmDelete(reportId, e)}
+                              variant="destructive"
+                              className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete Report</span>
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 };

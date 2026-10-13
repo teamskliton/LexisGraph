@@ -289,6 +289,52 @@ class ComplianceReport(Base):
         lazy="select",
     )
 
+    @property
+    def regulation_name(self) -> str | None:
+        if self.regulation:
+            return getattr(self.regulation, "official_title", None) or self.regulation.title or self.regulation.act_name
+        return None
+
+    @property
+    def policy_name(self) -> str | None:
+        if self.policy_document:
+            return self.policy_document.title or self.policy_document.original_filename
+        return None
+
+    @property
+    def organization_name(self) -> str | None:
+        if self.organization:
+            return self.organization.name
+        return None
+
+    @property
+    def report_title(self) -> str:
+        reg_title = (getattr(self.regulation, "official_title", None) or self.regulation.title or self.regulation.act_name) if self.regulation else ""
+        pol_title = (self.policy_document.title or self.policy_document.original_filename) if self.policy_document else ""
+
+        reg_lower = reg_title.lower() if reg_title else ""
+        if "dpdp" in reg_lower or "data protection" in reg_lower or "privacy" in reg_lower:
+            return "Data Protection Compliance Assessment"
+        elif "posh" in reg_lower or "harassment" in reg_lower or "women" in reg_lower:
+            return "Workplace Safety & POSH Review"
+        elif "fema" in reg_lower or "foreign exchange" in reg_lower:
+            return "Foreign Exchange Compliance Assessment"
+        elif "it act" in reg_lower or "information technology" in reg_lower or "cyber" in reg_lower:
+            return "Cybersecurity & IT Act Assessment"
+        elif "companies" in reg_lower:
+            return "Corporate Governance Compliance Assessment"
+        elif "wages" in reg_lower or "wage" in reg_lower:
+            return "Labour & Wages Compliance Review"
+        elif "factories" in reg_lower:
+            return "Occupational Health & Factories Review"
+        elif reg_title:
+            return f"{reg_title} Compliance Assessment"
+        elif pol_title:
+            return f"{pol_title} Compliance Review"
+        else:
+            date_str = self.created_at.strftime("%b %d, %Y") if self.created_at else "Report"
+            return f"Compliance Assessment — {date_str}"
+
     def __repr__(self) -> str:
         return (
             f"<ComplianceReport(id={self.id}, org={self.organization_id}, "

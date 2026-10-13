@@ -18,6 +18,7 @@ export const reportService = {
     risk_level?: string;
     start_date?: string;
     end_date?: string;
+    search?: string;
     report_id?: string;
     policy_name?: string;
     sort_by?: string;
@@ -31,6 +32,7 @@ export const reportService = {
     if (params?.risk_level && params.risk_level !== "ALL") queryParams.risk_level = params.risk_level;
     if (params?.start_date) queryParams.start_date = params.start_date;
     if (params?.end_date) queryParams.end_date = params.end_date;
+    if (params?.search) queryParams.search = params.search;
     if (params?.report_id) queryParams.report_id = params.report_id;
     if (params?.policy_name) queryParams.policy_name = params.policy_name;
     if (params?.sort_by) queryParams.sort_by = params.sort_by;
@@ -38,6 +40,25 @@ export const reportService = {
     const response = await api.get<ReportPaginatedResponse>("/reports", {
       params: queryParams,
     });
+    return response.data;
+  },
+
+  /**
+   * Fetch KPI summary for an organization from GET /reports/organization/{organization_id}/summary
+   */
+  getOrganizationReportSummary: async (
+    organizationId: string
+  ): Promise<{
+    total_reports: number;
+    latest_score: number | null;
+    latest_report_date: string | null;
+    latest_risk_level: string | null;
+    average_score: number | null;
+    high_risk_count: number;
+  }> => {
+    const response = await api.get(
+      `/reports/organization/${organizationId}/summary`
+    );
     return response.data;
   },
 

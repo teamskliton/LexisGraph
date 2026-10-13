@@ -55,6 +55,7 @@ def list_reports(
     risk_level: Optional[str] = Query(None, description="Filter by Risk Level (LOW, MEDIUM, HIGH, CRITICAL)"),
     start_date: Optional[datetime] = Query(None, description="Filter by created_at >= start_date"),
     end_date: Optional[datetime] = Query(None, description="Filter by created_at <= end_date"),
+    search: Optional[str] = Query(None, description="Unified search across reports, policies, regulations"),
     report_id: Optional[str] = Query(None, description="Search by Report ID substring"),
     policy_name: Optional[str] = Query(None, description="Search by Policy Document Name substring"),
     sort_by: Optional[str] = Query("newest", description="Sort order: newest, oldest, highest_score, lowest_score"),
@@ -95,6 +96,7 @@ def list_reports(
         end_date=end_date,
         report_id_query=report_id,
         policy_name_query=policy_name,
+        search_query=search,
         sort_by=sort_by,
         user_id=current_user.id,
     )
@@ -104,6 +106,29 @@ def list_reports(
         page_size=page_size,
         items=[ReportItemResponse.model_validate(item) for item in items],
     )
+
+
+@router.get(
+    "/organization/{organization_id}/summary",
+    summary="Get report KPI summary for an organization",
+)
+def get_organization_report_summary(
+    organization_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: ReportService = Depends(get_report_service),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get organization-scoped report KPI summary metrics.
+    Enforces active membership authorization.
+    """
+    if not verify_user_organization_access(db, current_user.id, organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this organization's report summary.",
+        )
+
+    return service.get_organization_report_summary(db, organization_id)
 
 
 @router.get(

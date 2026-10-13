@@ -16,6 +16,10 @@ export interface ReportItemResponse {
   processing_time_seconds: number | null;
   processing_time_ms?: number | null;
   is_deleted?: boolean;
+  report_title?: string;
+  regulation_name?: string | null;
+  policy_name?: string | null;
+  organization_name?: string | null;
 }
 
 export interface ReportPaginatedResponse {
@@ -50,12 +54,29 @@ export interface ReportDetailResponse {
   is_deleted?: boolean;
   created_at: string;
   updated_at: string;
+  report_title?: string;
+  regulation_name?: string | null;
+  policy_name?: string | null;
+  organization_name?: string | null;
+}
+
+export interface OrganizationReportSummary {
+  total_reports: number;
+  latest_score: number | null;
+  latest_report_date: string | null;
+  latest_risk_level: string | null;
+  average_score: number | null;
+  high_risk_count: number;
 }
 
 export interface ReportFilterParams {
+  search?: string;
   status?: string;
-  orgSearch?: string;
+  risk_level?: string;
+  regulation_id?: string;
+  start_date?: string;
+  end_date?: string;
   idSearch?: string;
-  sortOrder?: 'newest' | 'oldest';
+  sort_by?: 'newest' | 'oldest' | 'highest_score' | 'lowest_score';
 }
 

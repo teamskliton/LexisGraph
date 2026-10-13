@@ -40,6 +40,10 @@ class ReportItemResponse(BaseModel):
     regulation_id: Optional[uuid.UUID] = None
     regulation_document_id: Optional[uuid.UUID] = None
     policy_document_id: Optional[uuid.UUID] = None
+    report_title: Optional[str] = None
+    regulation_name: Optional[str] = None
+    policy_name: Optional[str] = None
+    organization_name: Optional[str] = None
     overall_score: Optional[float] = None
     risk_level: Optional[str] = None
     total_matches: Optional[int] = None
@@ -75,6 +79,10 @@ class ReportDetailResponse(BaseModel):
     regulation_id: uuid.UUID
     regulation_document_id: Optional[uuid.UUID] = None
     policy_document_id: uuid.UUID
+    report_title: Optional[str] = None
+    regulation_name: Optional[str] = None
+    policy_name: Optional[str] = None
+    organization_name: Optional[str] = None
     overall_score: Optional[float] = None
     risk_level: Optional[str] = None
     summary: Optional[str] = None
