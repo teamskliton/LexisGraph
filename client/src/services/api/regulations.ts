@@ -3,16 +3,21 @@ import { api } from '../api';
 export interface GlobalRegulation {
   id: string;
   title: string;
+  official_title?: string;
   act_name?: string;
   version?: string;
   act_year?: number;
   jurisdiction?: string;
   issuing_authority?: string;
+  effective_date?: string;
+  domain?: string;
+  source?: string;
   document_hash: string;
   original_filename: string;
   file_size: number;
   processing_status: string;
   is_linked?: boolean;
+  created_at?: string;
 }
 
 export const regulationsApi = {

@@ -49,15 +49,18 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
 }: RegulationDetailsDrawerProps) {
   if (!regulation) return null;
 
-  const title = regulation.title || regulation.act_name || "Statutory Regulation";
-  const jurisdiction = regulation.jurisdiction || "India (Central)";
-  const authority = regulation.issuing_authority || "Ministry of Corporate Affairs";
-  const actYear = regulation.act_year || 2013;
-  const version = regulation.version || "2013 Statutory Text";
-  const fileSizeMB = regulation.file_size ? `${(regulation.file_size / (1024 * 1024)).toFixed(1)} MB` : "3.5 MB";
+  const title = regulation.official_title || regulation.title || regulation.act_name || "Statutory Act";
+  const jurisdiction = regulation.jurisdiction || "Not available";
+  const authority = regulation.issuing_authority || "Unverified";
+  const actYear = regulation.act_year ? String(regulation.act_year) : "Not available";
+  const version = regulation.version || "Not available";
+  const domain = regulation.domain || "General Statutory";
+  const effectiveDate = regulation.effective_date || "Not available";
+  const source = regulation.source || "Official Gazette / Government Registry";
+  const fileSizeMB = regulation.file_size ? `${(regulation.file_size / (1024 * 1024)).toFixed(2)} MB` : "Not available";
 
   const handleCopyReference = () => {
-    const ref = `${title} (${actYear}) — ${jurisdiction}. Hash: ${regulation.document_hash.substring(0, 12)}`;
+    const ref = `${title} (${actYear}) — ${jurisdiction}. Authority: ${authority}. Hash: ${regulation.document_hash ? regulation.document_hash.substring(0, 12) : "N/A"}`;
     navigator.clipboard.writeText(ref);
     toast.success("Regulation reference copied to clipboard.");
   };
@@ -76,9 +79,13 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-border/60">
                   {jurisdiction}
                 </Badge>
-                {isLinked && (
+                {isLinked ? (
                   <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-[10px] font-semibold">
-                    Linked for Analysis
+                    Linked to Workspace
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-muted text-muted-foreground border-border/60 text-[10px]">
+                    Available
                   </Badge>
                 )}
               </div>
@@ -88,7 +95,7 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
             </div>
           </div>
           <SheetDescription className="text-xs text-muted-foreground">
-            Global statutory regulation metadata, clause nodes, and analysis selection.
+            Official statutory legislation metadata and workspace compliance linkage.
           </SheetDescription>
         </SheetHeader>
 
@@ -102,7 +109,7 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
               className="text-xs gap-1.5 cursor-pointer font-semibold"
             >
               <Zap className="h-3.5 w-3.5 text-warning" />
-              {isLinked ? "Unlink Analysis" : "Select for Analysis"}
+              {isLinked ? "Unlink Workspace" : "Link Workspace"}
             </Button>
           )}
 
@@ -133,7 +140,7 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
 
         {/* Regulation Metadata */}
         <div className="space-y-2 text-xs border-t border-border/40 pt-4">
-          <h4 className="font-semibold text-foreground">Regulation Attributes</h4>
+          <h4 className="font-semibold text-foreground">Verified Regulatory Metadata</h4>
 
           <div className="space-y-2 text-muted-foreground">
             <div className="flex justify-between">
@@ -147,13 +154,28 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
             </div>
 
             <div className="flex justify-between">
-              <span>Statutory Act Year:</span>
+              <span>Enactment Year:</span>
               <strong className="text-foreground">{actYear}</strong>
             </div>
 
             <div className="flex justify-between">
-              <span>Version:</span>
+              <span>Effective Date:</span>
+              <strong className="text-foreground">{effectiveDate}</strong>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Regulatory Domain:</span>
+              <strong className="text-foreground">{domain}</strong>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Version / Amendment:</span>
               <strong className="text-foreground">{version}</strong>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Official Source:</span>
+              <strong className="text-foreground truncate max-w-[200px]" title={source}>{source}</strong>
             </div>
 
             <div className="flex justify-between">
@@ -171,7 +193,7 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
 
           <div className="p-3 rounded-lg border border-border/40 bg-muted/20 space-y-1.5 text-muted-foreground">
             <div className="flex justify-between">
-              <span>Filename:</span>
+              <span>Original Filename:</span>
               <strong className="text-foreground font-mono text-[11px] truncate max-w-[200px]" title={regulation.original_filename}>
                 {regulation.original_filename}
               </strong>
@@ -185,23 +207,21 @@ export const RegulationDetailsDrawer = memo(function RegulationDetailsDrawer({
             <div className="flex justify-between">
               <span>Document Hash:</span>
               <strong className="text-foreground font-mono text-[10px] truncate max-w-[180px]" title={regulation.document_hash}>
-                {regulation.document_hash.substring(0, 16)}…
+                {regulation.document_hash ? `${regulation.document_hash.substring(0, 16)}…` : "Not available"}
               </strong>
             </div>
           </div>
         </div>
 
-        {/* Applicable Industries */}
+        {/* Regulatory Scope */}
         <div className="space-y-2 border-t border-border/40 pt-4 text-xs">
           <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5 text-muted-foreground" /> Applicable Industries
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground" /> Regulatory Domain
           </h4>
           <div className="flex flex-wrap gap-1">
-            {["Information Technology", "Banking & Finance", "Healthcare", "Corporate HR"].map((ind) => (
-              <Badge key={ind} variant="outline" className="text-[10px] font-normal border-border/60">
-                {ind}
-              </Badge>
-            ))}
+            <Badge variant="outline" className="text-[10px] font-normal border-border/60">
+              {domain}
+            </Badge>
           </div>
         </div>
       </SheetContent>

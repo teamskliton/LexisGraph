@@ -111,7 +111,18 @@ def upload_document(
         )
 
     if document_type == DBDocumentType.REGULATION.value:
-        from app.services.regulation_service import RegulationDeduplicationEngine, link_regulation_to_organization
+        if not getattr(current_user, "is_superuser", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only authorized platform administrators can import or publish global regulations. Organization users can link existing regulations from the library.",
+            )
+
+        from app.services.regulation_service import (
+            RegulationDeduplicationEngine,
+            link_regulation_to_organization,
+            resolve_canonical_metadata,
+            extract_year_from_title,
+        )
 
         # Run multi-strategy deduplication check (SHA-256, title/version, file size)
         dup_reg, strategy = RegulationDeduplicationEngine.check_duplicate(
@@ -132,11 +143,27 @@ def upload_document(
                 pass
             return dup_reg
 
-        # Infer default act_name and version if missing
-        reg_act = act_name or (file.filename.rsplit('.', 1)[0] if file.filename else "Regulation")
-        reg_ver = version or "1.0"
-        reg_juris = jurisdiction or "Global"
-        reg_title = f"{reg_act} (v{reg_ver})" if version else (file.filename or "Regulation")
+        # Resolve verified canonical metadata
+        canon = resolve_canonical_metadata(file.filename or "", file.filename or "", act_name)
+
+        reg_act = act_name
+        reg_title = None
+        reg_ver = version
+        reg_juris = jurisdiction
+        reg_year = None
+        reg_authority = None
+
+        if canon:
+            reg_act = reg_act or canon["act_name"]
+            reg_title = canon["official_title"]
+            reg_ver = reg_ver or canon["version"]
+            reg_juris = reg_juris or canon["jurisdiction"]
+            reg_year = canon["act_year"]
+            reg_authority = canon["issuing_authority"]
+        else:
+            reg_act = reg_act or (file.filename.rsplit('.', 1)[0] if file.filename else "Regulation")
+            reg_title = f"{reg_act} (v{reg_ver})" if version else (file.filename or "Regulation")
+            reg_year = extract_year_from_title(reg_title) or extract_year_from_title(file.filename or "")
 
         # Create new global regulation entry
         regulation = Regulation(
@@ -144,6 +171,8 @@ def upload_document(
             act_name=reg_act,
             version=reg_ver,
             jurisdiction=reg_juris,
+            act_year=reg_year,
+            issuing_authority=reg_authority,
             document_hash=stored_metadata.checksum,
             uploaded_by=current_user.id,
             original_filename=stored_metadata.original_filename,

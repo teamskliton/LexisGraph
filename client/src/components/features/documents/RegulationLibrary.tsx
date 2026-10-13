@@ -1,11 +1,10 @@
 // RegulationLibrary — Global Regulation Library component
-// Displays Header KPIs, Filter Toolbar, Data Table / Cards, Side Drawer Details,
-// Link/Unlink Analysis selection, Contextual Empty States, Skeletons, and Error Retry.
+// Global regulations catalog with workspace-isolated linking, verified statutory metadata,
+// summary statistics, and platform administrator publishing controls.
 
 "use client";
 
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
 import {
   BookOpen,
   Search,
@@ -18,14 +17,14 @@ import {
   List,
   ChevronDown,
   AlertCircle,
-  FolderUp,
   CheckCircle2,
-  Network,
-  X,
-  FileText,
   MoreHorizontal,
+  Building2,
+  Globe,
+  Loader2,
+  ShieldAlert,
 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,8 +42,6 @@ import { cn } from "@/lib/utils";
 import { regulationsApi, GlobalRegulation } from "@/services/api/regulations";
 import { RegulationDetailsDrawer } from "./RegulationDetailsDrawer";
 import { DocumentUpload } from "./DocumentUpload";
-import type { OrganizationDocumentExtended } from "./documents-types";
-
 import { useAuth } from "@/context/auth-context";
 
 interface RegulationLibraryProps {
@@ -53,10 +50,12 @@ interface RegulationLibraryProps {
 }
 
 export const RegulationLibrary = memo(function RegulationLibrary({
-  organizationId = "org-001",
-  organizationName = "Organization Workspace",
+  organizationId = "",
+  organizationName = "Active Workspace",
 }: RegulationLibraryProps) {
-  const { permissions } = useAuth();
+  const { user } = useAuth();
+  const isPlatformAdmin = Boolean(user?.is_superuser);
+
   const [regulations, setRegulations] = useState<GlobalRegulation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -64,11 +63,12 @@ export const RegulationLibrary = memo(function RegulationLibrary({
 
   // Filters & State
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("All");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [sortKey, setSortKey] = useState<"act_name" | "act_year" | "jurisdiction">("act_name");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [statusFilter, setStatusFilter] = useState<"All" | "LINKED" | "AVAILABLE">("All");
+  const [jurisdictionFilter, setJurisdictionFilter] = useState<string>("All");
+  const [sortKey, setSortKey] = useState<"title" | "act_year" | "jurisdiction">("title");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
+  const [pendingLinkIds, setPendingLinkIds] = useState<Set<string>>(new Set());
 
   // Drawer & Upload State
   const [selectedReg, setSelectedReg] = useState<GlobalRegulation | null>(null);
@@ -80,7 +80,7 @@ export const RegulationLibrary = memo(function RegulationLibrary({
     setError(null);
 
     try {
-      const data = await regulationsApi.listRegulations(organizationId, searchQuery);
+      const data = await regulationsApi.listRegulations(organizationId || undefined, searchQuery);
       setRegulations(data || []);
       const initialLinked = (data || [])
         .filter((r) => r.is_linked)
@@ -125,31 +125,64 @@ export const RegulationLibrary = memo(function RegulationLibrary({
     return () => clearInterval(interval);
   }, [hasProcessingRegulations, organizationId, searchQuery]);
 
-  // Toggle Link / Unlink for Analysis
+  // Toggle Link / Unlink for Workspace Analysis
   const handleToggleLink = async (reg: GlobalRegulation) => {
+    if (!organizationId) {
+      toast.error("No active organization workspace selected.");
+      return;
+    }
+
+    if (pendingLinkIds.has(reg.id)) return; // Prevent duplicate rapid clicks
+
     const isCurrentlyLinked = linkedIds.includes(reg.id);
+    const regLabel = reg.official_title || reg.title || reg.act_name || "Statutory Act";
+
+    setPendingLinkIds((prev) => new Set(prev).add(reg.id));
+
     try {
       if (isCurrentlyLinked) {
         await regulationsApi.unlinkRegulation(organizationId, reg.id);
         setLinkedIds((prev) => prev.filter((id) => id !== reg.id));
-        toast.success(`Unlinked ${reg.title || reg.act_name} from analysis workspace.`);
+        toast.success(`Unlinked ${regLabel} from ${organizationName}.`);
       } else {
         await regulationsApi.linkRegulation(organizationId, reg.id);
         setLinkedIds((prev) => [...prev, reg.id]);
-        toast.success(`Selected ${reg.title || reg.act_name} for compliance analysis.`);
+        toast.success(`Linked ${regLabel} to ${organizationName}.`);
       }
-    } catch {
-      toast.error("Failed to update regulation selection state.");
+    } catch (err: any) {
+      const errorMsg =
+        err?.response?.data?.detail || "Failed to update regulation workspace link.";
+      toast.error(errorMsg);
+    } finally {
+      setPendingLinkIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reg.id);
+        return next;
+      });
     }
   };
 
-  // Copy reference helper
+  // Copy citation reference
   const handleCopyReference = (reg: GlobalRegulation) => {
-    const title = reg.title || reg.act_name || "Statutory Regulation";
-    const ref = `${title} (${reg.act_year || 2013}) — ${reg.jurisdiction || "India"}`;
+    const title = reg.official_title || reg.title || reg.act_name || "Statutory Regulation";
+    const yearStr = reg.act_year ? ` (${reg.act_year})` : "";
+    const jurisStr = reg.jurisdiction ? ` — ${reg.jurisdiction}` : "";
+    const authStr = reg.issuing_authority ? ` [${reg.issuing_authority}]` : "";
+    const ref = `${title}${yearStr}${jurisStr}${authStr}`;
     navigator.clipboard.writeText(ref);
     toast.success("Regulation reference copied to clipboard.");
   };
+
+  // Unique jurisdictions from dataset
+  const uniqueJurisdictions = useMemo(() => {
+    const set = new Set<string>();
+    regulations.forEach((r) => {
+      if (r.jurisdiction && r.jurisdiction.trim()) {
+        set.add(r.jurisdiction.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [regulations]);
 
   // Filtered & Sorted regulations list
   const filteredRegulations = useMemo(() => {
@@ -160,56 +193,87 @@ export const RegulationLibrary = memo(function RegulationLibrary({
       result = result.filter(
         (r) =>
           (r.title && r.title.toLowerCase().includes(q)) ||
+          (r.official_title && r.official_title.toLowerCase().includes(q)) ||
           (r.act_name && r.act_name.toLowerCase().includes(q)) ||
           (r.jurisdiction && r.jurisdiction.toLowerCase().includes(q)) ||
-          (r.issuing_authority && r.issuing_authority.toLowerCase().includes(q))
+          (r.issuing_authority && r.issuing_authority.toLowerCase().includes(q)) ||
+          (r.domain && r.domain.toLowerCase().includes(q))
       );
     }
 
-    if (statusFilter !== "All") {
-      result = result.filter((r) => (r.processing_status || "PROCESSED") === statusFilter);
+    if (jurisdictionFilter !== "All") {
+      result = result.filter((r) => r.jurisdiction === jurisdictionFilter);
+    }
+
+    if (statusFilter === "LINKED") {
+      result = result.filter((r) => linkedIds.includes(r.id));
+    } else if (statusFilter === "AVAILABLE") {
+      result = result.filter((r) => !linkedIds.includes(r.id));
     }
 
     result.sort((a, b) => {
       if (sortKey === "act_year") return (b.act_year || 0) - (a.act_year || 0);
-      if (sortKey === "jurisdiction") return (a.jurisdiction || "").localeCompare(b.jurisdiction || "");
-      return (a.title || a.act_name || "").localeCompare(b.title || b.act_name || "");
+      if (sortKey === "jurisdiction")
+        return (a.jurisdiction || "").localeCompare(b.jurisdiction || "");
+      const titleA = a.official_title || a.title || a.act_name || "";
+      const titleB = b.official_title || b.title || b.act_name || "";
+      return titleA.localeCompare(titleB);
     });
 
     return result;
-  }, [regulations, searchQuery, statusFilter, sortKey]);
+  }, [regulations, searchQuery, jurisdictionFilter, statusFilter, sortKey, linkedIds]);
+
+  // Statistics
+  const totalGlobalCount = regulations.length;
+  const linkedWorkspaceCount = linkedIds.length;
+  const availableWorkspaceCount = Math.max(0, totalGlobalCount - linkedWorkspaceCount);
+  const pendingIndexingCount = regulations.filter(
+    (r) => r.processing_status && r.processing_status !== "PROCESSED"
+  ).length;
 
   return (
     <div className="space-y-6">
       {/* ─── 1. PAGE HEADER ────────────────────────────────────────────── */}
-      <Card className="border border-border/50 bg-card p-6 space-y-4">
+      <Card className="border border-border/50 bg-card p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2.5">
-              <BookOpen className="h-5 w-5 text-success" />
-              <h2 className="text-xl font-bold text-foreground">Global Regulation Library</h2>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <BookOpen className="h-5 w-5" />
+              </div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">
+                Global Regulation Library
+              </h1>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Discover, inspect, and select statutory acts for automated compliance cross-checks.
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
+              Explore verified regulations and link applicable legislation to your organization&apos;s compliance analysis.
             </p>
+            {/* Workspace Context Display */}
+            <div className="flex items-center gap-2 pt-1">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/60 border border-border/60 text-xs font-medium text-foreground">
+                <Building2 className="h-3.5 w-3.5 text-primary" />
+                <span>Managing regulations for:</span>
+                <strong className="text-foreground font-semibold">{organizationName}</strong>
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
             <Button
               variant="outline"
               size="sm"
               onClick={() => fetchRegulations(true)}
               disabled={isRefreshing}
-              className="gap-1.5 text-xs cursor-pointer"
+              className="gap-1.5 text-xs cursor-pointer h-9"
             >
               <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-primary")} />
               Refresh
             </Button>
-            {permissions.canUploadDocuments && (
+            {isPlatformAdmin && (
               <Button
                 size="sm"
                 onClick={() => setIsUploadOpen(true)}
-                className="gap-1.5 text-xs font-semibold cursor-pointer"
+                className="gap-1.5 text-xs font-semibold cursor-pointer h-9"
               >
                 <Upload className="h-3.5 w-3.5" /> Import Regulation
               </Button>
@@ -217,40 +281,88 @@ export const RegulationLibrary = memo(function RegulationLibrary({
           </div>
         </div>
 
-        {/* 4 Header KPI Cards */}
+        {/* ─── 2. SUMMARY STATISTICS (4 Cards) ─────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-          <div className="p-3 rounded-xl border border-border/40 bg-muted/20">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Total Regulations</span>
-            <span className="text-xl font-bold tabular-nums text-foreground">{regulations.length}</span>
+          {/* Card 1: Total Global Regulations */}
+          <div className="p-3.5 rounded-xl border border-border/50 bg-muted/20 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                Total Regulations
+              </span>
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-border/50 bg-background/50">
+                Global
+              </Badge>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold tabular-nums text-foreground">{totalGlobalCount}</span>
+              <span className="text-[11px] text-muted-foreground">Published</span>
+            </div>
           </div>
 
-          <div className="p-3 rounded-xl border border-border/40 bg-muted/20">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Selected for Scan</span>
-            <span className="text-xl font-bold tabular-nums text-success">{linkedIds.length}</span>
+          {/* Card 2: Linked to Current Workspace */}
+          <div className="p-3.5 rounded-xl border border-success/30 bg-success/5 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                Linked to Workspace
+              </span>
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-success/30 text-success bg-success/10 font-semibold">
+                Workspace
+              </Badge>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold tabular-nums text-success">{linkedWorkspaceCount}</span>
+              <span className="text-[11px] text-muted-foreground truncate" title={organizationName}>
+                in {organizationName}
+              </span>
+            </div>
           </div>
 
-          <div className="p-3 rounded-xl border border-border/40 bg-muted/20">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Last Updated</span>
-            <span className="text-xs font-semibold text-foreground truncate mt-1 block">Aug 2026</span>
+          {/* Card 3: Available Regulations */}
+          <div className="p-3.5 rounded-xl border border-border/50 bg-muted/20 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                Available to Link
+              </span>
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-border/50 bg-background/50">
+                Workspace
+              </Badge>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold tabular-nums text-foreground">{availableWorkspaceCount}</span>
+              <span className="text-[11px] text-muted-foreground">Unlinked</span>
+            </div>
           </div>
 
-          <div className="p-3 rounded-xl border border-border/40 bg-muted/20">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Vector Indexing</span>
-            <span className="text-xs font-semibold text-emerald-500 mt-1 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Qdrant Ready
-            </span>
+          {/* Card 4: Pending Indexing */}
+          <div className="p-3.5 rounded-xl border border-border/50 bg-muted/20 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                Pending Indexing
+              </span>
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-border/50 bg-background/50">
+                Global
+              </Badge>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className={cn("text-2xl font-bold tabular-nums", pendingIndexingCount > 0 ? "text-amber-500" : "text-foreground")}>
+                {pendingIndexingCount}
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {pendingIndexingCount === 0 ? "All indexed" : "In queue"}
+              </span>
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* ─── 2. TOOLBAR ────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-border/50 bg-card">
+      {/* ─── 3. TOOLBAR (Search, Filters, Sort, View) ───────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-xl border border-border/50 bg-card">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <div className="relative flex-1 min-w-[220px] max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <input
             type="search"
-            placeholder="Quick search regulations by title, act, jurisdiction…"
+            placeholder="Search regulations by title, act, jurisdiction…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
@@ -258,18 +370,42 @@ export const RegulationLibrary = memo(function RegulationLibrary({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Status Filter */}
+          {/* Status Filter (Workspace Scope) */}
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-foreground hover:bg-muted cursor-pointer">
-              Status: {statusFilter}
+              Status: {statusFilter === "All" ? "All" : statusFilter === "LINKED" ? "Linked to Workspace" : "Available"}
               <ChevronDown className="h-3 w-3 text-muted-foreground" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuLabel className="text-xs">Filter Status</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel className="text-xs">Workspace Link Status</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {["All", "PROCESSED", "PARSING", "FAILED"].map((s) => (
-                <DropdownMenuItem key={s} onClick={() => setStatusFilter(s)} className="text-xs cursor-pointer">
-                  {s}
+              <DropdownMenuItem onClick={() => setStatusFilter("All")} className="text-xs cursor-pointer">
+                All Regulations
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStatusFilter("LINKED")} className="text-xs cursor-pointer">
+                Linked to {organizationName}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStatusFilter("AVAILABLE")} className="text-xs cursor-pointer">
+                Available (Unlinked)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Jurisdiction Filter */}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-foreground hover:bg-muted cursor-pointer">
+              Jurisdiction: {jurisdictionFilter}
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel className="text-xs">Filter by Jurisdiction</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setJurisdictionFilter("All")} className="text-xs cursor-pointer">
+                All Jurisdictions
+              </DropdownMenuItem>
+              {uniqueJurisdictions.map((j) => (
+                <DropdownMenuItem key={j} onClick={() => setJurisdictionFilter(j)} className="text-xs cursor-pointer">
+                  {j}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -278,15 +414,21 @@ export const RegulationLibrary = memo(function RegulationLibrary({
           {/* Sort */}
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-foreground hover:bg-muted cursor-pointer">
-              Sort: {sortKey === "act_name" ? "Act Name" : sortKey === "act_year" ? "Act Year" : "Jurisdiction"}
+              Sort: {sortKey === "title" ? "Regulation Name" : sortKey === "act_year" ? "Enactment Year" : "Jurisdiction"}
               <ChevronDown className="h-3 w-3 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuLabel className="text-xs">Sort Options</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setSortKey("act_name")} className="text-xs cursor-pointer">Act Name</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortKey("act_year")} className="text-xs cursor-pointer">Act Year</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortKey("jurisdiction")} className="text-xs cursor-pointer">Jurisdiction</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortKey("title")} className="text-xs cursor-pointer">
+                Regulation Name
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortKey("act_year")} className="text-xs cursor-pointer">
+                Enactment Year
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortKey("jurisdiction")} className="text-xs cursor-pointer">
+                Jurisdiction
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -294,15 +436,21 @@ export const RegulationLibrary = memo(function RegulationLibrary({
           <div className="flex items-center border border-border rounded-md overflow-hidden h-8">
             <button
               onClick={() => setViewMode("list")}
-              className={cn("px-2 h-full flex items-center", viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground")}
-              title="List view"
+              className={cn(
+                "px-2 h-full flex items-center cursor-pointer transition-colors",
+                viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Table view"
             >
               <List className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => setViewMode("grid")}
-              className={cn("px-2 h-full flex items-center", viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground")}
-              title="Grid view"
+              className={cn(
+                "px-2 h-full flex items-center cursor-pointer transition-colors",
+                viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Card view"
             >
               <LayoutGrid className="h-3.5 w-3.5" />
             </button>
@@ -310,29 +458,31 @@ export const RegulationLibrary = memo(function RegulationLibrary({
         </div>
       </div>
 
-      {/* Selection Counter Bar */}
+      {/* ─── 4. ACTIVE SELECTION BAR ──────────────────────────────────── */}
       {linkedIds.length > 0 && (
         <div className="flex items-center justify-between p-2.5 px-4 rounded-xl border border-success/30 bg-success/10 text-xs">
-          <span className="font-semibold text-foreground">
-            {linkedIds.length} regulation{linkedIds.length > 1 ? "s" : ""} selected for compliance analysis
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-success" />
+            <span className="font-semibold text-foreground">
+              {linkedIds.length} regulation{linkedIds.length > 1 ? "s" : ""} actively linked for compliance analysis in {organizationName}
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            Changes save automatically to workspace
           </span>
-          <Button variant="ghost" size="xs" onClick={() => setLinkedIds([])} className="text-xs underline cursor-pointer">
-            Clear Selection
-          </Button>
         </div>
       )}
 
-      {/* ─── 3. CONTENT / TABLE / CARDS ──────────────────────────────── */}
+      {/* ─── 5. CONTENT (TABLE / SKELETON / EMPTY) ────────────────────── */}
       {isLoading ? (
         <div className="space-y-2">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            <Skeleton key={i} className="h-14 w-full rounded-xl" />
           ))}
         </div>
       ) : error ? (
-        /* Error State */
-        <Card className="border border-danger/30 bg-danger/5 p-8 text-center space-y-3">
-          <AlertCircle className="h-8 w-8 text-danger mx-auto" />
+        <Card className="border border-destructive/30 bg-destructive/5 p-8 text-center space-y-3">
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
           <h3 className="text-sm font-semibold text-foreground">Failed to load regulations</h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">{error}</p>
           <Button variant="outline" size="sm" onClick={() => fetchRegulations()} className="gap-1.5 cursor-pointer text-xs">
@@ -340,146 +490,253 @@ export const RegulationLibrary = memo(function RegulationLibrary({
           </Button>
         </Card>
       ) : filteredRegulations.length === 0 ? (
-        /* ─── 4. EMPTY STATE ──────────────────────────────────────────── */
         <Card className="border border-dashed border-border/60 bg-muted/10 p-12 text-center space-y-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-success/10 text-success mx-auto">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary mx-auto">
             <BookOpen className="h-7 w-7" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-semibold text-foreground">No regulations available</h3>
+            <h3 className="text-base font-semibold text-foreground">No regulations found</h3>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
-              Global regulations will appear here once imported into the platform.
+              {searchQuery || jurisdictionFilter !== "All" || statusFilter !== "All"
+                ? "No regulations match the current search or filter criteria. Try adjusting your search query."
+                : isPlatformAdmin
+                ? "The global regulation library is empty. Platform administrators can import statutory documents."
+                : "No regulations are currently published in the global library. Contact a platform administrator to import regulations."}
             </p>
           </div>
-          <Button size="sm" onClick={() => setIsUploadOpen(true)} className="gap-1.5 font-semibold cursor-pointer">
-            <Upload className="h-3.5 w-3.5" /> Import Regulation
-          </Button>
+          {isPlatformAdmin && !searchQuery && (
+            <Button size="sm" onClick={() => setIsUploadOpen(true)} className="gap-1.5 font-semibold cursor-pointer">
+              <Upload className="h-3.5 w-3.5" /> Import Regulation
+            </Button>
+          )}
         </Card>
-      ) : (
-        /* ─── 5. REGULATION TABLE (Desktop) OR CARDS (Mobile) ─────────── */
-        <div className="space-y-2">
-          {/* Desktop Table View */}
-          <div className="hidden sm:block overflow-x-auto rounded-xl border border-border/50 bg-card">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-border/40 bg-muted/30 text-muted-foreground font-semibold uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="p-3 pl-4">Regulation Name</th>
-                  <th className="p-3">Jurisdiction</th>
-                  <th className="p-3">Issuing Authority</th>
-                  <th className="p-3">Act Year</th>
-                  <th className="p-3">Version</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right pr-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/30">
-                {filteredRegulations.map((reg) => {
-                  const isLinked = linkedIds.includes(reg.id);
-                  const regTitle = reg.title || reg.act_name || "Statutory Act";
+      ) : viewMode === "list" ? (
+        /* ─── DESKTOP DATA TABLE ─────────────────────────────────────── */
+        <div className="overflow-x-auto rounded-xl border border-border/50 bg-card">
+          <table className="w-full text-left text-xs">
+            <thead className="border-b border-border/40 bg-muted/30 text-muted-foreground font-semibold uppercase text-[10px] tracking-wider">
+              <tr>
+                <th className="p-3 pl-4">Regulation Name</th>
+                <th className="p-3">Jurisdiction</th>
+                <th className="p-3">Issuing Authority</th>
+                <th className="p-3">Year</th>
+                <th className="p-3">Version</th>
+                <th className="p-3">Workspace Status</th>
+                <th className="p-3 text-right pr-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/30">
+              {filteredRegulations.map((reg) => {
+                const isLinked = linkedIds.includes(reg.id);
+                const isPending = pendingLinkIds.has(reg.id);
+                const displayTitle = reg.official_title || reg.title || reg.act_name || "Statutory Act";
+                const jurisdiction = reg.jurisdiction || "Not available";
+                const authority = reg.issuing_authority || "Unverified";
+                const actYear = reg.act_year ? String(reg.act_year) : "Not available";
+                const version = reg.version || "Not available";
 
-                  return (
-                    <tr key={reg.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="p-3 pl-4">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <BookOpen className="h-4 w-4 text-success shrink-0" />
+                return (
+                  <tr key={reg.id} className="hover:bg-muted/20 transition-colors">
+                    {/* Regulation Name */}
+                    <td className="p-3 pl-4 max-w-xs">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <BookOpen className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <div className="min-w-0">
                           <button
                             onClick={() => setSelectedReg(reg)}
-                            className="font-semibold text-foreground hover:text-primary transition-colors text-left truncate max-w-xs cursor-pointer"
+                            className="font-semibold text-foreground hover:text-primary transition-colors text-left truncate block max-w-sm cursor-pointer"
+                            title={displayTitle}
                           >
-                            {regTitle}
+                            {displayTitle}
                           </button>
+                          {reg.domain && (
+                            <span className="text-[10px] text-muted-foreground block truncate">
+                              {reg.domain}
+                            </span>
+                          )}
                         </div>
-                      </td>
-                      <td className="p-3 text-muted-foreground font-medium">{reg.jurisdiction || "India (Central)"}</td>
-                      <td className="p-3 text-muted-foreground truncate max-w-[140px]">{reg.issuing_authority || "Ministry of Corporate Affairs"}</td>
-                      <td className="p-3 text-muted-foreground font-mono">{reg.act_year || 2013}</td>
-                      <td className="p-3 text-muted-foreground">{reg.version || "Statutory Text"}</td>
-                      <td className="p-3">
-                        <Badge
-                          variant="outline"
+                      </div>
+                    </td>
+
+                    {/* Jurisdiction */}
+                    <td className="p-3 text-muted-foreground font-medium whitespace-nowrap">
+                      {jurisdiction}
+                    </td>
+
+                    {/* Issuing Authority */}
+                    <td className="p-3 text-muted-foreground max-w-[180px] truncate" title={authority}>
+                      {authority}
+                    </td>
+
+                    {/* Year */}
+                    <td className="p-3 text-muted-foreground font-mono whitespace-nowrap">
+                      {actYear}
+                    </td>
+
+                    {/* Version */}
+                    <td className="p-3 text-muted-foreground whitespace-nowrap truncate max-w-[120px]" title={version}>
+                      {version}
+                    </td>
+
+                    {/* Workspace Status */}
+                    <td className="p-3 whitespace-nowrap">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] font-semibold gap-1",
+                          isLinked
+                            ? "bg-success/10 text-success border-success/30"
+                            : "bg-muted/60 text-muted-foreground border-border/60"
+                        )}
+                      >
+                        {isLinked ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3" />
+                            Linked to Workspace
+                          </>
+                        ) : (
+                          "Available"
+                        )}
+                      </Badge>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="p-3 pr-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant={isLinked ? "outline" : "default"}
+                          size="xs"
+                          disabled={isPending}
+                          onClick={() => handleToggleLink(reg)}
                           className={cn(
-                            "text-[10px] font-semibold",
-                            isLinked
-                              ? "bg-success/10 text-success border-success/20"
-                              : "bg-muted text-muted-foreground border-border"
+                            "gap-1 cursor-pointer text-[11px] font-semibold min-w-[70px]",
+                            isLinked && "hover:border-destructive hover:text-destructive hover:bg-destructive/10"
                           )}
                         >
-                          {isLinked ? "Linked for Analysis" : "Available"}
-                        </Badge>
-                      </td>
-                      <td className="p-3 pr-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant={isLinked ? "outline" : "default"}
-                            size="xs"
-                            onClick={() => handleToggleLink(reg)}
-                            className="gap-1 cursor-pointer text-[11px] font-semibold"
-                          >
-                            <Zap className="h-3 w-3 text-warning" />
-                            {isLinked ? "Unlink" : "Select"}
-                          </Button>
+                          {isPending ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : isLinked ? (
+                            "Unlink"
+                          ) : (
+                            <>
+                              <Zap className="h-3 w-3 text-warning" />
+                              Link
+                            </>
+                          )}
+                        </Button>
 
-                          <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted cursor-pointer">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              <DropdownMenuItem onClick={() => setSelectedReg(reg)} className="gap-2 text-xs cursor-pointer">
-                                <Eye className="h-3.5 w-3.5" /> View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleCopyReference(reg)} className="gap-2 text-xs cursor-pointer">
-                                <Copy className="h-3.5 w-3.5" /> Copy Reference
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted cursor-pointer text-muted-foreground hover:text-foreground">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem
+                              onClick={() => setSelectedReg(reg)}
+                              className="gap-2 text-xs cursor-pointer"
+                            >
+                              <Eye className="h-3.5 w-3.5" /> View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleCopyReference(reg)}
+                              className="gap-2 text-xs cursor-pointer"
+                            >
+                              <Copy className="h-3.5 w-3.5" /> Copy Reference
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* ─── GRID / CARD VIEW ───────────────────────────────────────── */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filteredRegulations.map((reg) => {
+            const isLinked = linkedIds.includes(reg.id);
+            const isPending = pendingLinkIds.has(reg.id);
+            const displayTitle = reg.official_title || reg.title || reg.act_name || "Statutory Act";
+            const jurisdiction = reg.jurisdiction || "Not available";
+            const authority = reg.issuing_authority || "Unverified";
+            const actYear = reg.act_year ? String(reg.act_year) : "Not available";
 
-          {/* Mobile Card Layout */}
-          <div className="sm:hidden space-y-3">
-            {filteredRegulations.map((reg) => {
-              const isLinked = linkedIds.includes(reg.id);
-              const regTitle = reg.title || reg.act_name || "Statutory Act";
-
-              return (
-                <Card key={reg.id} className="p-3 space-y-2 border border-border/50 bg-card">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <BookOpen className="h-4 w-4 text-success shrink-0" />
-                      <span onClick={() => setSelectedReg(reg)} className="font-bold text-foreground text-xs truncate cursor-pointer">
-                        {regTitle}
-                      </span>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] font-semibold bg-success/10 text-success border-success/20">
-                      {isLinked ? "Linked" : "Available"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground border-t border-border/30 pt-2">
-                    <span>{reg.jurisdiction || "India"}</span>
-                    <span>Year: {reg.act_year || 2013}</span>
-                  </div>
-                  <div className="flex justify-end gap-2 pt-1">
-                    <Button variant="outline" size="xs" onClick={() => setSelectedReg(reg)} className="text-xs cursor-pointer">
-                      <Eye className="h-3 w-3" /> Details
-                    </Button>
-                    <Button
-                      size="xs"
-                      onClick={() => handleToggleLink(reg)}
-                      className="text-xs cursor-pointer font-semibold gap-1"
+            return (
+              <Card key={reg.id} className="p-4 space-y-3 border border-border/50 bg-card hover:border-border transition-colors">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <BookOpen className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <button
+                      onClick={() => setSelectedReg(reg)}
+                      className="font-bold text-foreground text-xs hover:text-primary transition-colors text-left line-clamp-2 cursor-pointer"
+                      title={displayTitle}
                     >
-                      <Zap className="h-3 w-3 text-warning" /> {isLinked ? "Unlink" : "Select"}
-                    </Button>
+                      {displayTitle}
+                    </button>
                   </div>
-                </Card>
-              );
-            })}
-          </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[9px] shrink-0 font-semibold",
+                      isLinked
+                        ? "bg-success/10 text-success border-success/30"
+                        : "bg-muted text-muted-foreground border-border/60"
+                    )}
+                  >
+                    {isLinked ? "Linked" : "Available"}
+                  </Badge>
+                </div>
+
+                <div className="text-[11px] text-muted-foreground space-y-1 border-t border-border/30 pt-2.5">
+                  <div className="flex justify-between">
+                    <span>Jurisdiction:</span>
+                    <strong className="text-foreground">{jurisdiction}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Authority:</span>
+                    <strong className="text-foreground truncate max-w-[150px]">{authority}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Enactment Year:</span>
+                    <strong className="text-foreground">{actYear}</strong>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1 border-t border-border/30">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setSelectedReg(reg)}
+                    className="text-xs cursor-pointer gap-1"
+                  >
+                    <Eye className="h-3 w-3" /> Details
+                  </Button>
+                  <Button
+                    variant={isLinked ? "outline" : "default"}
+                    size="xs"
+                    disabled={isPending}
+                    onClick={() => handleToggleLink(reg)}
+                    className={cn(
+                      "text-xs cursor-pointer font-semibold gap-1 min-w-[70px]",
+                      isLinked && "hover:border-destructive hover:text-destructive hover:bg-destructive/10"
+                    )}
+                  >
+                    {isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : isLinked ? (
+                      "Unlink"
+                    ) : (
+                      <>
+                        <Zap className="h-3 w-3 text-warning" /> Link
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -492,16 +749,18 @@ export const RegulationLibrary = memo(function RegulationLibrary({
         onToggleLink={handleToggleLink}
       />
 
-      {/* Document Upload Modal (Import Regulation) */}
-      <DocumentUpload
-        open={isUploadOpen}
-        onOpenChange={setIsUploadOpen}
-        onUploadSuccess={() => {
-          fetchRegulations();
-          toast.success("Regulation uploaded successfully.");
-        }}
-        organizationId={organizationId}
-      />
+      {/* Document Upload Modal (Platform Administrator Only) */}
+      {isPlatformAdmin && (
+        <DocumentUpload
+          open={isUploadOpen}
+          onOpenChange={setIsUploadOpen}
+          onUploadSuccess={() => {
+            fetchRegulations();
+            toast.success("Regulation imported into global library successfully.");
+          }}
+          organizationId={organizationId}
+        />
+      )}
     </div>
   );
 });

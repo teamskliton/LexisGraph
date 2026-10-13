@@ -38,22 +38,29 @@ class UnlinkRegulationRequest(BaseModel):
     regulation_id: uuid.UUID = Field(..., description="Global Regulation ID to unlink")
 
 
+from pydantic import BaseModel, Field, ConfigDict
+
+
 class GlobalRegulationResponse(BaseModel):
     id: uuid.UUID
     title: str
+    official_title: Optional[str] = None
     act_name: Optional[str] = None
     version: Optional[str] = None
     act_year: Optional[int] = None
     jurisdiction: Optional[str] = None
     issuing_authority: Optional[str] = None
+    effective_date: Optional[str] = None
+    domain: Optional[str] = None
+    source: Optional[str] = None
     document_hash: str
     original_filename: str
     file_size: int
     processing_status: str
     is_linked: bool = False
+    created_at: Optional[Any] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------------------------------------------------------
