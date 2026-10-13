@@ -53,6 +53,13 @@ class Activity(Base):
         index=True,
     )
 
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     event_type: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
@@ -89,6 +96,11 @@ class Activity(Base):
 
     user: Mapped["User"] = relationship(
         "User",
+        lazy="select",
+    )
+
+    organization: Mapped["Organization | None"] = relationship(
+        "Organization",
         lazy="select",
     )
 

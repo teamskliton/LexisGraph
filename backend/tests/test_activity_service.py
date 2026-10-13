@@ -100,9 +100,24 @@ class ActivityServiceTest(unittest.TestCase):
         self.assertEqual(user2_activities[0].event_type, "AI_CHAT_STARTED")
 
     def test_dashboard_stats_returns_activities(self):
+        from app.core.workspace_context import WorkspaceContext, get_active_workspace_context
+        from app.db.models import Organization
+        from app.db.models.rbac import UserRole
+
+        org_id = uuid.uuid4()
+        org = Organization(id=org_id, name="Test Org", created_by=self.user1.id)
+        ws_mock = WorkspaceContext(
+            user=self.user1,
+            organization=org,
+            organization_id=org_id,
+            member=None,
+            role=UserRole.ADMIN,
+        )
+
         log_activity(
             self.db,
             user_id=self.user1.id,
+            organization_id=org_id,
             event_type="COMPLIANCE_STARTED",
             title="Compliance Check",
             description="Started check",
@@ -120,6 +135,7 @@ class ActivityServiceTest(unittest.TestCase):
 
         app.dependency_overrides[get_db] = _override_db
         app.dependency_overrides[get_current_user] = _override_user
+        app.dependency_overrides[get_active_workspace_context] = lambda: ws_mock
 
         client = TestClient(app)
         res = client.get("/dashboard/stats")

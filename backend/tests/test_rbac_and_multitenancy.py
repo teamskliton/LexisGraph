@@ -233,7 +233,8 @@ class TestRBACAndMultiTenancy:
         app.dependency_overrides[get_db] = _get_db_override
 
         # 1. Authorized Owner access -> 200 OK
-        from app.core.dependencies import get_optional_current_user
+        from app.core.dependencies import get_current_user, get_optional_current_user
+        app.dependency_overrides[get_current_user] = lambda: owner_user
         app.dependency_overrides[get_optional_current_user] = lambda: owner_user
 
         client = TestClient(app)
@@ -243,6 +244,7 @@ class TestRBACAndMultiTenancy:
             assert resp.status_code == 200
 
         # 2. Unauthorized User access -> 403 Forbidden
+        app.dependency_overrides[get_current_user] = lambda: invited_user
         app.dependency_overrides[get_optional_current_user] = lambda: invited_user
         with patch("app.routes.graph.get_graph_snapshot", return_value=dummy_snapshot):
             resp = client.get(f"/graph-view?organization_id={test_org.id}")
