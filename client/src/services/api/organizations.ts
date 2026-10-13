@@ -104,6 +104,23 @@ export const organizationsService = {
     const response = await api.get<OrganizationMember[]>(`/organizations/${organizationId}/members`);
     return response.data;
   },
+
+  getInvitations: async (organizationId: string): Promise<any[]> => {
+    const response = await api.get<any[]>(`/organizations/${organizationId}/invitations`);
+    return response.data;
+  },
+
+  cancelInvitation: async (organizationId: string, invitationId: string): Promise<void> => {
+    await api.delete(`/organizations/${organizationId}/invitations/${invitationId}`);
+  },
+
+  updateMemberRole: async (organizationId: string, userId: string, role: string): Promise<void> => {
+    await api.put(`/organizations/${organizationId}/members/${userId}/role`, { role });
+  },
+
+  removeMember: async (organizationId: string, userId: string): Promise<void> => {
+    await api.delete(`/organizations/${organizationId}/members/${userId}`);
+  },
 };
 
 export interface OrganizationMember {

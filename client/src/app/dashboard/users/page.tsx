@@ -1,10 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { ProtectedRoute } from '@/components/layout/protected-route';
 import { AppShell } from '@/components/layout/AppShell';
-import { OrganizationSwitcher } from '@/components/layout/OrganizationSwitcher';
-import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { useAuth } from '@/context/auth-context';
 import {
   Users,
@@ -12,40 +10,37 @@ import {
   Shield,
   Mail,
   Trash2,
-  Edit2,
   Loader2,
   Search,
-  Clock,
   RefreshCw,
   AlertCircle,
   XCircle,
-  Building2,
   Link2,
   Share2,
   Copy,
   Check,
-  ExternalLink,
+  MoreVertical,
+  Clock,
+  Inbox,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
-import { organizationsService } from '@/services/api/organizations';
+import { format } from 'date-fns';
+import { organizationsService, OrganizationMember } from '@/services/api/organizations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { formatRoleLabel, getRoleBadgeClass, isRoleAdmin } from '@/utils/role-utils';
 import { NaturalAvatar } from '@/components/ui/NaturalAvatar';
-
-interface Member {
-  id: string;
-  user_id: string;
-  full_name: string;
-  email: string;
-  role: string;
-  status: string;
-  joined_at: string;
-  last_active: string;
-}
 
 interface PendingInvitation {
   id: string;
@@ -58,78 +53,152 @@ interface PendingInvitation {
   invited_by: string;
 }
 
-const ROLE_OPTIONS = [
-  { value: 'COMPLIANCE_ANALYST', label: 'Compliance Analyst (Policy upload & compliance runs)' },
-  { value: 'REVIEWER', label: 'Reviewer (Findings & report review)' },
-  { value: 'VIEWER', label: 'Viewer (Read-only dashboard & report downloads)' },
+const ROLE_DEFINITIONS: Record<
+  string,
+  { label: string; description: string }
+> = {
+  ADMIN: {
+    label: 'Admin',
+    description:
+      'Admins can manage organization members, invitations, roles, settings, policies, and compliance runs.',
+  },
+  COMPLIANCE_ANALYST: {
+    label: 'Compliance Analyst',
+    description:
+      'Compliance Analysts can upload policies, initiate compliance analyses, and investigate findings.',
+  },
+  REVIEWER: {
+    label: 'Reviewer',
+    description:
+      'Reviewers can inspect compliance findings, examine citations and evidence, and perform review actions.',
+  },
+  VIEWER: {
+    label: 'Viewer',
+    description:
+      'Viewers have read-only access to view authorized policies, compliance reports, and findings.',
+  },
+};
+
+const INVITATION_ROLES = [
+  { value: 'COMPLIANCE_ANALYST', label: 'Compliance Analyst' },
+  { value: 'REVIEWER', label: 'Reviewer' },
+  { value: 'VIEWER', label: 'Viewer' },
+];
+
+const CHANGE_ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'COMPLIANCE_ANALYST', label: 'Compliance Analyst' },
+  { value: 'REVIEWER', label: 'Reviewer' },
+  { value: 'VIEWER', label: 'Viewer' },
 ];
 
 export function UserManagementContent() {
-  const { user, isAdmin: authIsAdmin } = useAuth();
-  const [members, setMembers] = useState<Member[]>([]);
+  const { user, activeMembership, permissions, isAdmin: authIsAdmin } = useAuth();
+  const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Invite Modal & Dual Method state
+  const activeOrgId =
+    activeMembership?.organization_id ||
+    (typeof window !== 'undefined'
+      ? localStorage.getItem('selected_organization_id')
+      : null);
+  const activeOrgName =
+    activeMembership?.organization_name || 'Active Workspace';
+
+  // Modal states
   const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
   const [inviteMethod, setInviteMethod] = useState<'EMAIL' | 'LINK'>('EMAIL');
   const [inviteEmail, setInviteEmail] = useState<string>('');
-  const [inviteRole, setInviteRole] = useState<string>('VIEWER');
+  const [inviteRole, setInviteRole] = useState<string>('COMPLIANCE_ANALYST');
   const [isSendingInvite, setIsSendingInvite] = useState<boolean>(false);
   const [generatedInviteUrl, setGeneratedInviteUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
-  // Edit Role Modal
-  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  // Edit Role Modal state
+  const [editingMember, setEditingMember] = useState<OrganizationMember | null>(null);
   const [newRole, setNewRole] = useState<string>('');
+  const [isUpdatingRole, setIsUpdatingRole] = useState<boolean>(false);
 
-  // Delete Member Confirmation Modal
-  const [removingMember, setRemovingMember] = useState<Member | null>(null);
+  // Remove Member Modal state
+  const [removingMember, setRemovingMember] = useState<OrganizationMember | null>(null);
   const [isRemoving, setIsRemoving] = useState<boolean>(false);
 
+  // Fetch organization team data
   const fetchTeamData = useCallback(async () => {
-    const orgId = typeof window !== 'undefined' ? localStorage.getItem('selected_organization_id') : null;
-    if (!orgId) return;
+    if (!activeOrgId) {
+      setMembers([]);
+      setInvitations([]);
+      setIsLoading(false);
+      return;
+    }
 
-    setSelectedOrgId(orgId);
     setIsLoading(true);
+    setError(null);
 
     try {
-      // Fetch Active Members
-      const membersRes = await api.get(`/organizations/${orgId}/members`);
-      setMembers(membersRes.data || []);
+      const [membersData, invitationsData] = await Promise.all([
+        organizationsService.getMembers(activeOrgId).catch((err) => {
+          console.error('Failed to fetch members:', err);
+          return [];
+        }),
+        organizationsService.getInvitations(activeOrgId).catch(() => []),
+      ]);
 
-      // Fetch Pending Invitations
-      try {
-        const invRes = await api.get(`/organizations/${orgId}/invitations`);
-        setInvitations(invRes.data || []);
-      } catch {
-        setInvitations([]);
-      }
-    } catch (err) {
-      console.error('Failed loading team members:', err);
-      toast.error('Failed to load organization team members.');
+      setMembers(membersData || []);
+      setInvitations(invitationsData || []);
+    } catch (err: any) {
+      console.error('Failed loading team data:', err);
+      const detail =
+        err?.response?.data?.detail ||
+        'Failed to load organization team members and invitations.';
+      setError(detail);
+      toast.error(detail);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => {
     fetchTeamData();
+  }, [fetchTeamData]);
+
+  // Sync on organization change event
+  useEffect(() => {
     const handleOrgChange = () => fetchTeamData();
     window.addEventListener('organization_changed', handleOrgChange);
     return () => window.removeEventListener('organization_changed', handleOrgChange);
   }, [fetchTeamData]);
 
-  const currentMember = members.find((m) => m.user_id === user?.id);
-  const isAdmin = authIsAdmin || isRoleAdmin(currentMember?.role, user?.is_superuser);
+  // Determine current user permissions in this active workspace
+  const currentMember = useMemo(
+    () => members.find((m) => m.user_id === user?.id),
+    [members, user?.id]
+  );
 
-  // Handle Invitation Generation (Email or Share Link)
+  const canManageTeam =
+    permissions?.canManageOrganization ||
+    authIsAdmin ||
+    isRoleAdmin(currentMember?.role, user?.is_superuser);
+
+  // Filter members by name or email
+  const filteredMembers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter(
+      (m) =>
+        (m.full_name && m.full_name.toLowerCase().includes(q)) ||
+        (m.email && m.email.toLowerCase().includes(q)) ||
+        (m.username && m.username.toLowerCase().includes(q))
+    );
+  }, [members, searchQuery]);
+
+  // Handle invitation creation
   const handleGenerateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOrgId) return;
+    if (!activeOrgId) return;
 
     if (inviteMethod === 'EMAIL' && !inviteEmail.trim()) {
       toast.error('Please enter a valid work email address.');
@@ -140,7 +209,7 @@ export function UserManagementContent() {
     setGeneratedInviteUrl('');
 
     try {
-      const res = await organizationsService.createInvitation(selectedOrgId, {
+      const res = await organizationsService.createInvitation(activeOrgId, {
         email: inviteMethod === 'EMAIL' ? inviteEmail.trim() : undefined,
         role: inviteRole,
       });
@@ -149,7 +218,9 @@ export function UserManagementContent() {
       setGeneratedInviteUrl(fullUrl);
 
       if (inviteMethod === 'EMAIL') {
-        toast.success(`Invitation created for ${inviteEmail}!`);
+        toast.success(`Invitation sent to ${inviteEmail}!`);
+        setShowInviteModal(false);
+        setInviteEmail('');
       } else {
         toast.success('Shareable invitation link generated!');
       }
@@ -157,7 +228,8 @@ export function UserManagementContent() {
       fetchTeamData();
     } catch (err: any) {
       console.error('Failed creating invitation:', err);
-      toast.error(err?.response?.data?.detail || 'Failed to create invitation.');
+      const detail = err?.response?.data?.detail || 'Failed to create invitation.';
+      toast.error(typeof detail === 'string' ? detail : 'Failed to create invitation.');
     } finally {
       setIsSendingInvite(false);
     }
@@ -168,31 +240,32 @@ export function UserManagementContent() {
       try {
         await navigator.share({
           title: 'LexisGraph Team Invitation',
-          text: `You have been invited to join the team on LexisGraph as a ${formatRoleLabel(inviteRole)}.`,
+          text: `You have been invited to join ${activeOrgName} on LexisGraph.`,
           url: url,
         });
         toast.success('Shared invitation link!');
         return;
       } catch {
-        // User cancelled or share unhandled; fall back to copy
+        // Fallback to copy
       }
     }
 
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
-    toast.success('Copied invitation link to clipboard!');
+    toast.success('Invitation link copied to clipboard!');
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleResendInvitation = async (inv: PendingInvitation) => {
+    if (!activeOrgId) return;
     try {
-      const res = await organizationsService.createInvitation(selectedOrgId, {
+      const res = await organizationsService.createInvitation(activeOrgId, {
         email: inv.email || undefined,
         role: inv.role,
       });
       const fullUrl = `${window.location.origin}/invite/${res.token}`;
       navigator.clipboard.writeText(fullUrl);
-      toast.success(`New invitation link copied to clipboard!`);
+      toast.success('New invitation link created and copied to clipboard!');
       fetchTeamData();
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Failed to resend invitation.');
@@ -200,253 +273,439 @@ export function UserManagementContent() {
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
+    if (!activeOrgId) return;
     try {
-      await api.delete(`/organizations/${selectedOrgId}/invitations/${invitationId}`);
-      toast.info('Cancelled invitation.');
+      await organizationsService.cancelInvitation(activeOrgId, invitationId);
+      toast.info('Invitation revoked.');
       fetchTeamData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to cancel invitation.');
+      toast.error(err?.response?.data?.detail || 'Failed to revoke invitation.');
     }
   };
 
   const handleUpdateRole = async () => {
-    if (!editingMember || !selectedOrgId) return;
+    if (!editingMember || !activeOrgId || !newRole) return;
+    setIsUpdatingRole(true);
 
     try {
-      await api.put(`/organizations/${selectedOrgId}/members/${editingMember.user_id}/role`, {
-        role: newRole,
-      });
-      toast.success(`Updated role for ${editingMember.full_name}!`);
+      await organizationsService.updateMemberRole(
+        activeOrgId,
+        editingMember.user_id,
+        newRole
+      );
+      toast.success(`Role updated for ${editingMember.full_name || editingMember.email}!`);
       setEditingMember(null);
       fetchTeamData();
-    } catch (err) {
-      toast.error('Failed to update member role.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || 'Failed to update member role.';
+      toast.error(typeof detail === 'string' ? detail : 'Failed to update member role.');
+    } finally {
+      setIsUpdatingRole(false);
     }
   };
 
   const handleConfirmRemoveMember = async () => {
-    if (!removingMember || !selectedOrgId) return;
+    if (!removingMember || !activeOrgId) return;
     setIsRemoving(true);
+
     try {
-      await api.delete(`/organizations/${selectedOrgId}/members/${removingMember.user_id}`);
-      toast.info(`Removed ${removingMember.full_name} from organization.`);
+      await organizationsService.removeMember(
+        activeOrgId,
+        removingMember.user_id
+      );
+      toast.success(
+        `Removed ${removingMember.full_name || removingMember.email} from ${activeOrgName}.`
+      );
       setRemovingMember(null);
       fetchTeamData();
-    } catch (err) {
-      toast.error('Failed to remove member.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || 'Failed to remove member.';
+      toast.error(typeof detail === 'string' ? detail : 'Failed to remove member.');
     } finally {
       setIsRemoving(false);
     }
   };
 
-  const filteredMembers = members.filter(
-    (m) =>
-      m.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+    <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+      {/* ── Page Header ── */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-bold flex items-center gap-2 text-foreground">
-              <Users className="w-6 h-6 text-primary" />
-              Team & Member Management
-            </h1>
-            <OrganizationSwitcher onOrganizationChanged={fetchTeamData} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Manage organization team members, legal roles (Admin, Legal Analyst, Reviewer, Viewer), and invitation links.
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+            Team Members
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Manage team members, invitations, and access permissions for{' '}
+            <span className="font-semibold text-foreground">{activeOrgName}</span>.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <ThemeToggle />
-          {isAdmin && (
-            <Button
-              onClick={() => {
-                setShowInviteModal(true);
-                setGeneratedInviteUrl('');
-                setInviteEmail('');
-              }}
-              className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs px-4 h-9 rounded-xl shadow-lg shadow-primary/20 cursor-pointer shrink-0"
-            >
-              <UserPlus className="w-4 h-4 mr-1.5" /> Invite Member
-            </Button>
-          )}
+        {/* Primary Action */}
+        {canManageTeam && (
+          <Button
+            onClick={() => {
+              setShowInviteModal(true);
+              setGeneratedInviteUrl('');
+              setInviteEmail('');
+              setInviteRole('COMPLIANCE_ANALYST');
+            }}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 px-3.5 shadow-sm cursor-pointer shrink-0"
+          >
+            <UserPlus className="w-4 h-4 mr-1.5" />
+            <span>Invite Member</span>
+          </Button>
+        )}
+      </div>
+
+      {/* ── Compact Member Summary (Two Compact Counts) ── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/70 bg-card text-xs shadow-2xs">
+          <Users className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span className="text-muted-foreground font-medium">Active Members:</span>
+          <span className="font-semibold text-foreground tabular-nums">
+            {isLoading ? '...' : members.length}
+          </span>
+        </div>
+
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/70 bg-card text-xs shadow-2xs">
+          <Mail className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span className="text-muted-foreground font-medium">Pending Invitations:</span>
+          <span className="font-semibold text-foreground tabular-nums">
+            {isLoading ? '...' : invitations.length}
+          </span>
         </div>
       </div>
 
-      {/* Search Filter */}
-      <div className="relative max-w-md">
-        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
+      {/* ── Search Filter ── */}
+      <div className="relative max-w-md w-full">
+        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         <Input
           type="text"
-          placeholder="Search team members by name or email..."
+          placeholder="Search members by name or email..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 bg-background border-border text-foreground text-xs h-10 rounded-xl"
+          className="pl-9 pr-14 bg-background border-border text-foreground text-xs h-9 rounded-lg"
         />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      {/* Main Content Area */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="text-xs">Loading team members and invitations...</span>
+      {/* ── Error State ── */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="text-sm font-semibold">Failed to load team data</h3>
+              <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{error}</p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchTeamData}
+            className="gap-2 border-red-300 text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/50 shrink-0"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Retry</span>
+          </Button>
         </div>
-      ) : (
+      )}
+
+      {/* ── Main Content Area ── */}
+      {isLoading ? (
+        <div className="space-y-4">
+          <Card className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
+            <Skeleton className="h-5 w-32" />
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full rounded-lg" />
+              ))}
+            </div>
+          </Card>
+        </div>
+      ) : !error && (
         <div className="space-y-8">
           {/* Active Members Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-                Active Team Members ({filteredMembers.length})
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">
+                  Active Members
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-muted text-muted-foreground tabular-nums">
+                  {filteredMembers.length}
+                </span>
+              </div>
             </div>
 
             {filteredMembers.length === 0 ? (
-              <Card className="p-8 bg-card border-border rounded-2xl text-center space-y-2">
-                <Users className="w-8 h-8 text-muted-foreground mx-auto" />
-                <p className="text-sm font-semibold text-foreground">
-                  {members.length <= 1
-                    ? "You're the only member of this organization."
-                    : 'No matching team members found.'}
+              <Card className="p-8 bg-card border-border/60 rounded-xl text-center space-y-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mx-auto">
+                  <Users className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {searchQuery
+                    ? 'No members match your search'
+                    : 'No members in this workspace yet'}
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  {searchQuery
+                    ? 'Try checking for spelling errors or clearing your search query.'
+                    : 'Invite legal analysts or reviewers to collaborate on compliance assessments.'}
                 </p>
-                <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                  Invite legal analysts or reviewers to collaborate on compliance reports.
-                </p>
+                {searchQuery ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs font-medium cursor-pointer"
+                  >
+                    Clear Search
+                  </Button>
+                ) : (
+                  canManageTeam && (
+                    <Button
+                      size="sm"
+                      onClick={() => setShowInviteModal(true)}
+                      className="text-xs font-semibold cursor-pointer"
+                    >
+                      Invite Member
+                    </Button>
+                  )
+                )}
               </Card>
             ) : (
-              <Card className="bg-card border-border rounded-2xl overflow-hidden shadow-sm dark:shadow-2xl">
+              <Card className="bg-card border-border/60 rounded-xl overflow-hidden shadow-sm">
                 {/* Desktop Table View */}
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/50 text-muted-foreground uppercase font-semibold text-[11px] border-b border-border">
+                    <thead className="bg-muted/40 text-muted-foreground font-semibold text-[11px] border-b border-border/60">
                       <tr>
-                        <th className="p-4">Name & Email</th>
-                        <th className="p-4">Role</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4">Joined</th>
-                        {isAdmin && <th className="p-4 text-right">Actions</th>}
+                        <th className="p-3.5 pl-4 w-[36%]">Member</th>
+                        <th className="p-3.5 w-[22%]">Role</th>
+                        <th className="p-3.5 w-[14%]">Status</th>
+                        <th className="p-3.5 w-[18%]">Joined</th>
+                        {canManageTeam && (
+                          <th className="p-3.5 pr-4 w-[10%] text-right">Actions</th>
+                        )}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {filteredMembers.map((member) => (
-                        <tr key={member.id} className="hover:bg-muted/40 transition-colors">
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <NaturalAvatar
-                                name={member.full_name || member.email || 'Member'}
-                                shape="circle"
-                                maxInitials={1}
-                                className="w-8 h-8 text-xs shrink-0 shadow-2xs"
-                              />
-                              <div className="min-w-0">
-                                <div className="font-semibold text-foreground truncate">{member.full_name || 'Team Member'}</div>
-                                <div className="text-[11px] text-muted-foreground font-mono truncate max-w-[240px]">{member.email}</div>
-                              </div>
-                            </div>
-                          </td>
+                    <tbody className="divide-y divide-border/50">
+                      {filteredMembers.map((member) => {
+                        const isCurrentUser = member.user_id === user?.id;
+                        const joinedFormatted = member.joined_at
+                          ? format(new Date(member.joined_at), 'MMM d, yyyy')
+                          : '—';
 
-                          <td className="p-4">
-                            <Badge className={`text-[10px] uppercase font-mono ${getRoleBadgeClass(member.role)}`}>
-                              <Shield className="w-3 h-3 mr-1" />
-                              {formatRoleLabel(member.role)}
-                            </Badge>
-                          </td>
-
-                          <td className="p-4">
-                            <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px]">
-                              {member.status}
-                            </Badge>
-                          </td>
-
-                          <td className="p-4 text-muted-foreground font-mono text-[11px]">
-                            {member.joined_at ? new Date(member.joined_at).toLocaleDateString() : 'N/A'}
-                          </td>
-
-                          {isAdmin && (
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setEditingMember(member);
-                                    setNewRole(member.role);
-                                  }}
-                                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-muted cursor-pointer"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </Button>
-
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => setRemovingMember(member)}
-                                  className="h-7 w-7 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
+                        return (
+                          <tr
+                            key={member.id}
+                            className="hover:bg-muted/30 transition-colors"
+                          >
+                            {/* Member Avatar + Name + "You" badge + Email */}
+                            <td className="p-3.5 pl-4">
+                              <div className="flex items-center gap-3">
+                                <NaturalAvatar
+                                  name={member.full_name || member.email || 'Member'}
+                                  shape="circle"
+                                  maxInitials={1}
+                                  className="w-8 h-8 text-xs shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-foreground truncate">
+                                      {member.full_name || 'Team Member'}
+                                    </span>
+                                    {isCurrentUser && (
+                                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-primary/10 text-primary border border-primary/25">
+                                        You
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground font-mono truncate max-w-[240px]">
+                                    {member.email}
+                                  </div>
+                                </div>
                               </div>
                             </td>
-                          )}
-                        </tr>
-                      ))}
+
+                            {/* Role Badge */}
+                            <td className="p-3.5">
+                              <Badge
+                                className={`text-[10px] font-semibold uppercase tracking-wider ${getRoleBadgeClass(
+                                  member.role
+                                )}`}
+                              >
+                                <Shield className="w-3 h-3 mr-1" />
+                                {formatRoleLabel(member.role)}
+                              </Badge>
+                            </td>
+
+                            {/* Status */}
+                            <td className="p-3.5">
+                              <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 text-[10px] font-medium">
+                                Active
+                              </Badge>
+                            </td>
+
+                            {/* Joined Date */}
+                            <td className="p-3.5 text-muted-foreground text-[11px] whitespace-nowrap">
+                              {joinedFormatted}
+                            </td>
+
+                            {/* Actions Three-dot Menu */}
+                            {canManageTeam && (
+                              <td className="p-3.5 pr-4 text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                                        title="Member actions"
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                        <span className="sr-only">Actions</span>
+                                      </Button>
+                                    }
+                                  />
+                                  <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setEditingMember(member);
+                                        setNewRole(member.role);
+                                      }}
+                                      className="cursor-pointer gap-2"
+                                    >
+                                      <Shield className="w-3.5 h-3.5 text-primary" />
+                                      <span>Change Role</span>
+                                    </DropdownMenuItem>
+
+                                    {!isCurrentUser && (
+                                      <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onClick={() => setRemovingMember(member)}
+                                          variant="destructive"
+                                          className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <span>Remove from Workspace</span>
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile Cards View */}
-                <div className="md:hidden divide-y divide-border">
-                  {filteredMembers.map((member) => (
-                    <div key={member.id} className="p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <NaturalAvatar
-                            name={member.full_name || member.email || 'Member'}
-                            shape="circle"
-                            maxInitials={1}
-                            className="w-8 h-8 text-xs shrink-0 shadow-2xs"
-                          />
-                          <div className="min-w-0">
-                            <div className="font-semibold text-foreground text-xs truncate">{member.full_name || 'Team Member'}</div>
-                            <div className="text-[11px] text-muted-foreground font-mono truncate">{member.email}</div>
-                          </div>
-                        </div>
-                        <Badge className={`text-[10px] uppercase font-mono shrink-0 ${getRoleBadgeClass(member.role)}`}>
-                          {formatRoleLabel(member.role)}
-                        </Badge>
-                      </div>
+                <div className="md:hidden divide-y divide-border/60">
+                  {filteredMembers.map((member) => {
+                    const isCurrentUser = member.user_id === user?.id;
+                    const joinedFormatted = member.joined_at
+                      ? format(new Date(member.joined_at), 'MMM d, yyyy')
+                      : '—';
 
-                      {isAdmin && (
-                        <div className="flex justify-end gap-2 pt-1 border-t border-border/60">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingMember(member);
-                              setNewRole(member.role);
-                            }}
-                            className="h-7 text-xs text-primary hover:bg-primary/10"
+                    return (
+                      <div key={member.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <NaturalAvatar
+                              name={member.full_name || member.email || 'Member'}
+                              shape="circle"
+                              maxInitials={1}
+                              className="w-8 h-8 text-xs shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-foreground text-xs truncate">
+                                  {member.full_name || 'Team Member'}
+                                </span>
+                                {isCurrentUser && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-primary/10 text-primary border border-primary/25">
+                                    You
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground font-mono truncate">
+                                {member.email}
+                              </div>
+                            </div>
+                          </div>
+
+                          <Badge
+                            className={`text-[10px] font-semibold uppercase shrink-0 ${getRoleBadgeClass(
+                              member.role
+                            )}`}
                           >
-                            <Edit2 className="w-3 h-3 mr-1" /> Edit Role
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setRemovingMember(member)}
-                            className="h-7 text-xs text-rose-500 hover:bg-rose-500/10"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" /> Remove
-                          </Button>
+                            {formatRoleLabel(member.role)}
+                          </Badge>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
+                          <span>Joined: {joinedFormatted}</span>
+
+                          {canManageTeam && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                                  >
+                                    <MoreVertical className="w-3.5 h-3.5" />
+                                  </Button>
+                                }
+                              />
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setEditingMember(member);
+                                    setNewRole(member.role);
+                                  }}
+                                  className="cursor-pointer gap-2"
+                                >
+                                  <Shield className="w-3.5 h-3.5 text-primary" />
+                                  <span>Change Role</span>
+                                </DropdownMenuItem>
+
+                                {!isCurrentUser && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => setRemovingMember(member)}
+                                      variant="destructive"
+                                      className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <span>Remove from Workspace</span>
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
             )}
@@ -454,39 +713,69 @@ export function UserManagementContent() {
 
           {/* Pending Invitations Section */}
           <div className="space-y-3 pt-2">
-            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-              <Mail className="w-4 h-4 text-primary" /> Pending Invitations ({invitations.length})
-            </h2>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">
+                  Pending Invitations
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-muted text-muted-foreground tabular-nums">
+                  {invitations.length}
+                </span>
+              </div>
+            </div>
 
             {invitations.length === 0 ? (
-              <Card className="p-6 bg-card border-border rounded-2xl text-center">
-                <p className="text-xs text-muted-foreground">No pending invitations.</p>
+              <Card className="p-6 bg-card border-border/60 rounded-xl text-center space-y-1">
+                <h3 className="text-xs font-semibold text-foreground">
+                  No pending invitations
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Invitations awaiting acceptance will appear here.
+                </p>
               </Card>
             ) : (
-              <Card className="bg-card border-border rounded-2xl overflow-hidden shadow-sm dark:shadow-2xl p-4 space-y-3">
+              <Card className="bg-card border-border/60 rounded-xl overflow-hidden shadow-sm p-4">
                 <div className="divide-y divide-border/60">
                   {invitations.map((inv) => {
-                    const fullInviteUrl = typeof window !== 'undefined' ? `${window.location.origin}/invite/${inv.token}` : `/invite/${inv.token}`;
+                    const fullInviteUrl =
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/invite/${inv.token}`
+                        : `/invite/${inv.token}`;
+
+                    const sentDate = inv.created_at
+                      ? format(new Date(inv.created_at), 'MMM d, yyyy')
+                      : '—';
+                    const expiresDate = inv.expires_at
+                      ? format(new Date(inv.expires_at), 'MMM d, yyyy')
+                      : '—';
+
                     return (
-                      <div key={inv.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 first:pt-0 last:pb-0">
-                        <div className="space-y-0.5 min-w-0">
+                      <div
+                        key={inv.id}
+                        className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 first:pt-0 last:pb-0"
+                      >
+                        <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-foreground text-xs truncate max-w-[260px]">
-                              {inv.email || "Shareable Invitation Link"}
+                              {inv.email || 'Shareable Invitation Link'}
                             </span>
-                            <Badge className={`text-[10px] uppercase font-mono ${getRoleBadgeClass(inv.role)}`}>
+                            <Badge
+                              className={`text-[10px] font-semibold uppercase ${getRoleBadgeClass(
+                                inv.role
+                              )}`}
+                            >
                               {formatRoleLabel(inv.role)}
                             </Badge>
-                            <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[10px]">
+                            <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25 text-[10px] font-medium">
                               Pending
                             </Badge>
                           </div>
-                          <p className="text-[11px] text-muted-foreground font-mono">
-                            Sent: {new Date(inv.created_at).toLocaleDateString()} · Expires: {new Date(inv.expires_at).toLocaleDateString()}
+                          <p className="text-[11px] text-muted-foreground">
+                            Sent: {sentDate} · Expires: {expiresDate}
                           </p>
                         </div>
 
-                        {isAdmin && (
+                        {canManageTeam && (
                           <div className="flex items-center gap-2 shrink-0">
                             <Button
                               size="sm"
@@ -494,7 +783,8 @@ export function UserManagementContent() {
                               onClick={() => handleShareLink(fullInviteUrl)}
                               className="h-7 text-xs bg-background border-border hover:bg-muted text-foreground gap-1 cursor-pointer"
                             >
-                              <Copy className="w-3 h-3" /> Copy Link
+                              <Copy className="w-3 h-3" />
+                              <span>Copy Link</span>
                             </Button>
 
                             <Button
@@ -503,7 +793,8 @@ export function UserManagementContent() {
                               onClick={() => handleResendInvitation(inv)}
                               className="h-7 text-xs bg-background border-border hover:bg-muted text-foreground gap-1 cursor-pointer"
                             >
-                              <RefreshCw className="w-3 h-3" /> Resend
+                              <RefreshCw className="w-3 h-3" />
+                              <span>Resend</span>
                             </Button>
 
                             <Button
@@ -512,7 +803,8 @@ export function UserManagementContent() {
                               onClick={() => handleCancelInvitation(inv.id)}
                               className="h-7 text-xs text-rose-500 hover:bg-rose-500/10 gap-1 cursor-pointer"
                             >
-                              <XCircle className="w-3 h-3" /> Cancel
+                              <XCircle className="w-3 h-3" />
+                              <span>Revoke</span>
                             </Button>
                           </div>
                         )}
@@ -526,37 +818,40 @@ export function UserManagementContent() {
         </div>
       )}
 
-      {/* Invite Member Dual Modal (Email vs Share Link) */}
+      {/* ── Invite Member Modal ── */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div className="bg-background border border-border rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-primary" /> Invite Team Member
+                <UserPlus className="w-4 h-4 text-primary" />
+                <span>Invite Team Member</span>
               </h3>
               <button
+                type="button"
                 onClick={() => setShowInviteModal(false)}
-                className="text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+                className="text-muted-foreground hover:text-foreground text-xs cursor-pointer p-1 rounded"
               >
                 ✕
               </button>
             </div>
 
             {/* Dual Method Toggle */}
-            <div className="flex items-center gap-2 bg-muted/40 p-1 rounded-xl border border-border/60">
+            <div className="flex items-center gap-2 bg-muted/40 p-1 rounded-lg border border-border/60">
               <button
                 type="button"
                 onClick={() => {
                   setInviteMethod('EMAIL');
                   setGeneratedInviteUrl('');
                 }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   inviteMethod === 'EMAIL'
                     ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Mail className="w-3.5 h-3.5" /> Invite by Email
+                <Mail className="w-3.5 h-3.5" />
+                <span>Invite by Email</span>
               </button>
 
               <button
@@ -565,20 +860,23 @@ export function UserManagementContent() {
                   setInviteMethod('LINK');
                   setGeneratedInviteUrl('');
                 }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   inviteMethod === 'LINK'
                     ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Link2 className="w-3.5 h-3.5" /> Share Invitation Link
+                <Link2 className="w-3.5 h-3.5" />
+                <span>Share Link</span>
               </button>
             </div>
 
             <form onSubmit={handleGenerateInvite} className="space-y-4">
               {inviteMethod === 'EMAIL' ? (
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground block mb-1">Work Email Address</label>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                    Work Email Address
+                  </label>
                   <Input
                     type="email"
                     required
@@ -589,30 +887,41 @@ export function UserManagementContent() {
                   />
                 </div>
               ) : (
-                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-xs text-muted-foreground leading-relaxed">
-                  Generates a secure, time-limited single-use link. Recipient can sign up or log in to join your organization workspace.
+                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 text-xs text-muted-foreground leading-relaxed">
+                  Generates a secure single-use invitation link for{' '}
+                  <span className="font-semibold text-foreground">{activeOrgName}</span>.
                 </div>
               )}
 
+              {/* Role Selector */}
               <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">Assigned Role</label>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                  Organization Role
+                </label>
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
-                  className="w-full bg-background border border-border text-foreground text-xs h-9 rounded-xl px-3"
+                  className="w-full bg-background border border-border text-foreground text-xs h-9 rounded-lg px-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  {ROLE_OPTIONS.map((opt) => (
+                  {INVITATION_ROLES.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
                 </select>
+
+                {/* Role Description */}
+                <p className="text-[11px] text-muted-foreground mt-1.5 bg-muted/30 p-2 rounded border border-border/40">
+                  {ROLE_DEFINITIONS[inviteRole]?.description}
+                </p>
               </div>
 
               {/* Generated Link Display */}
               {generatedInviteUrl && (
-                <div className="space-y-2 p-3 rounded-xl bg-card border border-border space-y-2">
-                  <label className="text-[11px] font-bold text-foreground block">Invitation Link Ready:</label>
+                <div className="space-y-2 p-3 rounded-lg bg-card border border-border">
+                  <label className="text-[11px] font-semibold text-foreground block">
+                    Invitation Link:
+                  </label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       readOnly
@@ -623,12 +932,16 @@ export function UserManagementContent() {
                       type="button"
                       size="xs"
                       onClick={() => handleShareLink(generatedInviteUrl)}
-                      className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-8 px-3 cursor-pointer shrink-0 gap-1"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-3 cursor-pointer shrink-0 gap-1"
                     >
-                      {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      {copiedLink ? 'Copied' : 'Copy'}
+                      {copiedLink ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span>{copiedLink ? 'Copied' : 'Copy'}</span>
                     </Button>
-                    {typeof navigator !== "undefined" && "share" in navigator && (
+                    {typeof navigator !== 'undefined' && 'share' in navigator && (
                       <Button
                         type="button"
                         size="xs"
@@ -645,17 +958,27 @@ export function UserManagementContent() {
               )}
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="ghost" onClick={() => setShowInviteModal(false)} className="text-xs h-8 text-muted-foreground">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowInviteModal(false)}
+                  className="text-xs h-8 text-muted-foreground cursor-pointer"
+                >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSendingInvite} className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-8 px-4 cursor-pointer">
+                <Button
+                  type="submit"
+                  disabled={isSendingInvite}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 cursor-pointer"
+                >
                   {isSendingInvite ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : inviteMethod === 'EMAIL' ? (
-                    'Send Invitation'
-                  ) : (
-                    'Generate Invite Link'
-                  )}
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                  ) : null}
+                  <span>
+                    {inviteMethod === 'EMAIL'
+                      ? 'Send Invitation'
+                      : 'Generate Link'}
+                  </span>
                 </Button>
               </div>
             </form>
@@ -663,34 +986,93 @@ export function UserManagementContent() {
         </div>
       )}
 
-      {/* Edit Role Modal */}
+      {/* ── Change Role Modal ── */}
       {editingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" /> Change Role for {editingMember.full_name}
-            </h3>
-
-            <div className="space-y-3">
-              <label className="text-xs font-semibold text-muted-foreground block">Select New Role</label>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                className="w-full bg-background border border-border text-foreground text-xs h-9 rounded-xl px-3"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div className="bg-background border border-border rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <Shield className="w-4 h-4 text-primary" />
+                <span>Change Member Role</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingMember(null)}
+                className="text-muted-foreground hover:text-foreground text-xs cursor-pointer p-1 rounded"
               >
-                {ROLE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                ✕
+              </button>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3">
-                <Button variant="ghost" onClick={() => setEditingMember(null)} className="text-xs h-8 text-muted-foreground">
+            <div className="space-y-3.5 text-xs">
+              {/* Member Details */}
+              <div className="p-3 rounded-lg bg-card border border-border/70 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Member:</span>
+                  <span className="font-semibold text-foreground">
+                    {editingMember.full_name || 'Team Member'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between font-mono">
+                  <span className="text-muted-foreground">Email:</span>
+                  <span className="text-muted-foreground">{editingMember.email}</span>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                  <span className="text-muted-foreground">Current Role:</span>
+                  <Badge
+                    className={`text-[10px] font-semibold uppercase ${getRoleBadgeClass(
+                      editingMember.role
+                    )}`}
+                  >
+                    {formatRoleLabel(editingMember.role)}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* New Role Selector */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                  New Role
+                </label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                  className="w-full bg-background border border-border text-foreground text-xs h-9 rounded-lg px-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {CHANGE_ROLE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Explanation */}
+                <div className="mt-2 p-2.5 rounded bg-muted/40 border border-border/50 text-[11px] text-muted-foreground leading-relaxed">
+                  <span className="font-semibold text-foreground block mb-0.5">
+                    {ROLE_DEFINITIONS[newRole]?.label || newRole} Permissions:
+                  </span>
+                  {ROLE_DEFINITIONS[newRole]?.description}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setEditingMember(null)}
+                  className="text-xs h-8 text-muted-foreground cursor-pointer"
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleUpdateRole} className="bg-primary hover:bg-primary-hover text-primary-foreground text-xs h-8 px-4 cursor-pointer">
-                  Save Role
+                <Button
+                  onClick={handleUpdateRole}
+                  disabled={isUpdatingRole || newRole === editingMember.role}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-8 px-4 cursor-pointer"
+                >
+                  {isUpdatingRole && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                  )}
+                  <span>Save Changes</span>
                 </Button>
               </div>
             </div>
@@ -698,42 +1080,59 @@ export function UserManagementContent() {
         </div>
       )}
 
-      {/* Confirm Member Removal Modal */}
+      {/* ── Remove Member Confirmation Modal ── */}
       {removingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div className="bg-background border border-border rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-foreground flex items-center gap-2 text-rose-500">
-              <AlertCircle className="w-5 h-5 text-rose-500" /> Remove {removingMember.full_name}?
+              <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+              <span>Remove member from workspace?</span>
             </h3>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              This will immediately remove access for <span className="font-semibold text-foreground">{removingMember.email}</span> from this organization workspace.
+              <span className="font-semibold text-foreground">
+                {removingMember.full_name || removingMember.email}
+              </span>{' '}
+              will lose access to{' '}
+              <span className="font-semibold text-foreground">{activeOrgName}</span>.
+              Their LexisGraph account and access to other organizations will remain
+              unchanged.
             </p>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setRemovingMember(null)} className="text-xs h-8 text-muted-foreground">
+              <Button
+                variant="ghost"
+                onClick={() => setRemovingMember(null)}
+                className="text-xs h-8 text-muted-foreground cursor-pointer"
+              >
                 Cancel
               </Button>
               <Button
                 onClick={handleConfirmRemoveMember}
                 disabled={isRemoving}
-                className="bg-rose-600 hover:bg-rose-500 text-white text-xs h-8 px-4 cursor-pointer"
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs h-8 px-4 cursor-pointer"
               >
-                {isRemoving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Remove Member'}
+                {isRemoving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                ) : null}
+                <span>Remove Member</span>
               </Button>
             </div>
           </div>
-        </div >
+        </div>
       )}
     </div>
   );
 }
 
 export default function UserManagementPage() {
+  const { activeMembership } = useAuth();
+  const activeOrgId = activeMembership?.organization_id;
+
   return (
     <ProtectedRoute>
       <AppShell>
-        <UserManagementContent />
+        <UserManagementContent key={activeOrgId || 'no-org'} />
       </AppShell>
     </ProtectedRoute>
   );

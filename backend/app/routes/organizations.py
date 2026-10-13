@@ -477,6 +477,33 @@ def invite_user(
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     email_to_store = data.email.strip() if (data.email and str(data.email).strip()) else None
 
+    if email_to_store:
+        # Check if user is already an active member of this organization
+        existing_user = db.query(User).filter(User.email.ilike(email_to_store)).first()
+        if existing_user:
+            existing_member = db.query(OrganizationMember).filter(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == existing_user.id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            ).first()
+            if existing_member or (org and org.created_by == existing_user.id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"User with email '{email_to_store}' is already an active member of this organization.",
+                )
+
+        # Check if an active invitation already exists for this email
+        active_inv = db.query(OrganizationInvitation).filter(
+            OrganizationInvitation.organization_id == organization_id,
+            OrganizationInvitation.email.ilike(email_to_store),
+            OrganizationInvitation.expires_at > datetime.now(timezone.utc),
+        ).first()
+        if active_inv:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"An active invitation for '{email_to_store}' already exists.",
+            )
+
     invitation = OrganizationInvitation(
         id=uuid.uuid4(),
         organization_id=organization_id,
@@ -655,10 +682,36 @@ def update_member_role(
             detail="Only organization admins can change member roles.",
         )
 
+    org = db.get(Organization, organization_id)
+
+    # Protect the organization owner from demotion
+    if org and org.created_by == user_id and data.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot demote the organization owner from Administrator.",
+        )
+
     member = db.query(OrganizationMember).filter(
         OrganizationMember.organization_id == organization_id,
         OrganizationMember.user_id == user_id,
     ).first()
+
+    # Protect the last active administrator from demotion
+    target_current_role = member.role if member else (UserRole.ADMIN if (org and org.created_by == user_id) else None)
+    if target_current_role == UserRole.ADMIN and data.role != UserRole.ADMIN:
+        active_admins = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == organization_id,
+            OrganizationMember.role == UserRole.ADMIN,
+            OrganizationMember.status == MemberStatus.ACTIVE,
+        ).all()
+        admin_ids = {m.user_id for m in active_admins}
+        if org and org.created_by:
+            admin_ids.add(org.created_by)
+        if len(admin_ids) <= 1 and user_id in admin_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot demote the last active administrator of the organization.",
+            )
 
     if not member:
         # Create member record if not exists
@@ -707,10 +760,36 @@ def remove_member(
             detail="Only organization admins can remove members.",
         )
 
+    org = db.get(Organization, organization_id)
+
+    # Protect the organization owner from removal
+    if org and org.created_by == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove the organization owner from the workspace.",
+        )
+
     member = db.query(OrganizationMember).filter(
         OrganizationMember.organization_id == organization_id,
         OrganizationMember.user_id == user_id,
     ).first()
+
+    # Protect the last active administrator from removal
+    target_role = member.role if member else None
+    if target_role == UserRole.ADMIN:
+        active_admins = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == organization_id,
+            OrganizationMember.role == UserRole.ADMIN,
+            OrganizationMember.status == MemberStatus.ACTIVE,
+        ).all()
+        admin_ids = {m.user_id for m in active_admins}
+        if org and org.created_by:
+            admin_ids.add(org.created_by)
+        if len(admin_ids) <= 1 and user_id in admin_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot remove the last active administrator of the organization.",
+            )
 
     if member:
         db.delete(member)
