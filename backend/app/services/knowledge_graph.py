@@ -262,9 +262,10 @@ def build_knowledge_graph(user_document_id: str, domain_document_ids: list[str])
     policy_rows = []
     entity_rows = []
     entity_edges = []
+    policy_org_id = str(user_document.get("organization_id")) if user_document.get("organization_id") else None
     for clause in policy_clauses:
         clause_node_id = f"{build_id}:policy:{clause['id']}"
-        policy_rows.append({"id": clause_node_id, "source_id": clause["id"], "text": clause["text"], "type": clause["type"]})
+        policy_rows.append({"id": clause_node_id, "source_id": clause["id"], "text": clause["text"], "type": clause["type"], "organization_id": policy_org_id})
         for entity in clause["entities"]:
             entity_id = f"{build_id}:entity:{entity.lower()}"
             entity_rows.append({"id": entity_id, "name": entity})
@@ -309,7 +310,7 @@ def build_knowledge_graph(user_document_id: str, domain_document_ids: list[str])
         },
         write=True,
     )
-    run_query("MERGE (d:KnowledgeGraphNode:UserDocument {id: $id}) SET d += $props", {"id": user_node_id, "props": {"kg_build_id": build_id, "title": user_document.get("title") or "Untitled policy", "source_id": user_document_id}}, write=True)
+    run_query("MERGE (d:KnowledgeGraphNode:UserDocument {id: $id}) SET d += $props", {"id": user_node_id, "props": {"kg_build_id": build_id, "title": user_document.get("title") or "Untitled policy", "source_id": user_document_id, "organization_id": policy_org_id}}, write=True)
     run_query("UNWIND $rows AS row MERGE (d:KnowledgeGraphNode:DomainDocument {id: row.id}) SET d += row SET d.kg_build_id = $build_id", {"rows": domain_rows, "build_id": build_id}, write=True)
     run_query("UNWIND $rows AS row MERGE (c:KnowledgeGraphNode:PolicyClause {id: row.id}) SET c += row SET c.kg_build_id = $build_id", {"rows": policy_rows, "build_id": build_id}, write=True)
     run_query("UNWIND $rows AS row MERGE (c:KnowledgeGraphNode:RegulationClause {id: row.id}) SET c += row SET c.kg_build_id = $build_id", {"rows": regulation_rows, "build_id": build_id}, write=True)

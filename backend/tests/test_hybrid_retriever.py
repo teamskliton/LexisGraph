@@ -39,6 +39,8 @@ class HybridRetrieverTest(unittest.TestCase):
     @patch("app.services.hybrid_retriever.get_client")
     @patch("app.services.hybrid_retriever.get_embedding_model")
     def test_retrieve_sync_full_pipeline(self, mock_model, mock_qdrant, mock_neo4j):
+        org_id = str(uuid.uuid4())
+
         # 1. Mock embedding model
         mock_encoder = MagicMock()
         mock_encoder.encode.return_value = [0.1] * 384
@@ -55,6 +57,8 @@ class HybridRetrieverTest(unittest.TestCase):
                 "text": f"Clause text {i}",
                 "document_id": "doc-uuid-1",
                 "title": "Master Service Agreement",
+                "organization_id": org_id,
+                "document_type": "POLICY",
             }
             mock_points.append(point)
 
@@ -70,6 +74,7 @@ class HybridRetrieverTest(unittest.TestCase):
                 "target_id": "clause-21",  # Graph-discovered clause
                 "target_text": "Graph connected clause 21",
                 "target_title": "Security Policy",
+                "target_org_id": org_id,
                 "dist": 2,
                 "rel_types": ["NEXT_CLAUSE", "REFERENCES"],
             },
@@ -85,7 +90,6 @@ class HybridRetrieverTest(unittest.TestCase):
         mock_neo4j.return_value = mock_neo4j_records
 
         retriever = HybridRetriever()
-        org_id = str(uuid.uuid4())
         result = retriever.retrieve_sync(
             query="What is the data security requirement?",
             organization_id=org_id,

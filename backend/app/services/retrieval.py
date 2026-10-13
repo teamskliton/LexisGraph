@@ -1,4 +1,6 @@
 import logging
+import uuid
+from typing import Sequence
 from collections import Counter
 
 import numpy as np
@@ -23,21 +25,51 @@ def preload_model() -> None:
     _preload_shared_model()
 
 
-def _collect_clauses(collection_names: tuple[str, ...] | None = None) -> list[dict]:
-    """Collect unique clause texts and embeddings from Qdrant vector store."""
+def _collect_clauses(
+    collection_names: tuple[str, ...] | None = None,
+    organization_id: uuid.UUID | str | None = None,
+) -> list[dict]:
+    """Collect unique clause texts and embeddings from Qdrant vector store scoped to organization."""
+    if not organization_id:
+        logger.warning("[RETRIEVAL] Blocked unscoped clause collection: organization_id is required")
+        return []
+
+    org_str = str(organization_id)
     try:
+        from qdrant_client.http.models import FieldCondition, Filter, MatchValue
         from app.db.qdrant import get_client
         from app.services.vector_store import COLLECTION_USER
+
         client = get_client()
+        scroll_filter = Filter(
+            should=[
+                FieldCondition(key="organization_id", match=MatchValue(value=org_str)),
+                FieldCondition(key="is_global", match=MatchValue(value=True)),
+            ]
+        )
         points, _ = client.scroll(
             collection_name=COLLECTION_USER,
             limit=200,
             with_payload=True,
             with_vectors=True,
+            scroll_filter=scroll_filter,
         )
         clauses = []
         for point in points:
             payload = point.payload or {}
+            point_org = payload.get("organization_id")
+            is_global = payload.get("is_global") is True
+
+            # Zero-trust verification: quarantine points not belonging to org or global
+            if point_org != org_str and not is_global:
+                logger.warning(
+                    "[SECURITY ALERT] Quarantined mismatched vector point: point_id=%s point_org=%s target_org=%s",
+                    point.id,
+                    point_org,
+                    org_str,
+                )
+                continue
+
             text = payload.get("text", "")
             vector = point.vector
             if text and isinstance(vector, list):
@@ -64,15 +96,23 @@ def _filter_common_dimension_clauses(clauses: list[dict]) -> list[dict]:
     return [clause for clause in clauses if len(clause["embedding"]) == target_dimension]
 
 
-def retrieve_relevant_clauses(query: str) -> list[dict]:
-    """Retrieve top relevant clauses via embeddings and expand with graph neighbors."""
+def retrieve_relevant_clauses(
+    query: str,
+    organization_id: uuid.UUID | str | None = None,
+) -> list[dict]:
+    """Retrieve top relevant clauses via embeddings and expand with graph neighbors within tenant scope."""
     if not query or not query.strip():
         return []
 
+    if not organization_id:
+        logger.warning("[RETRIEVAL] Blocked unscoped retrieve_relevant_clauses for query: %r", query)
+        return []
+
+    org_str = str(organization_id)
     model = get_embedding_model()
     query_embedding = model.encode(query)
 
-    clauses = _collect_clauses()
+    clauses = _collect_clauses(organization_id=org_str)
     clauses = _filter_common_dimension_clauses(clauses)
     if not clauses:
         return []
@@ -98,17 +138,17 @@ def retrieve_relevant_clauses(query: str) -> list[dict]:
         score = float(similarity_scores[index])
         clause_id = clause["clause_id"]
 
-        # Structural neighbor lookup: clauses sharing the same parent Document
-        # Neo4j is NEVER used for semantic similarity (no SIMILAR_TO)
+        # Structural neighbor lookup scoped to authorized organization or global regulations
         neighbors = run_query(
             """
             MATCH (d:Document)-[:HAS_CLAUSE]->(c:Clause {id: $id})
+            WHERE (d.organization_id = $org_id OR d.is_global = true)
             MATCH (d)-[:HAS_CLAUSE]->(n:Clause)
-            WHERE n.id <> $id
+            WHERE n.id <> $id AND (n.organization_id = $org_id OR n.is_global = true)
             RETURN n.text AS text
             LIMIT 3
             """,
-            {"id": clause_id},
+            {"id": clause_id, "org_id": org_str},
         )
 
         expanded_results.append(
@@ -119,5 +159,5 @@ def retrieve_relevant_clauses(query: str) -> list[dict]:
             }
         )
 
-    logger.info("[RETRIEVAL] Query processed query=%s hits=%s", query.strip(), len(expanded_results))
+    logger.info("[RETRIEVAL] Query processed org=%s query=%s hits=%s", org_str, query.strip(), len(expanded_results))
     return expanded_results

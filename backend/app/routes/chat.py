@@ -18,7 +18,7 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,8 @@ from app.services.memory_service import (
     update_conversation,
 )
 
+from app.core.workspace_context import verify_user_workspace_membership
+
 router = APIRouter(prefix="", tags=["Chat"])
 logger = logging.getLogger(__name__)
 
@@ -55,12 +57,15 @@ logger = logging.getLogger(__name__)
 )
 def chat_endpoint(
     payload: ChatRequest,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ChatResponse:
     """
     POST /chat (Batch mode)
     """
+    verify_user_workspace_membership(db, current_user.id, payload.organization_id)
     return process_chat_request(db=db, current_user=current_user, payload=payload)
 
 
@@ -72,12 +77,15 @@ def chat_endpoint(
 def chat_stream_endpoint(
     request: Request,
     payload: ChatRequest,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """
     POST /chat/stream (SSE streaming mode)
     """
+    verify_user_workspace_membership(db, current_user.id, payload.organization_id)
     generator = stream_chat_request(
         request=request,
         db=db,
@@ -103,6 +111,8 @@ def chat_stream_endpoint(
 )
 def list_conversations_endpoint(
     organization_id: uuid.UUID | None = None,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     search: str | None = None,
     include_archived: bool = False,
     db: Session = Depends(get_db),
@@ -111,10 +121,21 @@ def list_conversations_endpoint(
     """
     GET /chat/conversations
     """
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
+    if target_org_id:
+        verify_user_workspace_membership(db, current_user.id, target_org_id)
+
     return list_user_conversations(
         db,
         current_user.id,
-        organization_id=organization_id,
+        organization_id=target_org_id,
         search=search,
         include_archived=include_archived,
     )
@@ -128,12 +149,24 @@ def list_conversations_endpoint(
 )
 def create_conversation_endpoint(
     payload: CreateConversationRequest,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConversationSessionResponse:
     """
     POST /chat/conversations
     """
+    target_org_id = payload.organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+            payload.organization_id = target_org_id
+        except (ValueError, TypeError):
+            pass
+    if target_org_id:
+        verify_user_workspace_membership(db, current_user.id, target_org_id)
     return create_conversation_session(db, current_user.id, payload)
 
 
@@ -146,13 +179,25 @@ def create_conversation_endpoint(
 def update_conversation_endpoint(
     conversation_id: uuid.UUID,
     payload: UpdateConversationRequest,
+    organization_id: uuid.UUID | None = None,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConversationSessionResponse:
     """
     PATCH /chat/conversations/{conversation_id}
     """
-    return update_conversation(db, current_user.id, conversation_id, payload)
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+    if target_org_id:
+        verify_user_workspace_membership(db, current_user.id, target_org_id)
+    return update_conversation(db, current_user.id, conversation_id, payload, organization_id=target_org_id)
 
 
 @router.post(
@@ -163,13 +208,25 @@ def update_conversation_endpoint(
 )
 def duplicate_conversation_endpoint(
     conversation_id: uuid.UUID,
+    organization_id: uuid.UUID | None = None,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConversationDetailResponse:
     """
     POST /chat/conversations/{conversation_id}/duplicate
     """
-    return duplicate_conversation(db, current_user.id, conversation_id)
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+    if target_org_id:
+        verify_user_workspace_membership(db, current_user.id, target_org_id)
+    return duplicate_conversation(db, current_user.id, conversation_id, organization_id=target_org_id)
 
 
 @router.get(
@@ -180,13 +237,25 @@ def duplicate_conversation_endpoint(
 def export_conversation_endpoint(
     conversation_id: uuid.UUID,
     format: str = Query(default="markdown", description="Export format: 'markdown', 'text', or 'json'"),
+    organization_id: uuid.UUID | None = None,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Response:
     """
     GET /chat/conversations/{conversation_id}/export
     """
-    content, filename = export_conversation(db, current_user.id, conversation_id, export_format=format)
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+    if target_org_id:
+        verify_user_workspace_membership(db, current_user.id, target_org_id)
+    content, filename = export_conversation(db, current_user.id, conversation_id, export_format=format, organization_id=target_org_id)
     media_type = "application/json" if format.lower() == "json" else "text/plain"
 
     return Response(
@@ -204,13 +273,25 @@ def export_conversation_endpoint(
 )
 def get_conversation_endpoint(
     conversation_id: uuid.UUID,
+    organization_id: uuid.UUID | None = None,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConversationDetailResponse:
     """
     GET /chat/conversations/{conversation_id}
     """
-    return get_conversation_detail(db, current_user.id, conversation_id)
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+    if target_org_id:
+        verify_user_workspace_membership(db, current_user.id, target_org_id)
+    return get_conversation_detail(db, current_user.id, conversation_id, organization_id=target_org_id)
 
 
 @router.delete(
@@ -221,13 +302,25 @@ def get_conversation_endpoint(
 def delete_conversation_endpoint(
     conversation_id: uuid.UUID,
     soft: bool = Query(default=True, description="Soft delete (archive) if True"),
+    organization_id: uuid.UUID | None = None,
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_organization_id: str | None = Header(None, alias="X-Organization-Id"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
     DELETE /chat/conversations/{conversation_id}
     """
-    delete_conversation(db, current_user.id, conversation_id, soft_delete=soft)
+    target_org_id = organization_id
+    if not target_org_id and (x_workspace_id or x_organization_id):
+        raw_header = x_workspace_id or x_organization_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+    if target_org_id:
+        verify_user_workspace_membership(db, current_user.id, target_org_id)
+    delete_conversation(db, current_user.id, conversation_id, soft_delete=soft, organization_id=target_org_id)
     return {
         "status": "success",
         "message": "Conversation session archived" if soft else "Conversation session permanently deleted",

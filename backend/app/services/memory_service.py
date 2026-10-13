@@ -128,10 +128,10 @@ def get_or_create_session(
         conv_uuid = _parse_conversation_uuid(str(conversation_id))
         session = db.get(ConversationSession, conv_uuid)
         if session is not None and isinstance(session, ConversationSession):
-            if session.user_id != user_id:
+            if session.user_id != user_id or session.organization_id != organization_id:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Conversation session not found or access denied",
+                    detail="Conversation session not found or access denied for this workspace",
                 )
             return session
 
@@ -322,13 +322,14 @@ def update_conversation(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     payload: UpdateConversationRequest,
+    organization_id: uuid.UUID | None = None,
 ) -> ConversationSessionResponse:
     """Update title, is_pinned, or is_archived attributes of a conversation session."""
     session = db.get(ConversationSession, conversation_id)
-    if session is None or session.user_id != user_id:
+    if session is None or session.user_id != user_id or (organization_id and session.organization_id != organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conversation session not found or access denied",
+            detail="Conversation session not found or access denied for this workspace",
         )
 
     if payload.title is not None:
@@ -363,13 +364,14 @@ def duplicate_conversation(
     db: Session,
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
+    organization_id: uuid.UUID | None = None,
 ) -> ConversationDetailResponse:
     """Duplicate a conversation session and all its messages."""
     original = db.get(ConversationSession, conversation_id)
-    if original is None or original.user_id != user_id:
+    if original is None or original.user_id != user_id or (organization_id and original.organization_id != organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conversation session not found or access denied",
+            detail="Conversation session not found or access denied for this workspace",
         )
 
     new_session = ConversationSession(
@@ -403,7 +405,7 @@ def duplicate_conversation(
         db.add(copied_msg)
 
     db.commit()
-    return get_conversation_detail(db, user_id, new_session.id)
+    return get_conversation_detail(db, user_id, new_session.id, organization_id=original.organization_id)
 
 
 def export_conversation(
@@ -411,12 +413,13 @@ def export_conversation(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     export_format: str = "markdown",
+    organization_id: uuid.UUID | None = None,
 ) -> tuple[str, str]:
     """
     Export conversation history as Markdown (.md), Plain Text (.txt), or JSON (.json).
     Returns (content_string, filename).
     """
-    detail = get_conversation_detail(db, user_id, conversation_id)
+    detail = get_conversation_detail(db, user_id, conversation_id, organization_id=organization_id)
     clean_title = re.sub(r"[^\w\s-]", "", detail.title).strip().replace(" ", "_") or "Conversation"
 
     if export_format.lower() == "json":
@@ -484,15 +487,17 @@ def get_conversation_detail(
     db: Session,
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
+    organization_id: uuid.UUID | None = None,
 ) -> ConversationDetailResponse:
     """
     Retrieve full message history for a specific conversation session ordered chronologically.
+    Strictly verifies user ownership and active workspace scope.
     """
     session = db.get(ConversationSession, conversation_id)
-    if session is None or session.user_id != user_id:
+    if session is None or session.user_id != user_id or (organization_id and session.organization_id != organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conversation session not found or access denied",
+            detail="Conversation session not found or access denied for this workspace",
         )
 
     stmt = (
@@ -547,16 +552,18 @@ def delete_conversation(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     soft_delete: bool = True,
+    organization_id: uuid.UUID | None = None,
 ) -> bool:
     """
     Delete a conversation session.
     If soft_delete=True, marks is_archived=True. Otherwise hard deletes session.
+    Strictly verifies user ownership and active workspace scope.
     """
     session = db.get(ConversationSession, conversation_id)
-    if session is None or session.user_id != user_id:
+    if session is None or session.user_id != user_id or (organization_id and session.organization_id != organization_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conversation session not found or access denied",
+            detail="Conversation session not found or access denied for this workspace",
         )
 
     if soft_delete:
@@ -568,9 +575,11 @@ def delete_conversation(
     db.commit()
 
     logger.info(
-        "[MEMORY_SERVICE] Deleted (soft=%s) conversation_id=%s for user_id=%s",
+        "[MEMORY_SERVICE] Deleted (soft=%s) conversation_id=%s for user_id=%s org_id=%s",
         soft_delete,
         conversation_id,
         user_id,
+        organization_id,
     )
     return True
+

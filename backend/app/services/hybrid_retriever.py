@@ -127,87 +127,73 @@ class HybridRetriever:
         organization_id: str | None = None,
         top_k: int = DEFAULT_VECTOR_TOP_K,
     ) -> list[dict[str, Any]]:
-        """Step 2: Search Qdrant for Top K semantic matches across organization policies and global regulations."""
+        """Step 2: Search Qdrant for Top K semantic matches strictly isolated to active workspace and global regulations."""
         logger.debug(
             "[HYBRID_RETRIEVER] Searching Qdrant: top_k=%d org_id=%s",
             top_k,
             organization_id,
         )
+        if not organization_id:
+            logger.warning("[SECURITY] Qdrant search denied: no verified organization_id provided")
+            return []
+
         client = get_client()
         points: list[Any] = []
 
-        # 1. Organization & Global Regulation filtered search (if organization_id provided)
-        if organization_id:
-            try:
-                org_filter = Filter(
-                    should=[
-                        FieldCondition(
-                            key="organization_id",
-                            match=MatchValue(value=str(organization_id)),
-                        ),
-                        FieldCondition(
-                            key="domain",
-                            match=MatchValue(value="regulation"),
-                        ),
-                        FieldCondition(
-                            key="type",
-                            match=MatchValue(value="regulation"),
-                        ),
-                        FieldCondition(
-                            key="document_type",
-                            match=MatchValue(value="regulation"),
-                        ),
-                        FieldCondition(
-                            key="is_global",
-                            match=MatchValue(value=True),
-                        ),
-                    ]
-                )
-                response = client.query_points(
-                    collection_name=COLLECTION_USER,
-                    query=query_vector,
-                    query_filter=org_filter,
-                    limit=top_k,
-                )
-                points.extend(response.points)
-            except Exception as exc:
-                logger.warning(
-                    "[HYBRID_RETRIEVER] Qdrant org-filtered search failed: %s", exc
-                )
-
-        # 2. Supplementary search for global regulation clauses or unfiltered pool
         try:
+            org_filter = Filter(
+                should=[
+                    FieldCondition(
+                        key="organization_id",
+                        match=MatchValue(value=str(organization_id)),
+                    ),
+                    FieldCondition(
+                        key="is_global",
+                        match=MatchValue(value=True),
+                    ),
+                ]
+            )
             response = client.query_points(
                 collection_name=COLLECTION_USER,
                 query=query_vector,
+                query_filter=org_filter,
                 limit=top_k,
             )
-            for point in response.points:
-                payload = point.payload or {}
-                p_org = payload.get("organization_id")
-                p_domain = str(payload.get("domain", "")).lower()
-                p_type = str(payload.get("type", "")).lower()
-                is_global_reg = (
-                    p_domain == "regulation"
-                    or p_type == "regulation"
-                    or not p_org
-                    or payload.get("is_global") is True
-                )
-                # Include point if it's a regulation, matches org_id, or point pool is small
-                if (
-                    is_global_reg
-                    or (organization_id and str(p_org) == str(organization_id))
-                    or len(points) < top_k
-                ):
-                    points.append(point)
+            points.extend(response.points)
         except Exception as exc:
-            logger.warning("[HYBRID_RETRIEVER] Qdrant global search failed: %s", exc)
+            logger.warning(
+                "[HYBRID_RETRIEVER] Qdrant org-filtered search failed: %s", exc
+            )
 
         hits: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
 
         for hit in points:
             payload = hit.payload or {}
+            hit_org_id = payload.get("organization_id")
+            is_global = payload.get("is_global", False)
+
+            # Strict Tenant Isolation Post-Validation
+            # 1. If payload has an organization_id, it MUST match the authorized organization_id
+            if hit_org_id and str(hit_org_id) != str(organization_id):
+                logger.error(
+                    "[SECURITY ALERT] Discarded cross-tenant vector point: point_id=%s doc_id=%s hit_org=%s requested_org=%s",
+                    hit.id,
+                    payload.get("document_id"),
+                    hit_org_id,
+                    organization_id,
+                )
+                continue
+
+            # 2. If payload lacks organization_id, only permitted if explicitly designated as a global resource
+            if not hit_org_id and not is_global:
+                logger.warning(
+                    "[SECURITY] Quarantined vector point lacking ownership metadata: point_id=%s doc_id=%s",
+                    hit.id,
+                    payload.get("document_id"),
+                )
+                continue
+
             clause_id = payload.get("clause_id", str(hit.id))
             if clause_id not in seen_ids:
                 seen_ids.add(clause_id)
@@ -224,29 +210,57 @@ class HybridRetriever:
                 )
 
         hits.sort(key=lambda x: x["score"], reverse=True)
-        logger.info("[HYBRID_RETRIEVER] Qdrant search returned %d hits", len(hits))
+        logger.info("[HYBRID_RETRIEVER] Qdrant search returned %d authorized hits", len(hits))
         return hits[:top_k]
 
     def _expand_neo4j_graph(
         self,
         clause_ids: Sequence[str],
+        organization_id: str | None = None,
         max_hops: int = MAX_GRAPH_HOPS,
     ) -> dict[str, dict[str, Any]]:
-        """Step 3: 2-Hop Graph Expansion through Neo4j traversing policy & regulation relationships."""
+        """Step 3: 2-Hop Graph Expansion through Neo4j strictly bounded to active workspace and global regulations."""
         if not clause_ids:
             return {}
 
+        if not organization_id:
+            logger.warning("[SECURITY] Neo4j graph expansion denied: no organization_id provided")
+            return {}
+
         logger.debug(
-            "[HYBRID_RETRIEVER] Expanding Neo4j graph for %d seed clause IDs (max_hops=%d)",
+            "[HYBRID_RETRIEVER] Expanding Neo4j graph for %d seed clause IDs (max_hops=%d, org_id=%s)",
             len(clause_ids),
             max_hops,
+            organization_id,
         )
 
         query = f"""
         UNWIND $clause_ids AS seed_id
         MATCH (seed) WHERE seed.id = seed_id
+          AND (
+            seed:RegulationClause
+            OR seed:DomainDocument
+            OR seed.is_global = true
+            OR coalesce(seed.organization_id, seed.org_id, '') = $org_id
+          )
         MATCH path = (seed)-[r:MATCH|PARTIAL_MATCH|MISSING|NEXT_CLAUSE|HAS_ENTITY|HAS_TOPIC|HAS_SECTION|REFERENCES|SIMILAR_TO|HAS_CLAUSE|BELONGS_TO*1..{max_hops}]-(target)
-        WHERE target:Clause OR target:PolicyClause OR target:RegulationClause OR target:Entity OR target:Topic OR target:Section OR target:Document OR target:UserDocument OR target:DomainDocument
+        WHERE (target:Clause OR target:PolicyClause OR target:RegulationClause OR target:Entity OR target:Topic OR target:Section OR target:Document OR target:UserDocument OR target:DomainDocument)
+          AND (
+            $org_id IS NULL
+            OR target:RegulationClause
+            OR target:DomainDocument
+            OR target:Entity
+            OR target:Topic
+            OR coalesce(target.organization_id, target.org_id, '') = $org_id
+          )
+          AND ALL(n IN nodes(path) WHERE
+            n:Entity
+            OR n:Topic
+            OR n:RegulationClause
+            OR n:DomainDocument
+            OR n.is_global = true
+            OR coalesce(n.organization_id, n.org_id, '') = $org_id
+          )
         WITH seed_id, target, path, length(path) AS dist
         ORDER BY dist ASC
         RETURN 
@@ -256,12 +270,13 @@ class HybridRetriever:
             coalesce(target.text, target.name, target.title, '') AS target_text,
             target.name AS target_name,
             coalesce(target.title, target.name, target.text) AS target_title,
+            target.organization_id AS target_org_id,
             dist,
             [rel IN relationships(path) | type(rel)] AS rel_types
         LIMIT 300
         """
 
-        records = run_query(query, {"clause_ids": list(clause_ids)})
+        records = run_query(query, {"clause_ids": list(clause_ids), "org_id": str(organization_id)})
         graph_map: dict[str, dict[str, Any]] = {}
 
         for rec in records:
@@ -270,6 +285,15 @@ class HybridRetriever:
             target_labels = rec.get("target_labels") or []
             dist = int(rec.get("dist") or 1)
             rel_types = rec.get("rel_types") or []
+            target_org_id = rec.get("target_org_id")
+
+            # Post-retrieval validation: if target node has a foreign tenant org_id, block it
+            if target_org_id and str(target_org_id) != str(organization_id):
+                logger.error(
+                    "[SECURITY ALERT] Discarded cross-tenant graph node: target_id=%s target_org=%s requested_org=%s",
+                    target_id, target_org_id, organization_id,
+                )
+                continue
 
             # If target is another Clause (PolicyClause or RegulationClause), add/update candidate clause entry
             if any(lbl in ("Clause", "PolicyClause", "RegulationClause") for lbl in target_labels) and target_id:
@@ -497,6 +521,7 @@ class HybridRetriever:
         seed_clause_ids = [h["clause_id"] for h in vector_hits if h.get("clause_id")]
         graph_nodes = self._expand_neo4j_graph(
             seed_clause_ids,
+            organization_id=organization_id,
             max_hops=self.config.max_hops,
         )
 

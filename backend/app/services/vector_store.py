@@ -60,6 +60,8 @@ def _clause_to_point(
     title: str,
     domain: str,
     organization_id: str | None = None,
+    is_global: bool = False,
+    document_type: str = "POLICY",
 ) -> PointStruct | None:
     """Convert a preprocessed clause dict to a Qdrant PointStruct.
 
@@ -82,6 +84,8 @@ def _clause_to_point(
         "type": str(clause.get("type") or "general"),
         "title": title,
         "domain": domain,
+        "is_global": bool(is_global),
+        "document_type": str(document_type),
     }
     if organization_id:
         payload["organization_id"] = str(organization_id)
@@ -100,6 +104,8 @@ def store_clauses_in_qdrant(
     title: str,
     domain: str,
     organization_id: str | None = None,
+    is_global: bool = False,
+    document_type: str = "POLICY",
     collection: str = COLLECTION_USER,
     batch_size: int = 64,
 ) -> int:
@@ -131,7 +137,15 @@ def store_clauses_in_qdrant(
 
     points: list[PointStruct] = []
     for clause in clauses:
-        point = _clause_to_point(clause, document_id, title, domain, organization_id)
+        point = _clause_to_point(
+            clause,
+            document_id,
+            title,
+            domain,
+            organization_id,
+            is_global=is_global,
+            document_type=document_type,
+        )
         if point is not None:
             points.append(point)
 

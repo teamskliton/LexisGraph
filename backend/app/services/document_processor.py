@@ -184,17 +184,25 @@ def _run_preprocessing(extracted_text: str, document: Document | Regulation) -> 
 def _store_in_qdrant(processed: dict, document: Document | Regulation) -> int:
     """Upsert clause embeddings into Qdrant. Returns number of points stored."""
     clauses = processed.get("clauses") or []
+    org_id = str(document.organization_id) if hasattr(document, "organization_id") and document.organization_id else None
+    is_global = getattr(document, "is_global", False)
+    doc_type = "REGULATION" if isinstance(document, Regulation) else str(getattr(document, "document_type", "POLICY").value if hasattr(getattr(document, "document_type", None), "value") else getattr(document, "document_type", "POLICY"))
     count = store_clauses_in_qdrant(
         clauses,
         document_id=str(document.id),
-        title=processed.get("title", document.original_filename),
+        title=processed.get("title", getattr(document, "original_filename", "Document")),
         domain=processed.get("domain", _DEFAULT_DOMAIN),
-        organization_id=str(document.organization_id) if hasattr(document, "organization_id") else None,
+        organization_id=org_id,
+        is_global=is_global,
+        document_type=doc_type,
     )
     logger.info(
-        "Qdrant store complete: document_id=%s points=%s",
+        "Qdrant store complete: document_id=%s points=%s org_id=%s doc_type=%s is_global=%s",
         document.id,
         count,
+        org_id,
+        doc_type,
+        is_global,
     )
     return count
 
@@ -202,16 +210,18 @@ def _store_in_qdrant(processed: dict, document: Document | Regulation) -> int:
 def _build_neo4j_graph(processed: dict, document: Document | Regulation) -> dict:
     """Build Document + Clause nodes and HAS_CLAUSE edges in Neo4j."""
     org_id = str(document.organization_id) if hasattr(document, "organization_id") and document.organization_id else None
-    doc_type = str(getattr(document, "document_type", "POLICY").value if hasattr(getattr(document, "document_type", None), "value") else getattr(document, "document_type", "POLICY"))
+    is_global = getattr(document, "is_global", False)
+    doc_type = "REGULATION" if isinstance(document, Regulation) else str(getattr(document, "document_type", "POLICY").value if hasattr(getattr(document, "document_type", None), "value") else getattr(document, "document_type", "POLICY"))
     checksum = str(getattr(document, "checksum", "")) if getattr(document, "checksum", None) else None
 
     result = build_graph(
         processed,
         pg_document_id=str(document.id),
-        source_type="user",
+        source_type="regulation" if isinstance(document, Regulation) else "user",
         organization_id=org_id,
         document_type=doc_type,
         checksum=checksum,
+        is_global=is_global,
     )
     logger.info(
         "Neo4j graph built: document_id=%s org_id=%s result=%s",

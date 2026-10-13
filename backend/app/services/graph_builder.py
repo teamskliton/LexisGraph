@@ -70,6 +70,7 @@ def _upsert_document_node(
     organization_id: str | None = None,
     document_type: str = "POLICY",
     checksum: str | None = None,
+    is_global: bool = False,
 ) -> None:
     """MERGE a Document node keyed by the PostgreSQL UUID."""
     run_query(
@@ -81,7 +82,8 @@ def _upsert_document_node(
             d.pg_document_id  = $pg_document_id,
             d.organization_id = $organization_id,
             d.document_type   = $document_type,
-            d.checksum        = $checksum
+            d.checksum        = $checksum,
+            d.is_global       = $is_global
         """,
         {
             "id": pg_document_id,
@@ -92,17 +94,18 @@ def _upsert_document_node(
             "organization_id": organization_id,
             "document_type": document_type,
             "checksum": checksum,
+            "is_global": is_global,
         },
         write=True,
     )
     logger.info(
-        "Neo4j Document node upserted: id=%s title=%r org_id=%s doc_type=%s",
-        pg_document_id, title, organization_id, document_type,
+        "Neo4j Document node upserted: id=%s title=%r org_id=%s doc_type=%s is_global=%s",
+        pg_document_id, title, organization_id, document_type, is_global,
     )
 
 
 def _upsert_clause_nodes_batch(clause_rows: list[dict]) -> int:
-    """Batch MERGE Clause nodes. Returns count merged."""
+    """Batch MERGE Clause nodes with tenant isolation properties. Returns count merged."""
     if not clause_rows:
         return 0
 
@@ -111,14 +114,20 @@ def _upsert_clause_nodes_batch(clause_rows: list[dict]) -> int:
         UNWIND $batch AS c
         MERGE (n:Clause {id: c.id})
         ON CREATE SET
-            n.text        = c.text,
-            n.type        = c.type,
-            n.doc_id      = c.doc_id,
-            n.source_type = c.source_type,
-            n.created_at  = datetime()
+            n.text            = c.text,
+            n.type            = c.type,
+            n.doc_id          = c.doc_id,
+            n.source_type     = c.source_type,
+            n.organization_id = c.organization_id,
+            n.document_type   = c.document_type,
+            n.is_global       = c.is_global,
+            n.created_at      = datetime()
         ON MATCH SET
-            n.text = c.text,
-            n.type = c.type
+            n.text            = c.text,
+            n.type            = c.type,
+            n.organization_id = coalesce(n.organization_id, c.organization_id),
+            n.document_type   = coalesce(n.document_type, c.document_type),
+            n.is_global       = coalesce(n.is_global, c.is_global)
         RETURN count(n) AS merged
         """,
         {"batch": clause_rows},
@@ -162,6 +171,7 @@ def build_graph(
     organization_id: str | None = None,
     document_type: str = "POLICY",
     checksum: str | None = None,
+    is_global: bool = False,
 ) -> dict:
     """Build Document + Clause nodes and HAS_CLAUSE edges in Neo4j.
 
@@ -180,6 +190,8 @@ def build_graph(
         Type of document (e.g. ``"POLICY"`` or ``"REGULATION"``).
     checksum:
         SHA-256 digest of the document content.
+    is_global:
+        Whether this is a shared global statutory regulation.
 
     Returns
     -------
@@ -194,8 +206,8 @@ def build_graph(
     clauses = processed.get("clauses") or []
 
     logger.info(
-        "[GRAPH] Building graph: pg_document_id=%s title=%r org_id=%s doc_type=%s clauses=%s",
-        pg_document_id, title, organization_id, document_type, len(clauses),
+        "[GRAPH] Building graph: pg_document_id=%s title=%r org_id=%s doc_type=%s is_global=%s clauses=%s",
+        pg_document_id, title, organization_id, document_type, is_global, len(clauses),
     )
 
     # 1. Upsert Document node
@@ -207,6 +219,7 @@ def build_graph(
         organization_id=organization_id,
         document_type=document_type,
         checksum=checksum,
+        is_global=is_global,
     )
 
     # 2. Build clause rows
@@ -226,6 +239,9 @@ def build_graph(
                 "type": ctype,
                 "doc_id": pg_document_id,
                 "source_type": source_type,
+                "organization_id": organization_id,
+                "document_type": document_type,
+                "is_global": is_global,
             }
         )
         clause_ids.append(cid)
@@ -253,7 +269,7 @@ def create_similarity_edges(
     similarity_threshold: float = _DEFAULT_SIMILARITY_THRESHOLD,
     top_k: int = _DEFAULT_SIMILARITY_TOP_K,
 ) -> dict:
-    """Create SIMILAR_TO edges between semantically close Clause nodes.
+    """Create SIMILAR_TO edges between semantically close Clause nodes within tenant boundary.
 
     Parameters
     ----------
@@ -306,6 +322,12 @@ def create_similarity_edges(
             MATCH (c1:Clause {id: $cid_1})
             MATCH (c2:Clause {id: $cid_2})
             WHERE c1.id <> c2.id
+              AND (
+                (c1.organization_id IS NOT NULL AND c1.organization_id = c2.organization_id)
+                OR c1.is_global = true
+                OR c2.is_global = true
+                OR (c1.organization_id IS NULL AND c2.organization_id IS NULL)
+              )
             MERGE (c1)-[r:SIMILAR_TO]->(c2)
             SET r.score = $score
             """,

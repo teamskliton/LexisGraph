@@ -34,7 +34,9 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual(req.organization_id, self.org_id)
         self.assertEqual(req.conversation_id, "conv-123")
 
-    @patch("app.routes.reports.verify_user_organization_access", return_value=True)
+    @patch("app.services.chat_service.verify_user_workspace_membership")
+    @patch("app.services.chat_service.validate_retrieval_candidates")
+    @patch("app.services.chat_service.authorize_citations")
     @patch("app.services.chat_service.log_activity")
     @patch("app.services.chat_service._resolve_reasoning")
     @patch("app.services.chat_service.retrieve_context")
@@ -43,8 +45,11 @@ class ChatServiceTest(unittest.TestCase):
         mock_retrieve,
         mock_resolve,
         mock_log,
+        mock_auth_citations,
+        mock_val_candidates,
         mock_verify,
     ):
+        mock_verify.return_value = (self.org, MagicMock(), "ADMIN")
         db = MagicMock()
         def _mock_get(model_cls, entity_id):
             if model_cls == Organization:
@@ -68,6 +73,8 @@ class ChatServiceTest(unittest.TestCase):
             formatted_prompt_context="Formatted context snippet",
         )
         mock_retrieve.return_value = mock_context
+        mock_val_candidates.return_value = [clause]
+        mock_auth_citations.side_effect = lambda *args, **kwargs: kwargs.get("citations", args[2] if len(args) > 2 else [])
         mock_resolve.return_value = "According to the Data Governance Policy, the data retention period is 7 years."
 
         payload = ChatRequest(
@@ -89,7 +96,7 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual(response.sources[0].clause_number, "clause-101")
         self.assertEqual(response.sources[0].search_source, "Both")
 
-    @patch("app.routes.reports.verify_user_organization_access", return_value=True)
+    @patch("app.services.chat_service.verify_user_workspace_membership")
     @patch("app.services.chat_service.log_activity")
     @patch("app.services.chat_service.retrieve_context")
     def test_process_chat_request_low_evidence_fallback(
@@ -98,6 +105,7 @@ class ChatServiceTest(unittest.TestCase):
         mock_log,
         mock_verify,
     ):
+        mock_verify.return_value = (self.org, MagicMock(), "ADMIN")
         db = MagicMock()
         def _mock_get(model_cls, entity_id):
             if model_cls == Organization:
@@ -125,7 +133,7 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual(response.sources, [])
         self.assertTrue(len(response.conversation_id) > 0)
 
-    @patch("app.routes.reports.verify_user_organization_access", return_value=False)
+    @patch("app.services.chat_service.verify_user_workspace_membership", side_effect=HTTPException(status_code=404, detail="Workspace not found."))
     def test_process_chat_request_org_not_found(self, mock_verify):
         db = MagicMock()
 
