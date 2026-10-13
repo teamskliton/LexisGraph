@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
@@ -18,6 +19,7 @@ from app.db.models import Document, DocumentType as DBDocumentType, Organization
 from app.db.session import get_db
 from typing import Union, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query, Header
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from app.services.activity_service import log_activity
 from app.services.storage import store_document, StorageError, InvalidMimeTypeError, FileTooLargeError
@@ -265,6 +267,57 @@ def list_documents(
         Document.document_type == DBDocumentType.POLICY,
     ).order_by(Document.created_at.desc()).all()
 
+    # Scoped duplicate detection & versioning within this organization
+    filename_groups: dict[str, list[Document]] = {}
+    for p in policies:
+        filename_groups.setdefault(p.original_filename, []).append(p)
+
+    for fname, group in filename_groups.items():
+        # group is ordered desc by created_at; chronological order gives v1.0, v2.0, etc.
+        asc_group = list(reversed(group))
+        for idx, p in enumerate(asc_group):
+            p.version = f"v{idx + 1}.0"
+
+    # Fetch latest compliance reports for analysis status
+    doc_ids = [p.id for p in policies]
+    reports_map = {}
+    if doc_ids:
+        try:
+            from app.compliance.models import ComplianceReport
+            reports = (
+                db.query(ComplianceReport)
+                .filter(
+                    ComplianceReport.organization_id == org.id,
+                    ComplianceReport.policy_document_id.in_(doc_ids),
+                    ComplianceReport.is_deleted == False,
+                )
+                .order_by(ComplianceReport.created_at.desc())
+                .all()
+            )
+            for r in reports:
+                if r.policy_document_id not in reports_map:
+                    reports_map[r.policy_document_id] = r
+        except Exception as exc:
+            logger.warning("Error querying compliance reports for policies: %s", exc)
+
+    for p in policies:
+        report = reports_map.get(p.id)
+        if not report:
+            p.analysis_status = "Not Analyzed"
+        else:
+            r_status = getattr(report.status, "value", str(report.status))
+            if r_status in ("PENDING", "PROCESSING"):
+                p.analysis_status = "Under Review"
+            elif r_status == "COMPLETED":
+                non_comp = getattr(report, "non_compliant_clauses", 0) or 0
+                score = getattr(report, "overall_score", None)
+                if non_comp > 0 or (score is not None and score < 80.0):
+                    p.analysis_status = "Non-Compliant"
+                else:
+                    p.analysis_status = "Compliant"
+            else:
+                p.analysis_status = "Not Analyzed"
+
     if document_type == DBDocumentType.POLICY.value:
         return policies
 
@@ -285,6 +338,7 @@ def list_documents(
                 "id": reg.id,
                 "organization_id": org.id,
                 "uploaded_by": reg.uploaded_by,
+                "uploader_name": (reg.uploader.full_name or reg.uploader.username) if getattr(reg, "uploader", None) else None,
                 "original_filename": reg.original_filename,
                 "stored_filename": reg.stored_filename,
                 "file_path": reg.file_path,
@@ -293,6 +347,8 @@ def list_documents(
                 "checksum": reg.document_hash,
                 "document_type": DBDocumentType.REGULATION.value,
                 "processing_status": reg.processing_status,
+                "analysis_status": "Not Analyzed",
+                "version": reg.version or "v1.0",
                 "progress": reg.progress,
                 "current_step": reg.current_step,
                 "processing_started_at": reg.processing_started_at,
@@ -614,6 +670,153 @@ def delete_document(
     )
 
     return None
+
+
+@router.get(
+    "/{document_id}/download",
+    summary="Download a policy or regulation document",
+)
+def download_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Download a document.
+    Validates organization ownership strictly for policy documents.
+    """
+    doc = db.get(Document, document_id)
+    if doc:
+        _validate_organization_ownership(db, doc.organization_id, current_user.id)
+        if not Path(doc.file_path).exists():
+            raise HTTPException(status_code=404, detail="Document file not found on disk.")
+        return FileResponse(
+            path=doc.file_path,
+            filename=doc.original_filename,
+            media_type=doc.mime_type or "application/pdf",
+        )
+
+    reg = db.get(Regulation, document_id)
+    if reg:
+        if not Path(reg.file_path).exists():
+            raise HTTPException(status_code=404, detail="Regulation file not found on disk.")
+        return FileResponse(
+            path=reg.file_path,
+            filename=reg.original_filename or f"{reg.title}.pdf",
+            media_type=reg.mime_type or "application/pdf",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Document or Regulation not found.",
+    )
+
+
+@router.get(
+    "/{document_id}/file",
+    summary="Stream document file for PDF viewer",
+)
+def stream_document_file(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Stream document file for inline viewer or preview.
+    """
+    return download_document(document_id, db, current_user)
+
+
+@router.post(
+    "/{document_id}/reprocess",
+    response_model=DocumentStatusResponse,
+    summary="Reprocess a policy document",
+)
+def reprocess_document(
+    document_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DocumentStatusResponse:
+    """
+    Re-trigger full processing pipeline for a policy document.
+    Enforces analyst or admin permission in the document's organization.
+    """
+    doc = db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    _validate_organization_ownership(db, doc.organization_id, current_user.id)
+
+    from app.core.rbac_dependencies import is_org_analyst_or_admin
+    if not is_org_analyst_or_admin(db, current_user.id, doc.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewers and Viewers are not permitted to reprocess documents.",
+        )
+
+    doc.processing_status = ProcessingStatus.UPLOADED
+    doc.progress = 0
+    doc.current_step = "Re-queued for processing"
+    doc.error_message = None
+    doc.processed_at = None
+    doc.processing_started_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(doc)
+
+    background_tasks.add_task(process_document, doc.id)
+    return DocumentStatusResponse(
+        document_id=doc.id,
+        status=doc.processing_status,
+        progress=doc.progress,
+        current_step=doc.current_step,
+        error_message=None,
+        processing_started_at=doc.processing_started_at,
+        processed_at=None,
+    )
+
+
+@router.patch(
+    "/{document_id}/rename",
+    response_model=DocumentResponse,
+    summary="Rename a policy document",
+)
+def rename_document(
+    document_id: uuid.UUID,
+    new_filename: str = Query(..., min_length=1, max_length=255),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Document:
+    """
+    Rename a policy document.
+    Enforces analyst or admin permission in the document's organization.
+    """
+    doc = db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    _validate_organization_ownership(db, doc.organization_id, current_user.id)
+
+    from app.core.rbac_dependencies import is_org_analyst_or_admin
+    if not is_org_analyst_or_admin(db, current_user.id, doc.organization_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewers and Viewers are not permitted to rename documents.",
+        )
+
+    clean_name = new_filename.strip()
+    if not clean_name.lower().endswith((".pdf", ".docx", ".txt")):
+        orig_ext = Path(doc.original_filename).suffix
+        clean_name = f"{clean_name}{orig_ext}"
+
+    doc.original_filename = clean_name
+    db.commit()
+    db.refresh(doc)
+    return doc
 
 
 @router.get(

@@ -46,6 +46,7 @@ from app.db.session import Base, get_db
 from app.routes.compliance import router as compliance_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.findings import router as findings_router
+from app.routes.documents import router as documents_router
 from app.routes.pdf import router as pdf_router
 from app.routes.reports import router as reports_router, verify_user_organization_access
 from app.services.hybrid_retriever import HybridRetriever
@@ -274,6 +275,7 @@ class WorkspaceIsolationTestSuite(unittest.TestCase):
         cls.app.include_router(pdf_router)
         cls.app.include_router(compliance_router)
         cls.app.include_router(findings_router)
+        cls.app.include_router(documents_router)
 
         cls.active_user_id = cls.user_a_id
 
@@ -547,6 +549,117 @@ class WorkspaceIsolationTestSuite(unittest.TestCase):
         # Ensure Cypher query restricts policy clauses to org_id
         self.assertIn("coalesce(target.organization_id, target.org_id, '') = $org_id", cypher_query)
 
+    def test_list_documents_workspace_isolation(self):
+        """Verify GET /documents/ returns only active workspace policies and blocks cross-tenant access."""
+        # 1. User A queries Org A policies
+        self.__class__.active_user_id = self.user_a_id
+        res_a = self.client.get(
+            f"/documents/?organization_id={self.org_a_id}&document_type=POLICY",
+            headers={"X-Workspace-Id": str(self.org_a_id)},
+        )
+        self.assertEqual(res_a.status_code, status.HTTP_200_OK)
+        docs_a = res_a.json()
+        doc_ids_a = [d["id"] for d in docs_a]
+        self.assertIn(str(self.doc_a_id), doc_ids_a)
+        self.assertNotIn(str(self.doc_b_id), doc_ids_a)
+
+        # Verify human-readable uploader name and analysis status
+        policy_a = next(d for d in docs_a if d["id"] == str(self.doc_a_id))
+        self.assertEqual(policy_a["uploader_name"], "Alice Admin")
+        self.assertEqual(policy_a["analysis_status"], "Compliant")
+
+        # 2. User A queries Org B policies -> blocked (404/403)
+        res_cross = self.client.get(
+            f"/documents/?organization_id={self.org_b_id}&document_type=POLICY",
+            headers={"X-Workspace-Id": str(self.org_b_id)},
+        )
+        self.assertIn(res_cross.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN])
+
+        # 3. User B queries Org B policies -> gets only Org B policies
+        self.__class__.active_user_id = self.user_b_id
+        res_b = self.client.get(
+            f"/documents/?organization_id={self.org_b_id}&document_type=POLICY",
+            headers={"X-Workspace-Id": str(self.org_b_id)},
+        )
+        self.assertEqual(res_b.status_code, status.HTTP_200_OK)
+        docs_b = res_b.json()
+        doc_ids_b = [d["id"] for d in docs_b]
+        self.assertIn(str(self.doc_b_id), doc_ids_b)
+        self.assertNotIn(str(self.doc_a_id), doc_ids_b)
+
+        policy_b = next(d for d in docs_b if d["id"] == str(self.doc_b_id))
+        self.assertEqual(policy_b["uploader_name"], "Bob Admin")
+        self.assertEqual(policy_b["analysis_status"], "Non-Compliant")
+
+    def test_document_download_cross_tenant_denied(self):
+        """Verify document download enforces workspace authorization and rejects foreign tenant downloads."""
+        # User A attempting to download User B's policy document
+        self.__class__.active_user_id = self.user_a_id
+        res = self.client.get(f"/documents/{self.doc_b_id}/download")
+        self.assertIn(res.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN])
+
+    @patch("app.routes.documents.process_document")
+    def test_document_reprocess_workspace_isolation(self, mock_process):
+        """Verify document reprocessing is authorized per tenant workspace."""
+        # User A cannot reprocess User B's policy
+        self.__class__.active_user_id = self.user_a_id
+        res_cross = self.client.post(f"/documents/{self.doc_b_id}/reprocess")
+        self.assertIn(res_cross.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN])
+
+        # User A can reprocess User A's policy
+        res_auth = self.client.post(f"/documents/{self.doc_a_id}/reprocess")
+        self.assertEqual(res_auth.status_code, status.HTTP_200_OK)
+        data = res_auth.json()
+        self.assertEqual(data["status"], "UPLOADED")
+        mock_process.assert_called_once_with(self.doc_a_id)
+
+    def test_document_rename_workspace_isolation(self):
+        """Verify document renaming is authorized per tenant workspace."""
+        # User A cannot rename User B's policy
+        self.__class__.active_user_id = self.user_a_id
+        res_cross = self.client.patch(f"/documents/{self.doc_b_id}/rename?new_filename=compromised.pdf")
+        self.assertIn(res_cross.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN])
+
+        # User A can rename User A's policy
+        res_auth = self.client.patch(f"/documents/{self.doc_a_id}/rename?new_filename=security_standards_v2.pdf")
+        self.assertEqual(res_auth.status_code, status.HTTP_200_OK)
+        data = res_auth.json()
+        self.assertEqual(data["original_filename"], "security_standards_v2.pdf")
+
+    def test_policy_duplicate_scoped_versioning(self):
+        """Verify duplicate filename within the same workspace creates sequential versions without overwriting."""
+        db = self.SessionLocal()
+        # Add a 2nd document with same original_filename in Org A
+        doc_a2 = Document(
+            id=uuid.uuid4(),
+            organization_id=self.org_a_id,
+            uploaded_by=self.user_a_id,
+            original_filename="security_standards_v2.pdf",
+            stored_filename="security_standards_v2_stored.pdf",
+            file_path="/tmp/security_standards_v2_stored.pdf",
+            file_size=2048,
+            mime_type="application/pdf",
+            checksum="acme_hash_2",
+            document_type=DocumentType.POLICY,
+            processing_status=ProcessingStatus.PROCESSED,
+        )
+        db.add(doc_a2)
+        db.commit()
+        db.close()
+
+        self.__class__.active_user_id = self.user_a_id
+        res = self.client.get(
+            f"/documents/?organization_id={self.org_a_id}&document_type=POLICY",
+            headers={"X-Workspace-Id": str(self.org_a_id)},
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        docs = res.json()
+        v2_docs = [d for d in docs if d["original_filename"] == "security_standards_v2.pdf"]
+        self.assertEqual(len(v2_docs), 2)
+        versions = {d["version"] for d in v2_docs}
+        self.assertEqual(versions, {"v1.0", "v2.0"})
+
 
 if __name__ == "__main__":
     unittest.main()
+

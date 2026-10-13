@@ -1377,12 +1377,6 @@ export function AppSidebar({
             (typeof window !== "undefined" && window.location.search.includes("tab=REGULATIONS"))),
       },
       {
-        label: "Analyses",
-        href: "/compliance/history",
-        icon: Zap,
-        isActive: (p) => p === "/compliance/history",
-      },
-      {
         label: "Knowledge Graph",
         href: "/knowledge-graph",
         icon: Network,

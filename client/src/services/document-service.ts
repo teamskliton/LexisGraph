@@ -64,9 +64,16 @@ export const documentService = {
   /**
    * Fetch all documents for a specific organization.
    */
-  async getDocuments(organizationId: string): Promise<DocumentResponse[]> {
+  async getDocuments(
+    organizationId: string,
+    documentType?: "POLICY" | "REGULATION"
+  ): Promise<DocumentResponse[]> {
+    const params: Record<string, string> = { organization_id: organizationId };
+    if (documentType) {
+      params.document_type = documentType;
+    }
     const response = await api.get<DocumentResponse[]>("/documents/", {
-      params: { organization_id: organizationId },
+      params,
     });
     return response.data;
   },
@@ -149,6 +156,46 @@ export const documentService = {
    */
   async deleteDocument(documentId: string): Promise<void> {
     await api.delete(`/documents/${documentId}`);
+  },
+
+  /**
+   * Download a document directly from backend.
+   */
+  async downloadDocument(documentId: string, filename = "document.pdf"): Promise<void> {
+    const response = await api.get(`/documents/${documentId}/download`, {
+      responseType: "blob",
+    });
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  /**
+   * Reprocess a policy document.
+   */
+  async reprocessDocument(documentId: string): Promise<DocumentStatusResponse> {
+    const response = await api.post<DocumentStatusResponse>(
+      `/documents/${documentId}/reprocess`
+    );
+    return response.data;
+  },
+
+  /**
+   * Rename a policy document.
+   */
+  async renameDocument(documentId: string, newFilename: string): Promise<DocumentResponse> {
+    const response = await api.patch<DocumentResponse>(
+      `/documents/${documentId}/rename`,
+      null,
+      { params: { new_filename: newFilename } }
+    );
+    return response.data;
   },
 
   /**

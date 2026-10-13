@@ -211,5 +211,11 @@ class Document(Base):
         lazy="select",
     )
 
+    @property
+    def uploader_name(self) -> str | None:
+        if self.uploader:
+            return self.uploader.full_name or self.uploader.username
+        return None
+
     def __repr__(self) -> str:
         return f"<Document(id={self.id}, filename={self.original_filename!r})>"

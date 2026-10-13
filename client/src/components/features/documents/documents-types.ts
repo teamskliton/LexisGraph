@@ -24,6 +24,7 @@ export interface OrganizationDocumentExtended {
   uploaded_at: string;
   uploaded_by: string;
   status: ProcessingStatus;
+  analysis_status?: "Not Analyzed" | "Under Review" | "Compliant" | "Non-Compliant";
   tags: string[];
   description?: string;
   clause_count?: number;

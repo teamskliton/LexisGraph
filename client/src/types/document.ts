@@ -25,6 +25,9 @@ export interface DocumentResponse {
   error_message: string | null;
   created_at: string;
   updated_at: string;
+  uploader_name?: string | null;
+  analysis_status?: string | null;
+  version?: string | null;
 }
 
 /** Returned by GET /documents/{id}/status */

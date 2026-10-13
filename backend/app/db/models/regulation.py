@@ -209,6 +209,12 @@ class Regulation(Base):
         lazy="select",
     )
 
+    @property
+    def uploader_name(self) -> str | None:
+        if self.uploader:
+            return self.uploader.full_name or self.uploader.username
+        return None
+
     def __repr__(self) -> str:
         return f"<Regulation(id={self.id}, title={self.title!r}, document_hash={self.document_hash!r})>"
 

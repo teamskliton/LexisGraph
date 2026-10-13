@@ -217,6 +217,9 @@ class DocumentResponse(DocumentBase):
     error_message: str | None = Field(default=None, description="Error message if processing failed")
     created_at: datetime = Field(..., description="UTC timestamp of upload")
     updated_at: datetime = Field(..., description="UTC timestamp of last update")
+    uploader_name: str | None = Field(default=None, description="Display name of the user who uploaded this document")
+    analysis_status: str | None = Field(default="Not Analyzed", description="Analysis status: Not Analyzed, Under Review, Compliant, Non-Compliant")
+    version: str | None = Field(default="v1.0", description="Policy version in this workspace")
 
 
 class DocumentStatusResponse(BaseModel):
@@ -275,6 +278,8 @@ class RegulationResponse(RegulationBase):
     error_message: str | None = Field(default=None, description="Error message if processing failed")
     created_at: datetime = Field(..., description="UTC timestamp of upload")
     updated_at: datetime = Field(..., description="UTC timestamp of last update")
+    uploader_name: str | None = Field(default=None, description="Display name of the user who uploaded this document")
+    analysis_status: str | None = Field(default="Not Analyzed", description="Analysis status")
 
 
 class RegulationStatusResponse(BaseModel):

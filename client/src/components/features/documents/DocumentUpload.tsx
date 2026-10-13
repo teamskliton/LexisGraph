@@ -31,6 +31,9 @@ interface DocumentUploadProps {
   onOpenChange: (open: boolean) => void;
   onUploadSuccess: (docs: OrganizationDocumentExtended[]) => void;
   organizationId?: string;
+  organizationName?: string;
+  existingPolicies?: Array<{ name: string; version?: string }>;
+  defaultCategory?: DocumentCategory;
 }
 
 export function DocumentUpload({
@@ -38,15 +41,25 @@ export function DocumentUpload({
   onOpenChange,
   onUploadSuccess,
   organizationId = "",
+  organizationName = "Active Workspace",
+  existingPolicies = [],
+  defaultCategory = "Policy",
 }: DocumentUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragOver, setIsDragOver] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<DocumentCategory>("Policy");
+  const [selectedCategory, setSelectedCategory] = useState<DocumentCategory>(defaultCategory);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isDuplicateInWorkspace = Boolean(
+    selectedFile &&
+      existingPolicies.some(
+        (p) => p.name.trim().toLowerCase() === selectedFile.name.trim().toLowerCase()
+      )
+  );
 
   const handleFileSelect = (file: File) => {
     const check = validateFile(file);
@@ -226,6 +239,22 @@ export function DocumentUpload({
                   <Progress value={progress} className="h-1.5" />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Workspace Duplicate Notification */}
+          {selectedFile && isDuplicateInWorkspace && !isUploading && (
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-500">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold block text-amber-400">
+                  Existing Policy Detected in {organizationName}
+                </span>
+                <span className="text-[11px] leading-relaxed text-amber-300/90 block">
+                  A policy named &ldquo;{selectedFile.name}&rdquo; already exists in this workspace.
+                  Uploading will create a new version and preserve historical versions without overwriting existing data.
+                </span>
+              </div>
             </div>
           )}
 

@@ -5,48 +5,60 @@ import { ProtectedRoute } from "@/components/layout/protected-route";
 import { AppShell } from "@/components/layout/AppShell";
 import { PolicyCenter } from "@/components/features/documents/PolicyCenter";
 import { organizationsService } from "@/services/api/organizations";
+import { useAuth } from "@/context/auth-context";
 
 function PoliciesPageContent() {
+  const { activeMembership } = useAuth();
   const [activeOrgId, setActiveOrgId] = useState<string>(() => {
-    return typeof window !== "undefined"
-      ? localStorage.getItem("selected_organization_id") || "org-001"
-      : "org-001";
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("selected_organization_id") || "";
+    }
+    return "";
   });
-  const [orgName, setOrgName] = useState<string>("Organization Workspace");
+  const [orgName, setOrgName] = useState<string>(
+    activeMembership?.organization_name || "Active Workspace"
+  );
 
   useEffect(() => {
-    const orgId = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
-    if (orgId) {
-      setActiveOrgId(orgId);
-      organizationsService
-        .getOrganizationById(orgId)
-        .then((o) => {
-          if (o?.name) setOrgName(o.name);
-        })
-        .catch(() => {});
-    }
-
-    const handleOrgChange = () => {
-      const stored = typeof window !== "undefined" ? localStorage.getItem("selected_organization_id") : null;
-      if (stored) {
-        setActiveOrgId(stored);
+    const syncOrg = () => {
+      const stored =
+        typeof window !== "undefined"
+          ? localStorage.getItem("selected_organization_id")
+          : null;
+      const targetId = stored || activeMembership?.organization_id || "";
+      if (targetId) {
+        setActiveOrgId(targetId);
         organizationsService
-          .getOrganizationById(stored)
+          .getOrganizationById(targetId)
           .then((o) => {
             if (o?.name) setOrgName(o.name);
           })
-          .catch(() => {});
+          .catch(() => {
+            if (activeMembership?.organization_name) {
+              setOrgName(activeMembership.organization_name);
+            }
+          });
       }
+    };
+
+    syncOrg();
+
+    const handleOrgChange = () => {
+      syncOrg();
     };
 
     window.addEventListener("organization_changed", handleOrgChange);
     return () => window.removeEventListener("organization_changed", handleOrgChange);
-  }, []);
+  }, [activeMembership]);
 
   return (
     <AppShell>
       <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-6">
-        <PolicyCenter organizationId={activeOrgId} organizationName={orgName} />
+        <PolicyCenter
+          key={activeOrgId || "empty-org"}
+          organizationId={activeOrgId}
+          organizationName={orgName}
+        />
       </main>
     </AppShell>
   );
