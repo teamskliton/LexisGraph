@@ -1,17 +1,14 @@
 // /compliance/new — Analysis Configuration Page Route
 // Route: /compliance/new
-// Displays the Analysis Configuration panel before initiating an AI compliance analysis.
+// Displays the New Compliance Analysis configuration panel before initiating an AI compliance analysis.
 
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { LogOut } from "lucide-react";
 import { ProtectedRoute } from "@/components/layout/protected-route";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/auth-context";
-import { Button } from "@/components/ui/button";
 
 import { AnalysisConfigurationPanel } from "@/components/compliance/AnalysisConfigurationPanel";
 import { organizationsService, Organization } from "@/services/api/organizations";
@@ -21,9 +18,7 @@ import { complianceService, ComplianceReport } from "@/services/api/compliance";
 import { DocumentResponse } from "@/types/document";
 
 function AnalysisConfigurationPageContent() {
-  const { logout } = useAuth();
-  const router = useRouter();
-
+  const { activeMembership } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
   const [isOrgLoading, setIsOrgLoading] = useState(true);
@@ -32,8 +27,9 @@ function AnalysisConfigurationPageContent() {
   const [regulations, setRegulations] = useState<GlobalRegulation[]>([]);
   const [reports, setReports] = useState<ComplianceReport[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
 
-  // 1. Fetch Organizations — restore last-selected org from localStorage
+  // 1. Fetch Organizations — synchronize with global active organization
   useEffect(() => {
     let active = true;
     (async () => {
@@ -42,15 +38,22 @@ function AnalysisConfigurationPageContent() {
         if (!active) return;
         setOrganizations(data);
         if (data.length > 0) {
-          // Prefer the org the user last selected (e.g. the one they just uploaded to)
-          const savedOrgId = typeof window !== "undefined"
-            ? window.localStorage.getItem("lexisgraph_selected_org_id")
+          // Priority 1: Auth context active membership
+          // Priority 2: Stored localStorage org ID
+          // Priority 3: First available organization
+          const storedOrgId = typeof window !== "undefined"
+            ? window.localStorage.getItem("selected_organization_id") ||
+              window.localStorage.getItem("lexisgraph_selected_org_id")
             : null;
-          const validSaved = savedOrgId && data.some((o) => o.id === savedOrgId);
-          const chosenId = validSaved ? savedOrgId! : data[0].id;
+
+          const activeOrgId = activeMembership?.organization_id;
+          const preferredId = activeOrgId || storedOrgId;
+          const validOrg = preferredId && data.some((o) => o.id === preferredId);
+          const chosenId = validOrg ? preferredId! : data[0].id;
+
           setSelectedOrgId(chosenId);
-          // Persist the chosen org so refresh/navigation stays consistent
           if (typeof window !== "undefined") {
+            window.localStorage.setItem("selected_organization_id", chosenId);
             window.localStorage.setItem("lexisgraph_selected_org_id", chosenId);
           }
         }
@@ -63,12 +66,30 @@ function AnalysisConfigurationPageContent() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [activeMembership]);
+
+  // Synchronize with global organization_changed events
+  useEffect(() => {
+    const handleOrgChanged = () => {
+      if (typeof window !== "undefined") {
+        const stored =
+          window.localStorage.getItem("selected_organization_id") ||
+          window.localStorage.getItem("lexisgraph_selected_org_id");
+        if (stored && stored !== selectedOrgId) {
+          setSelectedOrgId(stored);
+        }
+      }
+    };
+
+    window.addEventListener("organization_changed", handleOrgChanged);
+    return () => window.removeEventListener("organization_changed", handleOrgChanged);
+  }, [selectedOrgId]);
 
   // 2. Fetch Organization Specific Documents, Regulations, and Reports
   const fetchOrgData = useCallback(async (orgId: string) => {
     if (!orgId) return;
     setIsDataLoading(true);
+    setDataError(null);
 
     try {
       const [docsResult, regsResult, reportsResult] = await Promise.allSettled([
@@ -81,7 +102,7 @@ function AnalysisConfigurationPageContent() {
         setDocuments(docsResult.value || []);
       } else {
         console.error("Failed to fetch documents:", docsResult.reason);
-        toast.error("Could not load policy documents. Please try refreshing.");
+        toast.error("Could not load policy documents for workspace.");
         setDocuments([]);
       }
 
@@ -89,6 +110,7 @@ function AnalysisConfigurationPageContent() {
         setRegulations(regsResult.value || []);
       } else {
         console.error("Failed to fetch regulations:", regsResult.reason);
+        toast.error("Could not load global regulations catalog.");
         setRegulations([]);
       }
 
@@ -100,6 +122,7 @@ function AnalysisConfigurationPageContent() {
       }
     } catch (err) {
       console.error("Failed loading configuration data:", err);
+      setDataError("Failed loading workspace configuration data. Please try again.");
       toast.error("Failed loading configuration data.");
     } finally {
       setIsDataLoading(false);
@@ -118,7 +141,9 @@ function AnalysisConfigurationPageContent() {
   const handleSelectOrganization = (id: string) => {
     setSelectedOrgId(id);
     if (typeof window !== "undefined") {
+      window.localStorage.setItem("selected_organization_id", id);
       window.localStorage.setItem("lexisgraph_selected_org_id", id);
+      window.dispatchEvent(new Event("organization_changed"));
     }
   };
 
@@ -128,8 +153,7 @@ function AnalysisConfigurationPageContent() {
 
   return (
     <AppShell>
-      {/* Main Body */}
-      <main className="p-6 md:p-10">
+      <div className="min-h-full">
         <AnalysisConfigurationPanel
           organization={selectedOrg}
           organizations={organizations}
@@ -139,8 +163,9 @@ function AnalysisConfigurationPageContent() {
           regulations={regulations}
           latestReport={latestReport}
           isLoading={isOrgLoading || isDataLoading}
+          error={dataError}
         />
-      </main>
+      </div>
     </AppShell>
   );
 }
