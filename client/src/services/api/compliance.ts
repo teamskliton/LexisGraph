@@ -111,6 +111,12 @@ export interface ComplianceJob {
   completed_at?: string | null;
   created_at: string;
   updated_at: string;
+  policy_name?: string | null;
+  regulation_name?: string | null;
+  created_by_name?: string | null;
+  created_by_email?: string | null;
+  overall_score?: number | null;
+  risk_level?: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -62,6 +62,14 @@ class ComplianceJobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Rich enterprise history metadata
+    policy_name: str | None = None
+    regulation_name: str | None = None
+    created_by_name: str | None = None
+    created_by_email: str | None = None
+    overall_score: float | None = None
+    risk_level: str | None = None
+
     @model_validator(mode="before")
     @classmethod
     def populate_job_aliases(cls, data: Any) -> Any:
@@ -73,6 +81,22 @@ class ComplianceJobResponse(BaseModel):
             setattr(data, "job_id", job_id_val)
             setattr(data, "regulation_document_id", reg_val)
             setattr(data, "processing_time", (ms_val / 1000.0) if ms_val else None)
+
+            # Enrich with relations if loaded
+            policy_doc = getattr(data, "policy_document", None)
+            if policy_doc:
+                setattr(data, "policy_name", getattr(policy_doc, "original_filename", None))
+
+            creator = getattr(data, "creator", None)
+            if creator:
+                name = getattr(creator, "full_name", None) or getattr(creator, "username", None)
+                setattr(data, "created_by_name", name)
+                setattr(data, "created_by_email", getattr(creator, "email", None))
+
+            report = getattr(data, "report", None)
+            if report:
+                setattr(data, "overall_score", getattr(report, "overall_score", None))
+                setattr(data, "risk_level", getattr(report, "risk_level", None))
         elif isinstance(data, dict):
             data["job_id"] = data.get("job_id") or data.get("id")
             data["regulation_document_id"] = data.get("regulation_document_id") or data.get("regulation_id")

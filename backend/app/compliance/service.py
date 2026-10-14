@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Sequence
 
 from fastapi import BackgroundTasks, HTTPException, status
@@ -130,9 +131,13 @@ def analyze_compliance_report(
                 policy_document_id=data.policy_document_id,
                 user_id=user_id,
             )
+            now = datetime.now(timezone.utc)
             cached_job.status = crud.ComplianceJobStatus.COMPLETED
             cached_job.progress = 100
             cached_job.current_step = "Completed (Cached)"
+            cached_job.started_at = now
+            cached_job.completed_at = now
+            cached_job.processing_time_ms = 0.0
             cached_job.report_id = cached_report.id
             db.commit()
 
@@ -290,10 +295,10 @@ def list_compliance_reports(
     List compliance reports accessible to the user.
     """
     if organization_id:
-        org = db.get(Organization, organization_id)
-        if not org or org.created_by != user_id:
+        from app.routes.reports import verify_user_organization_access
+        if not verify_user_organization_access(db, user_id, organization_id):
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="Organization not found or you don't have access to it.",
             )
         reports = crud.list_compliance_reports_by_org(db, organization_id, skip=skip, limit=limit)
@@ -370,8 +375,15 @@ def list_compliance_jobs(
     limit: int = 100,
 ) -> Sequence[crud.ComplianceJob]:
     """
-    List active/recent compliance jobs for the current user.
+    List active/recent compliance jobs for the current user or organization.
     """
+    if organization_id:
+        from app.routes.reports import verify_user_organization_access
+        if not verify_user_organization_access(db, user_id, organization_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization's compliance analyses.",
+            )
     return crud.list_compliance_jobs_by_user(
         db,
         user_id=user_id,

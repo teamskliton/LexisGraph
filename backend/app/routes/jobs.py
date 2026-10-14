@@ -10,7 +10,7 @@ import logging
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Header, status
 from sqlalchemy.orm import Session
 
 from app.compliance import service
@@ -58,16 +58,26 @@ def list_jobs(
     status: Optional[ComplianceJobStatus] = Query(None, description="Filter by Job Status"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    x_organization_id: Optional[str] = Header(None, alias="X-Organization-ID"),
+    x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[ComplianceJobResponse]:
     """
-    Return current user's compliance jobs ordered newest first.
+    Return active/recent compliance jobs scoped to the active organization or current user.
     """
+    target_org_id = organization_id
+    if not target_org_id and (x_organization_id or x_workspace_id):
+        raw_header = x_organization_id or x_workspace_id
+        try:
+            target_org_id = uuid.UUID(str(raw_header).strip())
+        except (ValueError, TypeError):
+            pass
+
     jobs = service.list_compliance_jobs(
         db,
         user_id=current_user.id,
-        organization_id=organization_id,
+        organization_id=target_org_id,
         status_filter=status,
         skip=skip,
         limit=limit,

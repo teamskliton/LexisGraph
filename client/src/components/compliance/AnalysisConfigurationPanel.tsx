@@ -389,13 +389,30 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
 
       {/* ── 1. Select Documents (Two-Column Layout) ── */}
       <section aria-labelledby="step-1-heading" className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 id="step-1-heading" className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <span>1. Select Documents</span>
           </h2>
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            Each analysis compares one internal policy against one statutory regulation.
-          </span>
+          <div className="flex items-center gap-3 text-xs">
+            {(selectedPolicyId || selectedRegulationId) && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectedPolicyId || selectedRegulationId)}
+                  onChange={() => {
+                    setSelectedPolicyId(null);
+                    setSelectedRegulationId(null);
+                  }}
+                  className="h-3.5 w-3.5 rounded border-border text-primary cursor-pointer accent-primary"
+                  title="Unselect both policy and regulation"
+                />
+                <span className="font-medium text-foreground">Unselect All</span>
+              </label>
+            )}
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Each analysis compares one internal policy against one statutory regulation.
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -491,6 +508,34 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
               </div>
             )}
 
+            {/* Unselect Policy Checkbox Control */}
+            {policies.length > 0 && (
+              <div className="flex items-center justify-between px-1 py-1.5 text-xs border-b border-border/40">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedPolicyId)}
+                    onChange={() => setSelectedPolicyId(null)}
+                    disabled={!selectedPolicyId}
+                    className="h-3.5 w-3.5 rounded border-border text-primary cursor-pointer accent-primary disabled:opacity-40"
+                    title={selectedPolicyId ? "Click to unselect policy" : "No policy selected"}
+                  />
+                  <span className={cn(selectedPolicyId ? "text-foreground font-medium" : "text-muted-foreground")}>
+                    {selectedPolicyId ? "1 Policy Selected (Click to unselect)" : "No policy selected"}
+                  </span>
+                </label>
+                {selectedPolicyId && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPolicyId(null)}
+                    className="text-[11px] text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                  >
+                    Unselect
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Policy List / Empty States */}
             {policies.length === 0 ? (
               <div className="p-6 rounded-lg border border-dashed border-border/60 bg-muted/10 text-center space-y-3">
@@ -549,7 +594,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
                       tabIndex={isProcessed ? 0 : -1}
                       onClick={() => {
                         if (isProcessed) {
-                          setSelectedPolicyId(pol.id);
+                          setSelectedPolicyId((prev) => (prev === pol.id ? null : pol.id));
                         } else if (isProcessing) {
                           toast.info("This document is still being processed. Please wait for completion.");
                         } else if (isFailed) {
@@ -559,7 +604,7 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
                       onKeyDown={(e) => {
                         if ((e.key === "Enter" || e.key === " ") && isProcessed) {
                           e.preventDefault();
-                          setSelectedPolicyId(pol.id);
+                          setSelectedPolicyId((prev) => (prev === pol.id ? null : pol.id));
                         }
                       }}
                       className={cn(
@@ -709,6 +754,34 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
               )}
             </div>
 
+            {/* Unselect Regulation Checkbox Control */}
+            {regulations.length > 0 && (
+              <div className="flex items-center justify-between px-1 py-1.5 text-xs border-b border-border/40">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedRegulationId)}
+                    onChange={() => setSelectedRegulationId(null)}
+                    disabled={!selectedRegulationId}
+                    className="h-3.5 w-3.5 rounded border-border text-primary cursor-pointer accent-primary disabled:opacity-40"
+                    title={selectedRegulationId ? "Click to unselect regulation" : "No regulation selected"}
+                  />
+                  <span className={cn(selectedRegulationId ? "text-foreground font-medium" : "text-muted-foreground")}>
+                    {selectedRegulationId ? "1 Regulation Selected (Click to unselect)" : "No regulation selected"}
+                  </span>
+                </label>
+                {selectedRegulationId && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRegulationId(null)}
+                    className="text-[11px] text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                  >
+                    Unselect
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Regulations List / States */}
             {regulations.length === 0 ? (
               <div className="p-6 rounded-lg border border-dashed border-border/60 bg-muted/10 text-center space-y-3">
@@ -753,11 +826,11 @@ export const AnalysisConfigurationPanel: React.FC<AnalysisConfigurationPanelProp
                       role="radio"
                       aria-checked={isSelected}
                       tabIndex={0}
-                      onClick={() => setSelectedRegulationId(reg.id)}
+                      onClick={() => setSelectedRegulationId((prev) => (prev === reg.id ? null : reg.id))}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setSelectedRegulationId(reg.id);
+                          setSelectedRegulationId((prev) => (prev === reg.id ? null : reg.id));
                         }
                       }}
                       className={cn(

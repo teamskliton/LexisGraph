@@ -7,7 +7,7 @@ import uuid
 from typing import Sequence
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.compliance.models import ComplianceReport, ComplianceReportStatus
 from app.compliance.schemas import ComplianceReportCreate, ComplianceReportUpdate
@@ -162,9 +162,17 @@ def get_compliance_job(
     job_id: uuid.UUID,
 ) -> ComplianceJob | None:
     """
-    Retrieve a compliance job by ID.
+    Retrieve a compliance job by ID with relationships eagerly loaded.
     """
-    stmt = select(ComplianceJob).where(ComplianceJob.id == job_id)
+    stmt = (
+        select(ComplianceJob)
+        .options(
+            joinedload(ComplianceJob.policy_document),
+            joinedload(ComplianceJob.creator),
+            joinedload(ComplianceJob.report),
+        )
+        .where(ComplianceJob.id == job_id)
+    )
     return db.scalars(stmt).first()
 
 
@@ -177,15 +185,21 @@ def list_compliance_jobs_by_user(
     limit: int = 100,
 ) -> Sequence[ComplianceJob]:
     """
-    List compliance jobs created by a user with optional org & status filtering.
+    List compliance jobs with organization tenant scoping and optional status filtering.
     """
-    stmt = select(ComplianceJob).where(ComplianceJob.created_by == user_id)
+    stmt = select(ComplianceJob).options(
+        joinedload(ComplianceJob.policy_document),
+        joinedload(ComplianceJob.creator),
+        joinedload(ComplianceJob.report),
+    )
     if organization_id:
         stmt = stmt.where(ComplianceJob.organization_id == organization_id)
+    else:
+        stmt = stmt.where(ComplianceJob.created_by == user_id)
     if status_filter:
         stmt = stmt.where(ComplianceJob.status == status_filter)
     stmt = stmt.order_by(ComplianceJob.created_at.desc()).offset(skip).limit(limit)
-    return db.scalars(stmt).all()
+    return db.scalars(stmt).unique().all()
 
 
 def cancel_compliance_job(

@@ -64,51 +64,57 @@ function AnalysisHistoryContent() {
     <AppShell>
       {/* Main Container */}
       <main className="p-6 md:p-10 space-y-6 max-w-7xl mx-auto">
-        {/* Workspace Title & Org Selector */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
+        {/* Compact Workspace Header with Org Context */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
           <div className="space-y-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/compliance")}
-              className="w-fit -ml-2 text-muted-foreground hover:text-foreground cursor-pointer gap-1.5 text-xs mb-1"
+              className="w-fit -ml-2 text-muted-foreground hover:text-foreground cursor-pointer gap-1.5 text-xs h-7 mb-0.5"
             >
-              <ArrowLeft className="h-4 w-4" /> Back to Compliance Workspace
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Compliance Workspace
             </Button>
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
-              Analysis History & Audit Trail
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+              Analysis History
             </h1>
             <p className="text-xs text-muted-foreground">
-              Review and audit all statutory compliance analyses executed for your organization.
+              Review past compliance analyses, execution status, and results for your organization.
             </p>
           </div>
 
-          {organizations.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label htmlFor="org-select" className="text-xs font-semibold text-muted-foreground">
-                Organization:
-              </label>
-              <select
-                id="org-select"
-                value={selectedOrg?.id || ""}
-                onChange={(e) => {
-                  const org = organizations.find((o) => o.id === e.target.value);
-                  if (org) {
-                    setSelectedOrg(org);
-                    if (typeof window !== "undefined") {
-                      localStorage.setItem("selected_organization_id", org.id);
-                      window.dispatchEvent(new Event("organization_changed"));
-                    }
-                  }
-                }}
-                className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer font-medium focus:ring-1 focus:ring-primary"
-              >
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
-                  </option>
-                ))}
-              </select>
+          {selectedOrg && (
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/70 bg-card shadow-xs text-xs">
+                <span className="text-[11px] font-medium text-muted-foreground">Workspace:</span>
+                {organizations.length > 1 ? (
+                  <select
+                    id="org-select"
+                    value={selectedOrg.id}
+                    onChange={(e) => {
+                      const org = organizations.find((o) => o.id === e.target.value);
+                      if (org) {
+                        setSelectedOrg(org);
+                        if (typeof window !== "undefined") {
+                          localStorage.setItem("selected_organization_id", org.id);
+                          localStorage.setItem("lexisgraph_selected_org_id", org.id);
+                          window.dispatchEvent(new Event("organization_changed"));
+                        }
+                      }
+                    }}
+                    className="bg-transparent font-semibold text-foreground cursor-pointer focus:outline-hidden text-xs pr-1"
+                    aria-label="Active workspace organization"
+                  >
+                    {organizations.map((org) => (
+                      <option key={org.id} value={org.id} className="bg-popover text-popover-foreground">
+                        {org.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="font-semibold text-foreground">{selectedOrg.name}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
