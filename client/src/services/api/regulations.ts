@@ -30,6 +30,11 @@ export const regulationsApi = {
     return response.data;
   },
 
+  getRegulation: async (regulationId: string): Promise<GlobalRegulation> => {
+    const response = await api.get(`/regulations/${regulationId}`);
+    return response.data;
+  },
+
   searchRegulations: async (query: string, organizationId?: string): Promise<GlobalRegulation[]> => {
     const params: Record<string, string> = { q: query };
     if (organizationId) params.organization_id = organizationId;

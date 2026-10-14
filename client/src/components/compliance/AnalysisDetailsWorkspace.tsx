@@ -1,135 +1,154 @@
-// AnalysisDetailsWorkspace — Comprehensive 9-Section Compliance Review Workspace
-// Reuses existing compliance APIs, document services, and KnowledgeGraphOverview component.
+// AnalysisDetailsWorkspace — Enterprise 5-Tab Statutory Compliance Audit Workspace
+// Tab-based architecture: Overview | Findings | Evidence | Action Plan | Audit Details
+// Synchronized with URL query parameters, GraphRAG evidence, and FindingDetailDrawer.
 
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { format, differenceInSeconds } from "date-fns";
+import React, { useEffect, useMemo, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   AlertTriangle,
-  Building2,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Copy,
-  Download,
   FileCheck2,
-  FileCode,
-  FileText,
   Layers,
-  Loader2,
-  Search,
+  LayoutDashboard,
   ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  Share2,
   Network,
-  Activity,
-  History,
-  ArrowRight,
-  BarChart3,
-  ExternalLink,
+  CheckCircle2,
+  FileText,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  CardFooter,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RiskBadge } from "@/components/compliance/shared/RiskBadge";
-import { StatusBadge } from "@/components/compliance/shared/StatusBadge";
 
 import {
   complianceService,
   ComplianceReport,
   ComplianceReportDetails,
-  EvaluatedClause,
 } from "@/services/api/compliance";
+import { reportService } from "@/services/reportService";
 import { documentService } from "@/services/document-service";
 import { DocumentResponse } from "@/types/document";
 import { organizationsService, Organization } from "@/services/api/organizations";
-import { KnowledgeGraphOverview } from "@/components/dashboard/KnowledgeGraphOverview";
-import { GapAnalysisWorkspace } from "@/components/compliance/GapAnalysisWorkspace";
-import { ShareReportModal } from "@/components/compliance/ShareReportModal";
+import { regulationsApi, GlobalRegulation } from "@/services/api/regulations";
+
+import { ReportHeader } from "./report/ReportHeader";
+import { OverviewTab } from "./report/OverviewTab";
+import { FindingsTab } from "./report/FindingsTab";
+import { EvidenceTab } from "./report/EvidenceTab";
+import { ActionPlanTab, ActionPlanItem } from "./report/ActionPlanTab";
+import { AuditDetailsTab } from "./report/AuditDetailsTab";
+import { FindingDetailDrawer, FindingItem } from "./FindingDetailDrawer";
+import { ShareReportModal } from "./ShareReportModal";
+
+type PrimaryTab = "overview" | "findings" | "evidence" | "action-plan" | "audit-details";
 
 interface AnalysisDetailsWorkspaceProps {
   reportId: string;
 }
 
-export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> = ({
-  reportId,
-}) => {
+function AnalysisDetailsWorkspaceInner({ reportId }: AnalysisDetailsWorkspaceProps) {
   const router = useRouter();
-  const reportSectionRef = useRef<HTMLDivElement>(null);
+  const searchParams = useSearchParams();
 
+  // Active Tab synchronized with ?tab=...
+  const tabFromUrl = searchParams.get("tab");
+  const validTabs: PrimaryTab[] = ["overview", "findings", "evidence", "action-plan", "audit-details"];
+  const initialTab: PrimaryTab =
+    tabFromUrl && validTabs.includes(tabFromUrl as PrimaryTab)
+      ? (tabFromUrl as PrimaryTab)
+      : "overview";
+
+  const [activeTab, setActiveTab] = useState<PrimaryTab>(initialTab);
+  const [initialSeverityFilter, setInitialSeverityFilter] = useState<string>("ALL");
+
+  // Core Data States
   const [report, setReport] = useState<ComplianceReport | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [regDoc, setRegDoc] = useState<DocumentResponse | null>(null);
+  const [globalReg, setGlobalReg] = useState<GlobalRegulation | null>(null);
   const [policyDoc, setPolicyDoc] = useState<DocumentResponse | null>(null);
-  const [relatedReports, setRelatedReports] = useState<ComplianceReport[]>([]);
+  const [dbFindings, setDbFindings] = useState<FindingItem[]>([]);
 
+  // UI States
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("ALL");
-  // Sprint 8.1: Gap Analysis workspace tab
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"DETAILS" | "GAP_ANALYSIS">("DETAILS");
 
+  // Sync tab with URL
+  const handleTabChange = useCallback((newTab: PrimaryTab) => {
+    setActiveTab(newTab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", newTab);
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+
+  // Synchronize if user navigates via browser back/forward buttons
+  useEffect(() => {
+    if (tabFromUrl && validTabs.includes(tabFromUrl as PrimaryTab)) {
+      setActiveTab(tabFromUrl as PrimaryTab);
+    }
+  }, [tabFromUrl]);
+
+  // Load Report and all related metadata in parallel
   const loadWorkspace = useCallback(async () => {
-    const isUUID = !!reportId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(reportId);
+    const isUUID =
+      !!reportId &&
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+        reportId
+      );
     if (!isUUID) {
       setErrorMessage("Invalid Report ID format. Please select a report from your organization list.");
       setIsLoading(false);
       return;
     }
+
     setIsLoading(true);
     setErrorMessage(null);
+
     try {
+      // 1. Fetch main report
       const rep = await complianceService.getComplianceReport(reportId);
       setReport(rep);
 
-      // Fetch Organization & Document metadata in parallel
-      const [org, rDoc, pDoc, relReports] = await Promise.all([
+      // 2. Fetch DB findings, Organization, Policy Document, Regulation Metadata in parallel
+      const [findingsData, orgData, pDocData, rDocData, gRegData] = await Promise.all([
+        reportService.getReportFindings(reportId).catch(() => []),
         organizationsService.getOrganizationById(rep.organization_id).catch(() => null),
-        documentService.getDocument(rep.regulation_document_id).catch(() => null),
         documentService.getDocument(rep.policy_document_id).catch(() => null),
-        complianceService.listComplianceReports(rep.organization_id).catch(() => []),
+        rep.regulation_document_id
+          ? documentService.getDocument(rep.regulation_document_id).catch(() => null)
+          : null,
+        rep.regulation_id || rep.regulation_document_id
+          ? regulationsApi
+              .getRegulation(rep.regulation_id || rep.regulation_document_id)
+              .catch(() => null)
+          : null,
       ]);
 
-      setOrganization(org);
-      setRegDoc(rDoc);
-      setPolicyDoc(pDoc);
-      setRelatedReports(relReports.filter((r) => r.id !== reportId).slice(0, 5));
+      setDbFindings(findingsData || []);
+      setOrganization(orgData);
+      setPolicyDoc(pDocData);
+      setRegDoc(rDocData);
+      setGlobalReg(gRegData);
     } catch (err: any) {
       console.error(`Error loading report workspace ${reportId}:`, err);
       const rawDetail = err?.response?.data?.detail;
-      let detailMsg = "Report could not be loaded. Please verify backend connection or permissions.";
+      let detailMsg = "The compliance report could not be retrieved. Please verify your permissions.";
       if (typeof rawDetail === "string") {
         detailMsg = rawDetail;
-      } else if (Array.isArray(rawDetail)) {
-        detailMsg = rawDetail.map((d: any) => d?.msg || d?.detail || (typeof d === "string" ? d : JSON.stringify(d))).join("; ");
-      } else if (rawDetail && typeof rawDetail === "object") {
-        detailMsg = rawDetail?.msg || rawDetail?.detail || JSON.stringify(rawDetail);
       } else if (err?.message) {
         detailMsg = err.message;
       }
       setErrorMessage(detailMsg);
-      toast.error("Failed to load report details.");
+      toast.error("Failed to load statutory report details.");
     } finally {
       setIsLoading(false);
     }
@@ -139,10 +158,13 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
     loadWorkspace();
   }, [loadWorkspace]);
 
-  // Extract structured details
+  // Parse structured report details
   const details: ComplianceReportDetails | null = useMemo(() => {
     if (!report) return null;
     if (report.details) return report.details;
+    if (report.report_json && typeof report.report_json === "object") {
+      return report.report_json as ComplianceReportDetails;
+    }
     if (report.summary) {
       try {
         return JSON.parse(report.summary);
@@ -153,82 +175,215 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
     return null;
   }, [report]);
 
+  // Overall Score
   const score = report?.overall_score ?? details?.overall_score ?? 0;
-  const missingCount = details?.missing_clauses?.length ?? details?.non_compliant_count ?? 0;
 
-  // Risk Assessment — kept local since it needs both score + missingCount
-  const riskInfo = useMemo(() => {
-    if (score >= 80 && missingCount === 0) {
-      return {
-        level: "LOW RISK",
-        badge: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-        icon: <ShieldCheck className="h-5 w-5 text-emerald-500" aria-hidden="true" />,
+  // Correlate evaluated clauses and DB findings
+  const { allFindings, evidenceItems, actionItems } = useMemo(() => {
+    const clauses = details?.evaluated_clauses || [];
+    const dbMap = new Map<string, FindingItem>();
+    dbFindings.forEach((f) => {
+      if (f.regulation_clause_id) {
+        dbMap.set(f.regulation_clause_id, f);
+      }
+      if (f.id) {
+        dbMap.set(f.id, f);
+      }
+    });
+
+    const unifiedFindings: FindingItem[] = [];
+    const evidenceList: any[] = [];
+    const actionPlanList: ActionPlanItem[] = [];
+
+    // Process all evaluated clauses
+    clauses.forEach((c, idx) => {
+      const dbMatch = dbMap.get(c.regulation_clause_id);
+
+      const severity =
+        dbMatch?.severity ||
+        (c.status === "NON_COMPLIANT"
+          ? "HIGH"
+          : c.status === "PARTIALLY_COMPLIANT"
+          ? "MEDIUM"
+          : "LOW");
+
+      const lifecycle =
+        dbMatch?.lifecycle_status ||
+        (c.status === "COMPLIANT" ? "RESOLVED" : "OPEN");
+
+      const findingObj: FindingItem = {
+        id: dbMatch?.id || `clause-${c.regulation_clause_id || idx}`,
+        report_id: report?.id || reportId,
+        policy_clause_id: dbMatch?.policy_clause_id || c.matched_policy_clause_id || null,
+        regulation_clause_id: c.regulation_clause_id,
+        status: dbMatch?.status || c.status,
+        lifecycle_status: lifecycle,
+        confidence: c.similarity_score,
+        severity: severity,
+        reasoning: dbMatch?.reasoning || c.reasoning || "Statutory clause evaluation",
+        recommendation: dbMatch?.recommendation || c.recommendation || null,
+        citation: dbMatch?.citation || c.regulation_text,
+        matched_policy_text: dbMatch?.matched_policy_text || c.matched_policy_text || null,
+        assigned_to: dbMatch?.assigned_to || null,
+        assignee: dbMatch?.assignee || null,
+        created_at: dbMatch?.created_at || report?.created_at,
+        updated_at: dbMatch?.updated_at || report?.updated_at,
       };
+
+      unifiedFindings.push(findingObj);
+
+      // Evidence Explorer item
+      evidenceList.push({
+        id: `ev-${c.regulation_clause_id || idx}`,
+        regulationClauseId: c.regulation_clause_id,
+        regulationText: c.regulation_text,
+        matchedPolicyClauseId: c.matched_policy_clause_id,
+        matchedPolicyText: c.matched_policy_text,
+        similarityScore: c.similarity_score,
+        graphScore: c.graph_score,
+        status: c.status,
+        reasoning: c.reasoning,
+        recommendation: c.recommendation,
+        associatedFinding: findingObj,
+      });
+
+      // Action Plan item if there is a recommendation
+      const recText = findingObj.recommendation;
+      if (recText && recText.trim()) {
+        actionPlanList.push({
+          id: `act-${findingObj.id}`,
+          findingId: findingObj.id,
+          findingTitle: findingObj.reasoning || findingObj.citation || "Statutory Requirement",
+          statutoryClause: findingObj.regulation_clause_id || "Statutory Mandate",
+          recommendedAction: recText,
+          priority:
+            findingObj.severity === "CRITICAL"
+              ? "CRITICAL"
+              : findingObj.severity === "HIGH"
+              ? "HIGH"
+              : findingObj.severity === "MEDIUM"
+              ? "MEDIUM"
+              : "LOW",
+          status: findingObj.lifecycle_status || "OPEN",
+          assignedTo: findingObj.assigned_to,
+          assigneeName: findingObj.assignee?.full_name || null,
+          findingItem: findingObj,
+        });
+      }
+    });
+
+    // If report has standalone recommendations not attached to evaluated clauses, append them
+    if (details?.recommendations && Array.isArray(details.recommendations)) {
+      details.recommendations.forEach((recStr, rIdx) => {
+        if (typeof recStr === "string" && !actionPlanList.some((a) => a.recommendedAction === recStr)) {
+          const fallbackFinding: FindingItem = {
+            id: `rec-finding-${rIdx}`,
+            report_id: report?.id || reportId,
+            status: "NON_COMPLIANT",
+            lifecycle_status: "OPEN",
+            severity: "HIGH",
+            reasoning: recStr,
+            recommendation: recStr,
+            citation: "Audit Assessment Recommendation",
+          };
+          actionPlanList.push({
+            id: `act-rec-${rIdx}`,
+            findingId: fallbackFinding.id,
+            findingTitle: "Compliance Remediation Priority",
+            statutoryClause: `Recommendation #${rIdx + 1}`,
+            recommendedAction: recStr,
+            priority: "HIGH",
+            status: "OPEN",
+            findingItem: fallbackFinding,
+          });
+        }
+      });
     }
-    if (score >= 50 && missingCount <= 2) {
-      return {
-        level: "MEDIUM RISK",
-        badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
-        icon: <ShieldAlert className="h-5 w-5 text-amber-500" aria-hidden="true" />,
-      };
-    }
+
     return {
-      level: "HIGH RISK",
-      badge: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
-      icon: <AlertTriangle className="h-5 w-5 text-rose-500" aria-hidden="true" />,
+      allFindings: unifiedFindings,
+      evidenceItems: evidenceList,
+      actionItems: actionPlanList,
     };
-  }, [score, missingCount]);
+  }, [details, dbFindings, report, reportId]);
 
-  // Expand row toggle — keyboard accessible
-  const toggleRow = (clauseId: string) => {
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(clauseId)) next.delete(clauseId);
-      else next.add(clauseId);
-      return next;
+  // Severity counts
+  const { criticalCount, highCount, mediumCount, lowCount } = useMemo(() => {
+    let crit = 0;
+    let hi = 0;
+    let med = 0;
+    let lo = 0;
+
+    allFindings.forEach((f) => {
+      if (f.severity === "CRITICAL") crit++;
+      else if (f.severity === "HIGH") hi++;
+      else if (f.severity === "MEDIUM") med++;
+      else lo++;
     });
-  };
 
-  const handleRowKeyDown = (e: React.KeyboardEvent, clauseId: string) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      toggleRow(clauseId);
+    // If no findings, fallback to details counts
+    if (allFindings.length === 0 && details) {
+      hi = details.non_compliant_count || 0;
+      med = details.partially_compliant_count || 0;
+      lo = details.compliant_count || 0;
     }
+
+    return {
+      criticalCount: crit,
+      highCount: hi,
+      mediumCount: med,
+      lowCount: lo,
+    };
+  }, [allFindings, details]);
+
+  // Top Priority Findings (up to 5 highest severity unresolved)
+  const topPriorityFindings = useMemo(() => {
+    return allFindings
+      .filter((f) => (f.lifecycle_status || "OPEN") !== "RESOLVED")
+      .sort((a, b) => {
+        const rank: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+        return (rank[b.severity] || 0) - (rank[a.severity] || 0);
+      })
+      .slice(0, 5);
+  }, [allFindings]);
+
+  // Finding Handlers
+  const handleSelectFinding = (finding: FindingItem) => {
+    setSelectedFinding(finding);
+    setIsDrawerOpen(true);
   };
 
-  // Filtered clauses for findings table — short-circuit when no details
-  const filteredClauses = useMemo(() => {
-    if (!details?.evaluated_clauses) return [];
-    return details.evaluated_clauses.filter((item) => {
-      const matchesStatus = filterStatus === "ALL" || item.status === filterStatus;
-      const matchesSearch =
-        !searchQuery.trim() ||
-        item.regulation_text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.matched_policy_text &&
-          item.matched_policy_text.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        item.reasoning.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesStatus && matchesSearch;
-    });
-  }, [details, filterStatus, searchQuery]);
-
-  // Duration calculation from real timestamps
-  const durationText = useMemo(() => {
-    if (!report?.created_at || !report?.updated_at) return "—";
-    const secs = differenceInSeconds(new Date(report.updated_at), new Date(report.created_at));
-    if (secs < 60) return `${secs}s`;
-    const mins = Math.floor(secs / 60);
-    const remSecs = secs % 60;
-    return remSecs > 0 ? `${mins}m ${remSecs}s` : `${mins}m`;
-  }, [report?.created_at, report?.updated_at]);
-
-  // Export & Action handlers
-  const handleShare = () => {
-    setIsShareModalOpen(true);
+  const handleFindingUpdated = (updated: FindingItem) => {
+    setDbFindings((prev) =>
+      prev.map((f) => (f.id === updated.id ? { ...f, ...updated } : f))
+    );
+    setSelectedFinding(updated);
+    toast.success("Finding operational lifecycle status updated.");
   };
 
-  const handleCopyText = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Copied to clipboard!");
+  const handleNavigateToFindings = (severity?: string) => {
+    if (severity) {
+      setInitialSeverityFilter(severity);
+    }
+    handleTabChange("findings");
+  };
+
+  // Export handlers
+  const handleExportPDF = async () => {
+    if (!report) return;
+    try {
+      toast.info("Generating official audit PDF export...");
+      const blob = await complianceService.downloadReportPDF(report.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `LexisGraph_Audit_Report_${report.id.slice(0, 8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF audit report downloaded successfully.");
+    } catch {
+      window.print();
+    }
   };
 
   const handleExportJSON = async () => {
@@ -238,17 +393,17 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `analysis_${report.id.slice(0, 8)}.json`;
+      a.download = `LexisGraph_Report_${report.id.slice(0, 8)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("JSON report downloaded.");
+      toast.success("JSON report data downloaded.");
     } catch {
       const payload = JSON.stringify(report, null, 2);
       const blob = new Blob([payload], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `analysis_${report.id.slice(0, 8)}.json`;
+      a.download = `LexisGraph_Report_${report.id.slice(0, 8)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("JSON report downloaded.");
@@ -256,24 +411,33 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
   };
 
   const handleExportCSV = () => {
-    if (!details?.evaluated_clauses) return;
+    if (allFindings.length === 0) {
+      toast.error("No findings available to export.");
+      return;
+    }
     const headers = [
-      "Clause ID",
-      "Status",
-      "Score",
-      "Regulation Text",
-      "Policy Text",
+      "Finding ID",
+      "Statutory Clause ID",
+      "Severity",
+      "Lifecycle Status",
+      "Compliance Status",
+      "Statutory Citation",
+      "Matched Policy Text",
       "Reasoning",
       "Recommendation",
+      "Assigned Owner",
     ];
-    const rows = details.evaluated_clauses.map((c) => [
-      `"${c.regulation_clause_id}"`,
-      `"${c.status}"`,
-      `"${(c.similarity_score * 100).toFixed(1)}%"`,
-      `"${c.regulation_text.replace(/"/g, '""')}"`,
-      `"${(c.matched_policy_text || "").replace(/"/g, '""')}"`,
-      `"${c.reasoning.replace(/"/g, '""')}"`,
-      `"${(c.recommendation || "").replace(/"/g, '""')}"`,
+    const rows = allFindings.map((f) => [
+      `"${f.id}"`,
+      `"${f.regulation_clause_id || ""}"`,
+      `"${f.severity}"`,
+      `"${f.lifecycle_status || "OPEN"}"`,
+      `"${f.status}"`,
+      `"${(f.citation || "").replace(/"/g, '""')}"`,
+      `"${(f.matched_policy_text || "").replace(/"/g, '""')}"`,
+      `"${(f.reasoning || "").replace(/"/g, '""')}"`,
+      `"${(f.recommendation || "").replace(/"/g, '""')}"`,
+      `"${f.assignee?.full_name || "Unassigned"}"`,
     ]);
 
     const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -281,78 +445,65 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `analysis_clauses_${report?.id.slice(0, 8)}.csv`;
+    a.download = `LexisGraph_Findings_${report?.id.slice(0, 8)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("CSV clause findings downloaded.");
+    toast.success("Findings CSV export downloaded.");
   };
 
-  const handleExportPDF = async () => {
-    if (!report) return;
-    try {
-      toast.info("Generating PDF export...");
-      const blob = await complianceService.downloadReportPDF(report.id);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `analysis_report_${report.id.slice(0, 8)}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("PDF report downloaded.");
-    } catch {
-      window.print();
-    }
-  };
+  // Names
+  const policyName = policyDoc?.original_filename || (report?.policy_document_id ? `Policy #${report.policy_document_id.slice(0, 8)}` : undefined);
+  const regulationName = globalReg?.title || globalReg?.original_filename || regDoc?.original_filename || (report?.regulation_id ? `Regulation #${report.regulation_id.slice(0, 8)}` : undefined);
+  const organizationName = organization?.name || "TechNova Solutions Pvt. Ltd.";
 
-  const scrollToReport = () => {
-    reportSectionRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Loading skeleton
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-7xl mx-auto pb-16" aria-busy="true" aria-label="Loading analysis workspace">
-        <Skeleton className="h-10 w-48" />
+      <div className="space-y-6 max-w-7xl mx-auto pb-16" aria-busy="true">
+        <Skeleton className="h-8 w-48" />
         <Skeleton className="h-32 w-full rounded-xl" />
+        <div className="flex gap-2">
+          <Skeleton className="h-10 w-28 rounded-lg" />
+          <Skeleton className="h-10 w-28 rounded-lg" />
+          <Skeleton className="h-10 w-28 rounded-lg" />
+          <Skeleton className="h-10 w-28 rounded-lg" />
+          <Skeleton className="h-10 w-28 rounded-lg" />
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
         </div>
         <Skeleton className="h-96 w-full rounded-xl" />
       </div>
     );
   }
 
+  // Error boundary state
   if (errorMessage || !report) {
     return (
-      <Card
-        className="border border-rose-500/30 bg-rose-500/5 p-12 text-center max-w-2xl mx-auto my-12 space-y-4 shadow-sm"
-        role="alert"
-      >
-        <AlertTriangle className="h-12 w-12 text-rose-500 mx-auto" aria-hidden="true" />
+      <Card className="border border-rose-500/30 bg-rose-500/5 p-12 text-center max-w-2xl mx-auto my-12 space-y-4 shadow-sm">
+        <AlertTriangle className="h-12 w-12 text-rose-500 mx-auto" />
         <div className="space-y-1">
-          <h2 className="text-xl font-bold text-foreground">Report Could Not Be Loaded</h2>
+          <h2 className="text-xl font-bold text-foreground">Audit Report Could Not Be Loaded</h2>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            {errorMessage || "The requested compliance report could not be retrieved."}
+            {errorMessage || "The requested statutory compliance report could not be found or access is restricted."}
           </p>
         </div>
-
         <div className="flex items-center justify-center gap-3 pt-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => router.push("/reports")}
-            className="cursor-pointer text-xs"
-            aria-label="Return to reports workspace"
+            className="text-xs cursor-pointer"
           >
             Back to Reports
           </Button>
           <Button
             size="sm"
             onClick={loadWorkspace}
-            className="cursor-pointer text-xs gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold"
-            aria-label="Retry loading report"
+            className="text-xs gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold cursor-pointer"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span>Retry</span>
@@ -362,777 +513,283 @@ export const AnalysisDetailsWorkspace: React.FC<AnalysisDetailsWorkspaceProps> =
     );
   }
 
-  const createdFormatted = format(new Date(report.created_at), "MMM d, yyyy · HH:mm");
-  const completedFormatted = report.updated_at
-    ? format(new Date(report.updated_at), "MMM d, yyyy · HH:mm")
-    : createdFormatted;
-
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-16">
-      {/* Navigation Header */}
-      <div className="flex items-center justify-between">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/compliance")}
-          className="w-fit -ml-2 text-muted-foreground hover:text-foreground cursor-pointer gap-1.5 text-xs"
-          aria-label="Back to compliance workspace"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to Compliance Workspace
-        </Button>
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* ── REPORT HEADER (Sticky & Clean) ── */}
+      <ReportHeader
+        reportId={report.id}
+        organizationName={organizationName}
+        organizationId={report.organization_id}
+        policyName={policyName}
+        regulationName={regulationName}
+        status={report.status}
+        riskLevel={report.risk_level || (score >= 80 ? "LOW" : score >= 50 ? "MEDIUM" : "HIGH")}
+        score={score}
+        createdAt={report.created_at}
+        updatedAt={report.updated_at}
+        onExportPDF={handleExportPDF}
+        onExportJSON={handleExportJSON}
+        onExportCSV={handleExportCSV}
+        onShare={() => setIsShareModalOpen(true)}
+      />
 
-        <Badge
-          variant="outline"
-          className="border-primary/30 text-primary bg-primary/10 text-xs px-3 py-1 font-bold"
-        >
-          Analysis Workspace
-        </Badge>
-      </div>
-
-      {/* ── SECTION 1: ANALYSIS HEADER ── */}
-      <Card className="border border-border bg-card p-6 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
-                Statutory Compliance Audit #{report.id.slice(0, 8)}
-              </h1>
-              <Badge variant="outline" className={cn("text-xs font-bold px-3 py-0.5", riskInfo.badge)}>
-                {riskInfo.level}
-              </Badge>
-              <StatusBadge status={report.status} />
-            </div>
-
-            <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-              <Building2 className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden="true" />
-              <span>
-                Workspace: <strong>{organization?.name || "Organization Workspace"}</strong>
-              </span>
-              <span aria-hidden="true">•</span>
-              <span>Created: {createdFormatted}</span>
-              <span aria-hidden="true">•</span>
-              <span>Completed: {completedFormatted}</span>
-            </p>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push(`/ai-assistant?reportId=${report.id}&question=${encodeURIComponent(`Summarize the major compliance risks in report #${report.id.slice(0, 8)}.`)}`)}
-              className="text-xs cursor-pointer gap-1.5 border-accent/30 text-accent hover:bg-accent/10"
-              aria-label="Analyze report with AI Assistant"
-            >
-              <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> Analyze Report with AI
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={scrollToReport}
-              className="text-xs cursor-pointer gap-1.5"
-              aria-label="Scroll to executive report section"
-            >
-              <FileText className="h-4 w-4 text-primary" aria-hidden="true" /> View Report
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportJSON}
-              className="text-xs cursor-pointer gap-1.5"
-              aria-label="Export analysis as JSON"
-            >
-              <FileCode className="h-4 w-4" aria-hidden="true" /> Export JSON
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportCSV}
-              className="text-xs cursor-pointer gap-1.5"
-              aria-label="Export findings as CSV"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" /> Export CSV
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportPDF}
-              className="text-xs cursor-pointer gap-1.5"
-              aria-label="Download PDF report"
-            >
-              <Download className="h-4 w-4 text-emerald-500" aria-hidden="true" /> Download PDF
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={handleShare}
-              className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold shadow-md text-xs cursor-pointer gap-1.5"
-              aria-label="Copy workspace URL to clipboard"
-            >
-              <Share2 className="h-4 w-4" aria-hidden="true" /> Share
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* ── SPRINT 8.1: WORKSPACE TAB SWITCHER ── */}
-      {report.status === "COMPLETED" && (
+      {/* ── 5 PRIMARY REPORT TABS NAVIGATION ── */}
+      <div className="border-b border-border">
         <div
-          className="flex items-center gap-1 p-1 rounded-xl border border-border/50 bg-muted/20 w-fit"
+          className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none"
           role="tablist"
-          aria-label="Analysis workspace tabs"
+          aria-label="Statutory compliance report sections"
         >
-          {([
-            { id: "DETAILS" as const, label: "Report Details", icon: <FileCheck2 className="h-3.5 w-3.5" /> },
-            { id: "GAP_ANALYSIS" as const, label: "Gap Analysis", icon: <ShieldAlert className="h-3.5 w-3.5" /> },
-          ] as const).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeWorkspaceTab === tab.id}
-              onClick={() => setActiveWorkspaceTab(tab.id)}
+          {/* Tab 1: Overview */}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "overview"}
+            onClick={() => handleTabChange("overview")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+              activeTab === "overview"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
+            )}
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            <span>Overview</span>
+          </button>
+
+          {/* Tab 2: Findings */}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "findings"}
+            onClick={() => handleTabChange("findings")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+              activeTab === "findings"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
+            )}
+          >
+            <ShieldAlert className="h-4 w-4" />
+            <span>Findings</span>
+            <Badge
+              variant="outline"
               className={cn(
-                "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer",
-                activeWorkspaceTab === tab.id
-                  ? "bg-card text-foreground shadow-sm border border-border/60"
-                  : "text-muted-foreground hover:text-foreground"
+                "text-[10px] px-1.5 py-0 font-mono",
+                activeTab === "findings"
+                  ? "bg-primary-foreground/20 text-primary-foreground border-primary-foreground/30"
+                  : "bg-muted text-muted-foreground border-border"
               )}
             >
-              {tab.icon}
-              {tab.label}
-              {tab.id === "GAP_ANALYSIS" && (
-                <Badge
-                  variant="outline"
-                  className="text-[9px] px-1.5 py-0 border-primary/30 text-primary bg-primary/10 font-bold"
-                >
-                  NEW
-                </Badge>
+              {allFindings.length}
+            </Badge>
+          </button>
+
+          {/* Tab 3: Evidence */}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "evidence"}
+            onClick={() => handleTabChange("evidence")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+              activeTab === "evidence"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
+            )}
+          >
+            <Network className="h-4 w-4" />
+            <span>Evidence</span>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px] px-1.5 py-0 font-mono",
+                activeTab === "evidence"
+                  ? "bg-primary-foreground/20 text-primary-foreground border-primary-foreground/30"
+                  : "bg-muted text-muted-foreground border-border"
               )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ── SPRINT 8.1: GAP ANALYSIS TAB CONTENT ── */}
-      {activeWorkspaceTab === "GAP_ANALYSIS" && report.status === "COMPLETED" && (
-        <div role="tabpanel" aria-label="Gap Analysis">
-          <GapAnalysisWorkspace
-            reportId={reportId}
-            organizationId={report.organization_id}
-          />
-        </div>
-      )}
-
-      {/* ── EXISTING SECTIONS (Report Details tab) ── */}
-      {activeWorkspaceTab === "DETAILS" && (
-        <>
-
-      {/* ── SECTION 2: EXECUTIVE SUMMARY ── */}
-      <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
-        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> Executive Compliance Summary
-        </span>
-
-        {details?.summary ? (
-          <p className="text-xs leading-relaxed text-foreground/90 font-medium">{details.summary}</p>
-        ) : (
-          <p className="text-xs text-muted-foreground italic" role="status">
-            No high-level executive summary is available for this analysis run.
-          </p>
-        )}
-      </Card>
-
-      {/* ── SECTION 3: ANALYSIS METRICS (KPI CARDS) ── */}
-      <div
-        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3"
-        role="region"
-        aria-label="Analysis metrics"
-      >
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground block">Compliance Score</span>
-          <p
-            className="text-xl font-extrabold text-primary mt-1 font-mono"
-            aria-label={`Compliance score: ${score}%`}
-          >
-            {score}%
-          </p>
-        </Card>
-
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground block">Policies Analysed</span>
-          <p className="text-xl font-extrabold text-foreground mt-1 font-mono" aria-label="1 policy analysed">1</p>
-        </Card>
-
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground block">Regulations Applied</span>
-          <p className="text-xl font-extrabold text-foreground mt-1 font-mono" aria-label="1 regulation applied">1</p>
-        </Card>
-
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground block">Clauses Reviewed</span>
-          <p
-            className="text-xl font-extrabold text-foreground mt-1 font-mono"
-            aria-label={`${details?.total_regulation_clauses ?? 0} clauses reviewed`}
-          >
-            {details?.total_regulation_clauses ?? 0}
-          </p>
-        </Card>
-
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground block">Issues Found</span>
-          <p
-            className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 font-mono"
-            aria-label={`${(details?.non_compliant_count ?? 0) + (details?.partially_compliant_count ?? 0)} issues found`}
-          >
-            {(details?.non_compliant_count ?? 0) + (details?.partially_compliant_count ?? 0)}
-          </p>
-        </Card>
-
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-rose-600 dark:text-rose-400 block">High Risk Issues</span>
-          <p
-            className="text-xl font-extrabold text-rose-600 dark:text-rose-400 mt-1 font-mono"
-            aria-label={`${details?.non_compliant_count ?? 0} high risk issues`}
-          >
-            {details?.non_compliant_count ?? 0}
-          </p>
-        </Card>
-
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 block">Medium Risk</span>
-          <p
-            className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 font-mono"
-            aria-label={`${details?.partially_compliant_count ?? 0} medium risk items`}
-          >
-            {details?.partially_compliant_count ?? 0}
-          </p>
-        </Card>
-
-        <Card className="border border-border/60 bg-card p-3.5 shadow-xs text-center">
-          <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block">Low Risk</span>
-          <p
-            className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 font-mono"
-            aria-label={`${details?.compliant_count ?? 0} low risk items`}
-          >
-            {details?.compliant_count ?? 0}
-          </p>
-        </Card>
-      </div>
-
-      {/* ── FINDING LIFECYCLE OPERATIONS SUMMARY BAR ── */}
-      <Card className="border border-primary/20 bg-card p-4 shadow-xs">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-primary" />
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                Finding Remediation Lifecycle Status
-              </h3>
-              <p className="text-[11px] text-muted-foreground">
-                Operational status of active compliance remediation workflows for this report.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30">
-              Open: {report?.open_count ?? 0}
-            </Badge>
-            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-primary/10 text-primary border-primary/30">
-              In Review: {report?.in_review_count ?? 0}
-            </Badge>
-            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
-              In Remediation: {report?.remediation_count ?? 0}
-            </Badge>
-            <Badge variant="outline" className="text-xs font-semibold px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-              Resolved: {report?.resolved_count ?? 0}
-            </Badge>
-
-            <Button
-              size="sm"
-              onClick={() => router.push(`/compliance/reports/${report?.id}/findings`)}
-              className="text-xs font-semibold cursor-pointer gap-1 bg-primary hover:bg-primary-hover text-primary-foreground ml-2"
             >
-              <span>Manage Findings Workspace</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </Card>
+              {evidenceItems.length}
+            </Badge>
+          </button>
 
-      {/* ── SECTION 4: FINDINGS (PRIMARY EXPANDABLE TABLE) ── */}
-      <Card className="border border-border/60 bg-card p-5 space-y-4 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-foreground">Compliance Evaluation Findings</h3>
-              <Button
+          {/* Tab 4: Action Plan */}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "action-plan"}
+            onClick={() => handleTabChange("action-plan")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+              activeTab === "action-plan"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
+            )}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            <span>Action Plan</span>
+            {actionItems.length > 0 && (
+              <Badge
                 variant="outline"
-                size="xs"
-                onClick={() => router.push(`/compliance/reports/${reportId}/findings`)}
-                className="text-xs font-semibold cursor-pointer gap-1 text-primary border-primary/30"
+                className={cn(
+                  "text-[10px] px-1.5 py-0 font-mono",
+                  activeTab === "action-plan"
+                    ? "bg-primary-foreground/20 text-primary-foreground border-primary-foreground/30"
+                    : "bg-muted text-muted-foreground border-border"
+                )}
               >
-                <span>View All Findings Workspace</span>
-                <ExternalLink className="h-3 w-3" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Expand rows to inspect similarity scores, LLM legal reasoning, and policy recommendations.
-            </p>
-          </div>
+                {actionItems.length}
+              </Badge>
+            )}
+          </button>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              <Input
-                placeholder="Search clause text..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 text-xs h-9 bg-background"
-                aria-label="Search clause text"
-              />
-            </div>
-
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground cursor-pointer focus:ring-1 focus:ring-primary"
-              aria-label="Filter findings by status"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="COMPLIANT">Compliant</option>
-              <option value="PARTIALLY_COMPLIANT">Partially Compliant</option>
-              <option value="NON_COMPLIANT">Non-Compliant</option>
-            </select>
-          </div>
-        </div>
-
-        {filteredClauses.length === 0 ? (
-          <div
-            className="p-8 border border-dashed border-border/60 bg-muted/10 text-center rounded-xl"
-            role="status"
+          {/* Tab 5: Audit Details */}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "audit-details"}
+            onClick={() => handleTabChange("audit-details")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+              activeTab === "audit-details"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
+            )}
           >
-            <p className="text-xs font-semibold text-muted-foreground">No matching findings found.</p>
-          </div>
-        ) : (
-          <>
-            {/* Desktop Table (md and above) */}
-            <div className="hidden md:block overflow-x-auto border border-border/50 rounded-xl">
-              <table
-                className="w-full text-left text-xs"
-                role="table"
-                aria-label="Compliance evaluation findings"
-              >
-                <thead className="bg-muted/40 border-b border-border/60 uppercase font-bold text-[10px] text-muted-foreground tracking-wider">
-                  <tr>
-                    <th className="p-3 pl-4" scope="col">Status</th>
-                    <th className="p-3" scope="col">Regulation Clause</th>
-                    <th className="p-3" scope="col">Matched Policy Clause</th>
-                    <th className="p-3 text-center" scope="col">Score</th>
-                    <th className="p-3 pr-4 text-right" scope="col">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40 font-medium">
-                  {filteredClauses.map((clause, idx) => {
-                    const rowKey = clause.requirement_id || `${clause.regulation_clause_id}-${idx}`;
-                    const isExpanded = expandedRows.has(rowKey);
-                    return (
-                      <React.Fragment key={rowKey}>
-                        <tr
-                          onClick={() => toggleRow(rowKey)}
-                          onKeyDown={(e) => handleRowKeyDown(e, rowKey)}
-                          role="button"
-                          tabIndex={0}
-                          aria-expanded={isExpanded}
-                          aria-label={`Clause ${clause.regulation_clause_id} — ${clause.status}. Press to ${isExpanded ? "collapse" : "expand"} details.`}
-                          className="hover:bg-muted/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                        >
-                          <td className="p-3 pl-4">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] font-bold uppercase",
-                                clause.status === "COMPLIANT"
-                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                  : clause.status === "PARTIALLY_COMPLIANT"
-                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                              )}
-                            >
-                              {clause.status}
-                            </Badge>
-                          </td>
-
-                          <td className="p-3 text-foreground font-semibold max-w-xs">
-                            <p className="line-clamp-2">{clause.regulation_text}</p>
-                            <span className="text-[10px] text-muted-foreground font-mono block">
-                              ID: {clause.regulation_clause_id}
-                            </span>
-                          </td>
-
-                          <td className="p-3 text-muted-foreground max-w-xs">
-                            {clause.matched_policy_text ? (
-                              <p className="line-clamp-2">{clause.matched_policy_text}</p>
-                            ) : (
-                              <span className="italic text-rose-500">No policy match</span>
-                            )}
-                          </td>
-
-                          <td className="p-3 text-center font-mono font-bold text-primary">
-                            {(clause.similarity_score * 100).toFixed(0)}%
-                          </td>
-
-                          <td className="p-3 pr-4 text-right">
-                            <Button variant="ghost" size="icon-xs" className="cursor-pointer" aria-hidden="true" tabIndex={-1}>
-                              {isExpanded ? (
-                                <ChevronUp className="h-4 w-4" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </td>
-                        </tr>
-
-                        {isExpanded && (
-                          <tr className="bg-muted/20 border-b border-border/60">
-                            <td colSpan={5} className="p-5 space-y-4 text-xs">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="p-3.5 rounded-lg bg-background border border-border/50 space-y-1">
-                                  <span className="text-[10px] font-bold text-primary uppercase block">
-                                    Regulation Citation
-                                  </span>
-                                  <p className="text-foreground">{clause.regulation_text}</p>
-                                </div>
-
-                                <div className="p-3.5 rounded-lg bg-background border border-border/50 space-y-1">
-                                  <span className="text-[10px] font-bold text-emerald-500 uppercase block">
-                                    Policy Wording
-                                  </span>
-                                  <p className="text-muted-foreground">
-                                    {clause.matched_policy_text ||
-                                      "No policy clause addresses this requirement."}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="p-3.5 rounded-lg bg-accent/10 border border-accent/20 space-y-1">
-                                <span className="text-[10px] font-bold text-accent uppercase flex items-center gap-1">
-                                  <Sparkles className="h-3 w-3 text-accent" aria-hidden="true" /> LLM Legal Reasoning
-                                </span>
-                                <p className="text-foreground">{clause.reasoning}</p>
-                              </div>
-
-                              {clause.recommendation && (
-                                <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-1">
-                                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase flex items-center gap-1">
-                                    <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Recommended Remediation
-                                  </span>
-                                  <p className="text-amber-900 dark:text-amber-200">
-                                    {clause.recommendation}
-                                  </p>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Cards (md and below) */}
-            <div className="space-y-3 md:hidden">
-              {filteredClauses.map((clause, idx) => (
-                <div
-                  key={clause.requirement_id || `${clause.regulation_clause_id}-${idx}`}
-                  className="p-4 rounded-xl border border-border/60 bg-background space-y-3 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] font-bold uppercase",
-                        clause.status === "COMPLIANT"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                          : clause.status === "PARTIALLY_COMPLIANT"
-                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                          : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                      )}
-                    >
-                      {clause.status}
-                    </Badge>
-                    <span className="font-mono font-bold text-primary">
-                      {(clause.similarity_score * 100).toFixed(0)}% Score
-                    </span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                      Regulation Clause (#{clause.regulation_clause_id})
-                    </span>
-                    <p className="text-foreground font-medium">{clause.regulation_text}</p>
-                  </div>
-
-                  <div className="space-y-1 pt-2 border-t border-border/40">
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                      Matched Policy Text
-                    </span>
-                    <p className="text-muted-foreground">
-                      {clause.matched_policy_text || <span className="italic text-rose-500">No policy match</span>}
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 rounded-lg bg-accent/10 border border-accent/20 space-y-1">
-                    <span className="text-[10px] font-bold text-accent uppercase flex items-center gap-1">
-                      <Sparkles className="h-3 w-3 text-accent" aria-hidden="true" /> Reasoning
-                    </span>
-                    <p className="text-foreground">{clause.reasoning}</p>
-                  </div>
-
-                  {clause.recommendation && (
-                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-1">
-                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Recommendation
-                      </span>
-                      <p className="text-amber-900 dark:text-amber-200">{clause.recommendation}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </Card>
-
-      {/* ── SECTION 5: KNOWLEDGE GRAPH EVIDENCE ── */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Network className="h-4 w-4 text-accent" aria-hidden="true" /> Knowledge Graph Structural Evidence
-          </span>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/knowledge-graph")}
-            className="text-xs cursor-pointer gap-1.5 text-accent border-accent/30 hover:bg-accent/10"
-            aria-label="Explore evidence in the knowledge graph"
-          >
-            Explore in Knowledge Graph <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </Button>
+            <FileText className="h-4 w-4" />
+            <span>Audit Details</span>
+          </button>
         </div>
-
-        <KnowledgeGraphOverview
-          isLoading={false}
-          onExplore={() => router.push("/knowledge-graph")}
-        />
       </div>
 
-      {/* ── SECTION 6: AI RECOMMENDATIONS ── */}
-      <Card className="border border-accent/30 bg-accent/5 p-6 space-y-4 shadow-xs">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" /> AI Recommendations & Remediation
-          </span>
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() => router.push(`/compliance/reports/${reportId}/recommendations`)}
-            className="text-xs font-semibold cursor-pointer gap-1 text-amber-600 dark:text-amber-400 border-amber-500/30 bg-background"
-          >
-            <span>View All Recommendations Workspace</span>
-            <ExternalLink className="h-3 w-3" />
-          </Button>
-        </div>
-
-        {details?.recommendations && details.recommendations.length > 0 ? (
-          <ol className="space-y-3 text-xs" aria-label="AI remediation recommendations">
-            {details.recommendations.map((rec, idx) => (
-              <li
-                key={idx}
-                className="p-3.5 rounded-lg border border-border/50 bg-background/90 flex items-start gap-3"
-              >
-                <span
-                  className="h-6 w-6 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0"
-                  aria-hidden="true"
-                >
-                  {idx + 1}
-                </span>
-                <div className="flex-1 text-foreground font-medium">{rec}</div>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => handleCopyText(rec)}
-                  className="shrink-0 text-muted-foreground hover:text-foreground cursor-pointer"
-                  aria-label={`Copy recommendation ${idx + 1} to clipboard`}
-                >
-                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                </Button>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="text-xs text-muted-foreground italic" role="status">
-            No specific remediation steps required.
-          </p>
+      {/* ── TAB CONTENT CONTAINERS (Lazy / Non-overlapping) ── */}
+      <div className="pt-2">
+        {/* Tab 1: Overview */}
+        {activeTab === "overview" && (
+          <div role="tabpanel" aria-label="Executive Overview">
+            <OverviewTab
+              score={score}
+              riskLevel={report.risk_level || (score >= 80 ? "LOW" : score >= 50 ? "MEDIUM" : "HIGH")}
+              totalFindings={allFindings.length}
+              criticalCount={criticalCount}
+              highCount={highCount}
+              mediumCount={mediumCount}
+              lowCount={lowCount}
+              summaryText={details?.summary || report.executive_summary}
+              topPriorityFindings={topPriorityFindings}
+              organizationName={organizationName}
+              policyName={policyName}
+              regulationName={regulationName}
+              policyDocumentId={report.policy_document_id}
+              regulationDocumentId={report.regulation_document_id}
+              createdAt={report.created_at}
+              onNavigateToFindings={handleNavigateToFindings}
+              onSelectFinding={handleSelectFinding}
+            />
+          </div>
         )}
-      </Card>
 
-      {/* ── SECTION 7: REPORT PREVIEW ── */}
-      <div ref={reportSectionRef} className="space-y-4">
-        <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-border/50 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-foreground">Executive Report Document</h3>
-              <p className="text-xs text-muted-foreground">
-                Formally compiled statutory compliance report.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push(`/reports?report=${report.id}`)}
-                className="text-xs cursor-pointer gap-1.5"
-                aria-label="Open the full report in the reports viewer"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open Full Report
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleExportPDF}
-                className="bg-primary hover:bg-primary-hover text-primary-foreground font-semibold text-xs cursor-pointer gap-1.5"
-                aria-label="Download this report as PDF"
-              >
-                <Download className="h-4 w-4" aria-hidden="true" /> Download PDF
-              </Button>
-            </div>
+        {/* Tab 2: Findings */}
+        {activeTab === "findings" && (
+          <div role="tabpanel" aria-label="Compliance Findings">
+            <FindingsTab
+              findings={allFindings}
+              initialSeverityFilter={initialSeverityFilter}
+              onSelectFinding={handleSelectFinding}
+            />
           </div>
+        )}
 
-          <div className="p-6 rounded-xl border border-border/40 bg-muted/20 space-y-4 text-xs font-mono">
-            <p className="font-bold text-foreground">LEXISGRAPH STATUTORY AUDIT REPORT</p>
-            <p className="text-muted-foreground">Report ID: {report.id}</p>
-            <p className="text-muted-foreground">
-              Overall Compliance Alignment Score: {score}%
-            </p>
-            <p className="text-muted-foreground">Risk Level: {riskInfo.level}</p>
+        {/* Tab 3: Evidence */}
+        {activeTab === "evidence" && (
+          <div role="tabpanel" aria-label="Evidence Explorer">
+            <EvidenceTab
+              evidenceList={evidenceItems}
+              regulationName={regulationName}
+              policyName={policyName}
+              onSelectFinding={handleSelectFinding}
+            />
           </div>
-        </Card>
+        )}
+
+        {/* Tab 4: Action Plan */}
+        {activeTab === "action-plan" && (
+          <div role="tabpanel" aria-label="Remediation Action Plan">
+            <ActionPlanTab
+              actions={actionItems}
+              onSelectFinding={handleSelectFinding}
+              policyDocumentId={report.policy_document_id}
+            />
+          </div>
+        )}
+
+        {/* Tab 5: Audit Details */}
+        {activeTab === "audit-details" && (
+          <div role="tabpanel" aria-label="Audit Details">
+            <AuditDetailsTab
+              reportId={report.id}
+              organizationId={report.organization_id}
+              organizationName={organizationName}
+              policyDocumentId={report.policy_document_id}
+              policyName={policyName}
+              regulationDocumentId={report.regulation_document_id}
+              regulationName={regulationName}
+              status={report.status}
+              createdAt={report.created_at}
+              updatedAt={report.updated_at}
+              totalClauses={allFindings.length}
+            />
+          </div>
+        )}
       </div>
 
-      {/* ── SECTION 8: TIMELINE ── */}
-      <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
-        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Clock className="h-4 w-4 text-primary" aria-hidden="true" /> Execution Milestone Timeline
-        </span>
+      {/* ── FINDING DETAIL DRAWER (Reused System-Wide) ── */}
+      <FindingDetailDrawer
+        finding={selectedFinding}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onFindingUpdated={handleFindingUpdated}
+        reportName={regulationName}
+      />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-          <div className="p-3.5 rounded-lg border border-border/40 bg-muted/20">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Submitted</span>
-            <span className="font-semibold text-foreground">{createdFormatted}</span>
-          </div>
-
-          <div className="p-3.5 rounded-lg border border-border/40 bg-muted/20">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Completed</span>
-            <span className="font-semibold text-foreground">{completedFormatted}</span>
-          </div>
-
-          <div className="p-3.5 rounded-lg border border-border/40 bg-muted/20">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Duration</span>
-            <span className="font-semibold text-foreground">{durationText}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* ── SECTION 9: RELATED ANALYSES ── */}
-      <Card className="border border-border/60 bg-card p-6 space-y-4 shadow-xs">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <History className="h-4 w-4 text-primary" aria-hidden="true" /> Related Analyses for Organization
-          </span>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/compliance/history")}
-            className="text-xs cursor-pointer gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
-            aria-label="View all analysis history"
-          >
-            View All History <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </Button>
-        </div>
-
-        {relatedReports.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic" role="status">
-            No other compliance analyses recorded for this organization.
-          </p>
-        ) : (
-          <div className="space-y-2 text-xs" role="list" aria-label="Related analyses">
-            {relatedReports.map((rel) => (
-              <div
-                key={rel.id}
-                role="listitem"
-                className="p-3 rounded-lg border border-border/40 bg-muted/20 flex items-center justify-between gap-4"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-foreground font-mono">Audit #{rel.id.slice(0, 8)}</span>
-                  <span className="text-muted-foreground">
-                    {format(new Date(rel.created_at), "MMM d, yyyy")}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {rel.overall_score != null ? (
-                    <span className="font-bold font-mono text-primary">
-                      {rel.overall_score}%
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground font-mono">—</span>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push(`/compliance/reports/${rel.id}`)}
-                    className="text-xs cursor-pointer px-2"
-                    aria-label={`Open analysis workspace for audit ${rel.id.slice(0, 8)}`}
-                  >
-                    Open Workspace
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* Sprint 8.1: Close DETAILS tab wrapper */}
-      </>
-      )}
-
-      {/* Share Audit Modal */}
+      {/* ── SHARE REPORT MODAL ── */}
       <ShareReportModal
         open={isShareModalOpen}
         onOpenChange={setIsShareModalOpen}
         report={report}
-        reportId={report?.id || reportId}
-        organizationName={organization?.name}
-        regulationName={regDoc?.original_filename || (report?.regulation_id ? `Regulation #${report.regulation_id.slice(0, 8)}` : undefined)}
-        policyName={policyDoc?.original_filename || (report?.policy_document_id ? `Policy #${report.policy_document_id.slice(0, 8)}` : undefined)}
-        overallScore={report?.overall_score ?? details?.overall_score}
-        riskLevel={report?.risk_level}
-        totalClauses={details?.total_regulation_clauses}
-        compliantCount={details?.compliant_count ?? report?.total_matches}
-        partialCount={details?.partially_compliant_count ?? report?.total_partial_matches}
-        gapCount={details?.non_compliant_count ?? report?.total_missing}
+        reportId={report.id}
+        organizationName={organizationName}
+        regulationName={regulationName}
+        policyName={policyName}
+        overallScore={score}
+        riskLevel={report.risk_level || undefined}
+        totalClauses={allFindings.length}
+        compliantCount={lowCount}
+        partialCount={mediumCount}
+        gapCount={highCount + criticalCount}
       />
     </div>
   );
-};
+}
+
+export function AnalysisDetailsWorkspace({ reportId }: AnalysisDetailsWorkspaceProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6 max-w-7xl mx-auto pb-16">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Skeleton className="h-28 rounded-xl" />
+            <Skeleton className="h-28 rounded-xl" />
+            <Skeleton className="h-28 rounded-xl" />
+            <Skeleton className="h-28 rounded-xl" />
+          </div>
+          <Skeleton className="h-96 w-full rounded-xl" />
+        </div>
+      }
+    >
+      <AnalysisDetailsWorkspaceInner reportId={reportId} />
+    </Suspense>
+  );
+}

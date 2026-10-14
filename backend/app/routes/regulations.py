@@ -200,3 +200,28 @@ def unlink_regulation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found or already removed.")
 
     return {"message": "Regulation unlinked successfully"}
+
+
+@router.get(
+    "/{regulation_id}",
+    summary="Get global regulation by ID",
+    response_model=GlobalRegulationResponse,
+)
+def get_regulation_by_id(
+    regulation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> GlobalRegulationResponse:
+    """
+    Fetch a global regulation by its UUID.
+    """
+    from app.db.models.regulation import Regulation
+
+    reg = db.get(Regulation, regulation_id)
+    if not reg:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Regulation with ID '{regulation_id}' not found.",
+        )
+    return reg
+
