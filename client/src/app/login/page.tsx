@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Eye, EyeOff, ShieldCheck, Network, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { BrandLogo } from "@/components/ui/brand-logo";
+import { ForgotPasswordModal } from "@/components/features/auth/ForgotPasswordModal";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -27,6 +28,8 @@ function LoginContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isNoAccount, setIsNoAccount] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [prefilledEmail, setPrefilledEmail] = useState("");
   const router = useRouter();
 
   // Redirect if already logged in
@@ -43,6 +46,8 @@ function LoginContent() {
   const {
     register,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -51,6 +56,20 @@ function LoginContent() {
       password: "",
     },
   });
+
+  const handleOpenForgotPassword = () => {
+    const currentUsername = getValues("username")?.trim();
+    if (currentUsername && currentUsername.includes("@")) {
+      setPrefilledEmail(currentUsername);
+    }
+    setForgotPasswordOpen(true);
+  };
+
+  const handlePasswordResetSuccess = (resetEmail: string) => {
+    setValue("username", resetEmail);
+    setValue("password", "");
+    setErrorMessage(null);
+  };
 
   const onSubmit = async (data: LoginInput) => {
     setIsSubmitting(true);
@@ -213,6 +232,13 @@ function LoginContent() {
                     <label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Password
                     </label>
+                    <button
+                      type="button"
+                      onClick={handleOpenForgotPassword}
+                      className="text-xs text-primary hover:text-primary-hover hover:underline font-medium transition-colors cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
                   </div>
                   <div className="relative">
                     <Input
@@ -254,6 +280,14 @@ function LoginContent() {
               </form>
             </CardContent>
           </Card>
+
+          {/* Interactive Forgot Password Modal */}
+          <ForgotPasswordModal
+            open={forgotPasswordOpen}
+            onOpenChange={setForgotPasswordOpen}
+            defaultEmail={prefilledEmail}
+            onSuccess={handlePasswordResetSuccess}
+          />
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             New to LexisGraph?{" "}

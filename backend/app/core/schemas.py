@@ -80,6 +80,33 @@ class UserResponse(UserBase):
     )
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Payload to request password reset."""
+
+    email: EmailStr = Field(..., description="Email address associated with the account")
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Response containing status message and optional reset token."""
+
+    message: str = Field(..., description="Status message")
+    reset_token: str | None = Field(default=None, description="Password reset token for direct reset/verification")
+
+
+class ResetPasswordRequest(BaseModel):
+    """Payload to reset user password."""
+
+    email: EmailStr = Field(..., description="Email address associated with the account")
+    new_password: str = Field(..., min_length=8, max_length=128, description="New plain-text password (8-128 chars)")
+    token: str | None = Field(default=None, description="Reset token if verification is required")
+
+
+class ResetPasswordResponse(BaseModel):
+    """Response returned upon successful password reset."""
+
+    message: str = Field(..., description="Status message")
+
+
 # ---------------------------------------------------------------------------
 # Organization schemas
 # ---------------------------------------------------------------------------

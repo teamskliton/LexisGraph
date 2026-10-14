@@ -23,6 +23,23 @@ export const registerSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().min(1, "Email is required").email("Please enter a valid email address"),
+});
+
+export const resetPasswordSchema = z.object({
+  email: z.string().min(1, "Email is required").email("Please enter a valid email address"),
+  new_password: z.string().min(8, "Password must be at least 8 characters").max(128),
+  confirm_password: z.string().min(1, "Confirm password is required"),
+  token: z.string().optional(),
+}).refine((data) => data.new_password === data.confirm_password, {
+  message: "Passwords do not match",
+  path: ["confirm_password"],
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
 export const authService = {
   async login(data: LoginInput): Promise<TokenResponse> {
     // fastapi auth/token expects UserLogin model which has username and password fields.
@@ -44,6 +61,34 @@ export const authService = {
   },
 
   /**
+   * POST /auth/forgot-password
+   * Request password recovery token for an email address.
+   */
+  async forgotPassword(email: string): Promise<{
+    message: string;
+    reset_token?: string;
+  }> {
+    const response = await api.post<{
+      message: string;
+      reset_token?: string;
+    }>("/auth/forgot-password", { email });
+    return response.data;
+  },
+
+  /**
+   * POST /auth/reset-password
+   * Reset password with optional token verification.
+   */
+  async resetPassword(data: {
+    email: string;
+    new_password: string;
+    token?: string;
+  }): Promise<{ message: string }> {
+    const response = await api.post<{ message: string }>("/auth/reset-password", data);
+    return response.data;
+  },
+
+  /**
    * POST /auth/setup-role
    * Finalize role selection after normal (non-invited) signup.
    * Only "ADMIN" or "LEGAL_ANALYST" are accepted by the backend.
@@ -59,4 +104,5 @@ export const authService = {
     return response.data;
   },
 };
+
 

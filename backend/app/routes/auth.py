@@ -7,18 +7,29 @@ POST /auth/token     — exchange credentials for a JWT access token
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.schemas import Token, UserCreate, UserLogin, UserResponse
+from app.core.schemas import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    Token,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+)
 from app.core.security import (
+    TokenError,
     create_access_token,
     hash_password,
     verify_password,
+    verify_token,
 )
 from app.db.session import get_db
 from app.core.dependencies import get_current_user
@@ -342,3 +353,133 @@ def setup_role(
         "organization_name": org.name,
         "role": user_role.value,
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/forgot-password
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    summary="Request a password reset token",
+    responses={
+        200: {"description": "Password reset token generated"},
+        404: {"description": "No user found with the provided email"},
+        422: {"description": "Validation error"},
+    },
+)
+def forgot_password(
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+) -> ForgotPasswordResponse:
+    """
+    Initiate the password recovery process.
+
+    - Validates that an active user exists for the given email address.
+    - Generates a signed, short-lived (15 minutes) JWT reset token.
+    - Returns the token so the user can immediately set a new password.
+    """
+    from app.db.models import User
+
+    email_clean = data.email.strip().lower()
+    user = db.query(User).filter(User.email == email_clean).first()
+
+    if not user:
+        logger.warning("Password reset requested for non-existent email: %s", email_clean)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email address. Please check your email or register a new account.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account has been deactivated. Please contact your organization administrator.",
+        )
+
+    # Generate 15-minute reset token
+    reset_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email, "type": "reset_password"},
+        expires_delta=timedelta(minutes=15),
+    )
+
+    logger.info("Password reset token generated for user id=%s email=%s", user.id, user.email)
+    return ForgotPasswordResponse(
+        message="Verification token generated. You can now set your new password.",
+        reset_token=reset_token,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/reset-password
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordResponse,
+    summary="Reset user password using verification token",
+    responses={
+        200: {"description": "Password reset successfully"},
+        400: {"description": "Invalid, expired, or mismatched reset token"},
+        404: {"description": "User not found"},
+        422: {"description": "Validation error"},
+    },
+)
+def reset_password(
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+) -> ResetPasswordResponse:
+    """
+    Reset user password after token verification.
+
+    - Verifies user existence by email.
+    - Verifies the reset token signature, expiration, and user ID match if provided.
+    - Hashes the new password with bcrypt and updates the database.
+    """
+    from app.db.models import User
+
+    email_clean = data.email.strip().lower()
+    user = db.query(User).filter(User.email == email_clean).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email address.",
+        )
+
+    if data.token:
+        try:
+            payload = verify_token(data.token)
+            if payload.get("type") != "reset_password" or payload.get("sub") != str(user.id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid or mismatched password reset token.",
+                )
+        except TokenError as exc:
+            logger.warning("Token verification failed during password reset: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid or expired reset token: {exc}",
+            ) from exc
+
+    # Hash new password and update user
+    user.hashed_password = hash_password(data.new_password)
+    user.updated_at = datetime.now(timezone.utc)
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("Failed to commit password reset for user %s: %s", user.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update password. Please try again.",
+        ) from exc
+
+    logger.info("Password successfully reset for user id=%s email=%s", user.id, user.email)
+    return ResetPasswordResponse(
+        message="Your password has been successfully reset. You can now log in with your new password.",
+    )
