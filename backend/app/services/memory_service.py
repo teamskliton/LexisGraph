@@ -48,38 +48,76 @@ def generate_conversation_title(question: str | None) -> str:
     Automatically generate a readable conversation title from the user's initial question.
 
     Examples:
+    - "Summarize the major compliance risks in this report" -> "Compliance Risk Review"
     - "What are the rules under Code of Wages for overtime?" -> "Code of Wages Discussion"
     - "Review POSH policy compliance details" -> "POSH Compliance Review"
-    - Fallback: Truncated query string formatted cleanly.
     """
     if not question or not question.strip():
         return "New Conversation"
 
-    clean_text = question.strip()
+    # Strip structured context prefixes and UUID tags
+    clean_text = re.sub(r"\[Context\s+(?:Report ID|Policy|Regulation|Finding|Focus):\s*[^\]]+\]", "", question, flags=re.IGNORECASE)
+    clean_text = re.sub(r"#[0-9a-fA-F-]{8,36}", "", clean_text)
+    clean_text = clean_text.strip()
+    if not clean_text:
+        lower_q = question.lower()
+        if "report" in lower_q:
+            return "Compliance Risk Review"
+        if "finding" in lower_q:
+            return "Finding Investigation"
+        return "Compliance Inquiry"
 
     # Rule-based domain keyword matching
     lower = clean_text.lower()
-    if "wage" in lower or "salary" in lower or "compensation" in lower:
+    if "risk" in lower or "report" in lower or "audit" in lower:
+        return "Compliance Risk Review"
+    if "finding" in lower or "gap" in lower:
+        return "Finding Investigation"
+    if "dpdp" in lower or "privacy" in lower or "personal data" in lower:
+        return "DPDP Policy Gaps"
+    if "safety" in lower or "workplace" in lower or "osha" in lower:
+        return "Workplace Safety Findings"
+    if "retention" in lower or "deletion" in lower or "data protection" in lower:
+        return "Data Retention Review"
+    if "wage" in lower or "salary" in lower or "compensation" in lower or "overtime" in lower:
         return "Code of Wages Discussion"
     if "posh" in lower or "harassment" in lower:
         return "POSH Compliance Review"
-    if "retention" in lower or "data protection" in lower or "gdpr" in lower:
-        return "Data Retention & Protection Review"
     if "termination" in lower or "severance" in lower or "notice" in lower:
-        return "Employee Termination Policy Review"
+        return "Employee Termination Policy"
     if "leave" in lower or "maternity" in lower or "paternity" in lower:
         return "Leave Policy Inquiry"
 
     # Fallback title generation: clean punctuation and limit length
     words = re.findall(r"\w+", clean_text)
     if not words:
-        return "New Conversation"
+        return "Compliance Inquiry"
 
-    title_words = words[:6]
+    stopwords = {"what", "are", "the", "how", "can", "we", "is", "there", "any", "please", "summarize", "explain", "tell", "me", "about"}
+    filtered_words = [w for w in words if w.lower() not in stopwords]
+    title_words = filtered_words[:5] if len(filtered_words) >= 2 else words[:6]
+
     title = " ".join(w.capitalize() for w in title_words)
-    if len(title) > 40:
-        title = title[:40].rsplit(" ", 1)[0]
-    return title or "New Conversation"
+    if len(title) > 36:
+        title = title[:36].rsplit(" ", 1)[0]
+    return title or "Compliance Inquiry"
+
+
+def _sanitize_title(title: str | None) -> str:
+    """Ensure conversation titles are clean, enterprise-grade, and free of raw technical IDs."""
+    if not title:
+        return "AI Compliance Assistant"
+    t = title.strip()
+    # Strip legacy "Context Report Id E143c28e..." or raw "[Context..." titles
+    if re.match(r"^(?:context\s+report\s+id|\[context|report\s+id\s+[0-9a-fA-F-]+)", t, re.IGNORECASE):
+        hex_match = re.search(r"([0-9a-fA-F]{8})", t)
+        if hex_match:
+            return f"Compliance Risk Review #{hex_match.group(1).lower()}"
+        return "Compliance Risk Review"
+    # If title is just a raw UUID
+    if re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", t):
+        return f"Compliance Investigation #{t[:8]}"
+    return t
 
 
 def create_conversation_session(
@@ -304,7 +342,7 @@ def list_user_conversations(
         results.append(
             ConversationSessionResponse(
                 id=row.id,
-                title=row.title,
+                title=_sanitize_title(row.title),
                 organization_id=row.organization_id,
                 is_pinned=bool(row.is_pinned),
                 is_archived=bool(row.is_archived),
@@ -537,7 +575,7 @@ def get_conversation_detail(
 
     return ConversationDetailResponse(
         id=session.id,
-        title=session.title,
+        title=_sanitize_title(session.title),
         organization_id=session.organization_id,
         is_pinned=session.is_pinned,
         is_archived=session.is_archived,

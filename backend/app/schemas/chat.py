@@ -17,6 +17,11 @@ class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="User question or prompt")
     organization_id: uuid.UUID = Field(..., description="UUID of the organization to query")
     conversation_id: str | None = Field(default=None, description="Optional conversation identifier")
+    # Structured Enterprise Context Scope
+    report_id: uuid.UUID | str | None = Field(default=None, description="Optional targeted report UUID")
+    finding_id: uuid.UUID | str | None = Field(default=None, description="Optional targeted finding UUID")
+    document_id: uuid.UUID | str | None = Field(default=None, description="Optional targeted policy document UUID")
+    regulation_id: uuid.UUID | str | None = Field(default=None, description="Optional targeted regulation UUID")
 
 
 class SourceCitation(BaseModel):

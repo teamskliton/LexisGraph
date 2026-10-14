@@ -37,11 +37,13 @@ interface MessageBubbleProps {
   onCopy?: (text: string, id: string) => void;
   onSelectQuestion?: (question: string) => void;
   onOpenViewer?: (documentId?: string, clauseId?: string) => void;
+  onManageContext?: () => void;
   copiedId?: string | null;
 }
 
 function SimpleMarkdown({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
-  const lines = content.split("\n");
+  const cleanContent = content.split("--- RECOMMENDATIONS_JSON")[0].trim();
+  const lines = cleanContent.split("\n");
   return (
     <div className="space-y-2 text-sm leading-relaxed text-foreground/90">
       {lines.map((line, lineIdx) => {
@@ -96,12 +98,20 @@ function renderFormattedText(text: string) {
   });
 }
 
+function cleanUserMessageText(text: string): string {
+  if (!text) return "";
+  let cleaned = text.replace(/\[Context\s+(?:Report ID|Policy|Regulation|Finding|Focus):\s*[^\]]+\]\s*/gi, "");
+  cleaned = cleaned.replace(/^#[0-9a-fA-F-]{8,36}\s*/g, "");
+  return cleaned.trim() || text;
+}
+
 export const MessageBubble = React.memo(function MessageBubble({
   message,
   onRegenerate,
   onCopy,
   onSelectQuestion,
   onOpenViewer,
+  onManageContext,
   copiedId,
 }: MessageBubbleProps) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
@@ -111,17 +121,18 @@ export const MessageBubble = React.memo(function MessageBubble({
   const displayText = isCollapsed && isLong ? message.text.slice(0, 1000) + "..." : message.text;
 
   if (message.sender === "user") {
+    const userDisplay = cleanUserMessageText(message.text);
     return (
-      <div className="flex gap-3 max-w-3xl ml-auto flex-row-reverse group">
-        <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs shrink-0 shadow-sm">
-          <UserIcon className="h-4 w-4" />
+      <div className="flex gap-2.5 max-w-[85%] md:max-w-[75%] ml-auto flex-row-reverse group">
+        <div className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs shrink-0 mt-0.5 border border-primary/30">
+          <UserIcon className="h-3.5 w-3.5" />
         </div>
 
         <div className="space-y-1 max-w-full">
-          <div className="p-4 rounded-2xl bg-primary text-primary-foreground text-sm rounded-tr-none shadow-sm">
-            <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+          <div className="px-4 py-3 rounded-2xl bg-primary/10 border border-primary/20 text-foreground text-sm rounded-tr-xs shadow-xs leading-relaxed">
+            <p className="whitespace-pre-wrap">{userDisplay}</p>
           </div>
-          <span className="text-[10px] text-muted-foreground px-1 block text-right">
+          <span className="text-[10px] text-muted-foreground px-1 block text-right font-mono">
             {message.timestamp}
           </span>
         </div>
@@ -130,13 +141,13 @@ export const MessageBubble = React.memo(function MessageBubble({
   }
 
   return (
-    <div className="flex gap-3 max-w-3xl mr-auto group">
-      <div className="h-8 w-8 rounded-full bg-card border border-border text-accent flex items-center justify-center text-xs shrink-0 shadow-sm">
+    <div className="flex gap-3 max-w-full md:max-w-4xl mr-auto group">
+      <div className="h-8 w-8 rounded-xl bg-card border border-border text-accent flex items-center justify-center text-xs shrink-0 shadow-xs mt-0.5">
         <Bot className="h-4 w-4" />
       </div>
 
-      <div className="space-y-3 max-w-full flex-1">
-        <div className="p-4 rounded-2xl bg-card border border-border text-foreground rounded-tl-none relative shadow-sm">
+      <div className="space-y-3 max-w-full flex-1 min-w-0">
+        <div className="p-4 md:p-5 rounded-2xl bg-card border border-border/80 text-foreground rounded-tl-xs relative shadow-xs">
           {message.text ? (
             <div>
               <SimpleMarkdown content={displayText} isStreaming={message.isStreaming} />
@@ -248,6 +259,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             sources={message.sources}
             onOpenViewer={onOpenViewer}
             onSelectQuestion={onSelectQuestion}
+            onManageContext={onManageContext}
           />
         )}
 

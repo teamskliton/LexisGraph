@@ -21,6 +21,10 @@ export interface ChatRequestPayload {
   organization_id: string;
   question: string;
   conversation_id?: string;
+  report_id?: string | null;
+  finding_id?: string | null;
+  document_id?: string | null;
+  regulation_id?: string | null;
 }
 
 export interface ChatResponsePayload {

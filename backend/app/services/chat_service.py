@@ -80,35 +80,19 @@ def _enrich_context_with_entities(
     db: Session,
     organization_id: uuid.UUID | str,
     question: str,
+    report_id: uuid.UUID | str | None = None,
+    finding_id: uuid.UUID | str | None = None,
+    document_id: uuid.UUID | str | None = None,
+    regulation_id: uuid.UUID | str | None = None,
 ) -> tuple[str, list[SourceCitation], list[dict[str, Any]]]:
     """
-    Detect explicit report IDs, finding IDs, and context tags in the question and load
-    ground-truth database records (ComplianceReport, ReportFinding, Document, Regulation)
-    from PostgreSQL to ground the AI Legal Assistant.
+    Detect explicit report IDs, finding IDs, and context tags in the question AND from structured
+    request parameters, loading ground-truth database records (ComplianceReport, ReportFinding,
+    Document, Regulation) from PostgreSQL to ground the AI Compliance Copilot.
     """
     extra_context_lines: list[str] = []
     extra_sources: list[SourceCitation] = []
     extra_docs: list[dict[str, Any]] = []
-
-    # 1. Extract finding IDs: 'finding ID <uuid>' or 'finding (<uuid>)' or raw UUID matching ReportFinding
-    finding_matches = re.findall(
-        r"(?:finding\s*(?:ID\s*)?\(?([0-9a-fA-F-]{36})\)?)|(?:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))",
-        question,
-        re.IGNORECASE,
-    )
-    extracted_uuids: list[str] = []
-    for m in finding_matches:
-        uid = m[0] or m[1]
-        if uid and uid not in extracted_uuids:
-            extracted_uuids.append(uid)
-
-    # Check for Report ID tag
-    report_tag_match = re.search(r"\[Context Report ID:\s*([0-9a-fA-F-]+)\]", question, re.IGNORECASE)
-    report_tag_id = report_tag_match.group(1).strip() if report_tag_match else None
-
-    # Also detect short report references like 'report #265e6130'
-    short_report_match = re.search(r"report\s*#?([0-9a-fA-F]{8})", question, re.IGNORECASE)
-    short_report_hex = short_report_match.group(1).strip() if short_report_match else None
 
     # Convert organization_id to UUID
     try:
@@ -119,9 +103,36 @@ def _enrich_context_with_entities(
     if not org_uuid:
         return "", [], []
 
+    # 1. Extract finding IDs: from structured finding_id parameter OR from question
+    extracted_finding_uuids: list[str] = []
+    if finding_id:
+        clean_fid = str(finding_id).strip()
+        if clean_fid and clean_fid not in extracted_finding_uuids:
+            extracted_finding_uuids.append(clean_fid)
+
+    finding_matches = re.findall(
+        r"(?:finding\s*(?:ID\s*)?\(?([0-9a-fA-F-]{36})\)?)|(?:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))",
+        question,
+        re.IGNORECASE,
+    )
+    for m in finding_matches:
+        uid = m[0] or m[1]
+        if uid and uid not in extracted_finding_uuids:
+            extracted_finding_uuids.append(uid)
+
+    # Check for Report ID tag or structured report_id parameter
+    report_tag_match = re.search(r"\[Context Report ID:\s*([0-9a-fA-F-]+)\]", question, re.IGNORECASE)
+    report_tag_id = report_tag_match.group(1).strip() if report_tag_match else None
+    if report_id:
+        report_tag_id = str(report_id).strip()
+
+    # Also detect short report references like 'report #265e6130'
+    short_report_match = re.search(r"report\s*#?([0-9a-fA-F]{8})", question, re.IGNORECASE)
+    short_report_hex = short_report_match.group(1).strip() if short_report_match else None
+
     # Check ReportFinding records strictly belonging to this organization
     found_findings: list[ReportFinding] = []
-    for uid_str in extracted_uuids:
+    for uid_str in extracted_finding_uuids:
         try:
             f_uuid = uuid.UUID(uid_str)
             f = (
@@ -213,8 +224,8 @@ def _enrich_context_with_entities(
                     target_reports.append(r)
                 break
 
-    # Also if extracted_uuids has a compliance report
-    for uid_str in extracted_uuids:
+    # Also if extracted_finding_uuids contains a compliance report ID
+    for uid_str in extracted_finding_uuids:
         try:
             r_uuid = uuid.UUID(uid_str)
             r = db.query(ComplianceReport).filter(
@@ -285,7 +296,186 @@ def _enrich_context_with_entities(
         if reg:
             extra_docs.append({"id": str(reg.id), "title": reg_name, "score": 1.0})
 
+    # Explicit Document (Policy) Context
+    if document_id:
+        try:
+            d_uuid = uuid.UUID(str(document_id))
+            doc = db.query(Document).filter(
+                Document.id == d_uuid,
+                Document.organization_id == org_uuid,
+                Document.is_deleted == False,
+            ).first()
+            if doc:
+                doc_lines = [
+                    f"\n### Active Internal Policy Context ({doc.original_filename}):",
+                    f"- Policy ID: {doc.id}",
+                    f"- Category: {doc.category or 'Compliance Policy'}",
+                    f"- Extracted Clauses: {doc.clause_count or 0}",
+                ]
+                extra_context_lines.append("\n".join(doc_lines))
+                extra_docs.append({"id": str(doc.id), "title": doc.original_filename, "score": 1.0})
+                extra_sources.append(
+                    SourceCitation(
+                        document_id=str(doc.id),
+                        clause_id=str(doc.id),
+                        document=doc.original_filename,
+                        section="Policy Scope",
+                        clause=f"Targeted policy scope: {doc.original_filename}",
+                        clause_number="Overview",
+                        page=1,
+                        similarity=1.0,
+                        type="Policy",
+                        confidence_score=1.0,
+                        search_source="Policy Center",
+                    )
+                )
+        except (ValueError, TypeError):
+            pass
+
+    # Explicit Regulation Context
+    if regulation_id:
+        try:
+            r_uuid = uuid.UUID(str(regulation_id))
+            reg = db.query(Regulation).filter(Regulation.id == r_uuid).first()
+            if reg:
+                reg_name = reg.title or reg.act_name or "Statutory Regulation"
+                reg_lines = [
+                    f"\n### Active Statutory Regulation Scope ({reg_name}):",
+                    f"- Regulation ID: {reg.id}",
+                    f"- Jurisdiction: {reg.jurisdiction or 'National'}",
+                    f"- Total Clauses: {reg.total_clauses or 0}",
+                ]
+                extra_context_lines.append("\n".join(reg_lines))
+                extra_docs.append({"id": str(reg.id), "title": reg_name, "score": 1.0})
+                extra_sources.append(
+                    SourceCitation(
+                        document_id=str(reg.id),
+                        clause_id=str(reg.id),
+                        document=reg_name,
+                        section="Statutory Scope",
+                        clause=f"Targeted statutory scope: {reg_name}",
+                        clause_number="Overview",
+                        page=1,
+                        similarity=1.0,
+                        type="Regulation",
+                        confidence_score=1.0,
+                        search_source="Regulation Library",
+                    )
+                )
+        except (ValueError, TypeError):
+            pass
+
     return "\n\n".join(extra_context_lines), extra_sources, extra_docs
+
+
+def _build_insufficient_evidence_response(
+    db: Session,
+    organization_id: uuid.UUID,
+    question: str,
+    report_id: uuid.UUID | str | None = None,
+    finding_id: uuid.UUID | str | None = None,
+    document_id: uuid.UUID | str | None = None,
+    regulation_id: uuid.UUID | str | None = None,
+) -> tuple[str, list[str], list[RecommendedAction]]:
+    """
+    Generate an informative, state-aware insufficient evidence explanation and recovery actions
+    based on the actual context and document availability rather than a generic brush-off.
+    """
+    if report_id:
+        short_id = str(report_id)[:8]
+        try:
+            r_uuid = uuid.UUID(str(report_id))
+            r = db.query(ComplianceReport).filter(
+                ComplianceReport.id == r_uuid,
+                ComplianceReport.organization_id == organization_id,
+                ComplianceReport.is_deleted == False,
+            ).first()
+            if r:
+                return (
+                    f"I couldn't find enough verified findings or indexed clauses in Report #{short_id} to answer this specific inquiry. "
+                    "You can open the report to inspect its summary, check document status in the Policy Center, or broaden your scope to all accessible documents.",
+                    [
+                        f"Summarize overall compliance score for report #{short_id}",
+                        f"Which findings in report #{short_id} are high risk?",
+                        "What remediation actions are recommended for this report?",
+                    ],
+                    [
+                        RecommendedAction(
+                            type="view_report",
+                            title=f"Open Report #{short_id}",
+                            description="Inspect detailed findings and compliance score",
+                        ),
+                        RecommendedAction(
+                            type="manage_context",
+                            title="Change Context Scope",
+                            description="Broaden search across all organization documents",
+                        ),
+                    ],
+                )
+            else:
+                return (
+                    f"Report #{short_id} was not found or is inaccessible within your current organization workspace. "
+                    "Please verify your workspace permissions or select another report.",
+                    [
+                        "Show latest compliance audit reports",
+                        "Which policies have active audit reports?",
+                    ],
+                    [
+                        RecommendedAction(
+                            type="manage_context",
+                            title="Select Active Report",
+                            description="Choose an accessible report from your workspace",
+                        ),
+                        RecommendedAction(
+                            type="view_reports",
+                            title="Browse Reports",
+                            description="Go to Compliance Reports repository",
+                        ),
+                    ],
+                )
+        except Exception:
+            pass
+
+    if finding_id:
+        short_fid = str(finding_id)[:8]
+        return (
+            f"I couldn't locate finding #{short_fid} or its supporting policy clauses in your active workspace. "
+            "The finding may belong to another report or may have been resolved.",
+            [
+                "What are our highest severity compliance findings?",
+                "List all non-compliant findings in our latest report",
+            ],
+            [
+                RecommendedAction(
+                    type="manage_context",
+                    title="Change Context",
+                    description="Switch to an accessible report or finding",
+                ),
+            ],
+        )
+
+    # General no evidence
+    return (
+        "I couldn't find sufficient verified evidence in your organization's indexed documents, compliance reports, or statutory regulations to answer this query. "
+        "You can target a specific compliance report, verify document indexing in the Policy Center, or rephrase your question.",
+        [
+            "Summarize our major compliance risks",
+            "Which policies need attention?",
+            "Explain our latest audit findings",
+        ],
+        [
+            RecommendedAction(
+                type="manage_context",
+                title="Select Context",
+                description="Target a specific report, policy, or regulation",
+            ),
+            RecommendedAction(
+                type="view_reports",
+                title="Browse Reports",
+                description="Inspect completed compliance analysis reports",
+            ),
+        ],
+    )
 
 
 def _build_legal_assistant_prompt(
@@ -443,25 +633,50 @@ def _extract_recommendations_and_clean_answer(
 
     filtered_follow_ups = filtered_follow_ups[:3]
 
-    # 3. Fallback recommended actions if none parsed
+    # 3. Fallback recommended actions if none parsed (context-aware)
     if not actions:
-        actions = [
-            RecommendedAction(
-                type="compare_policy",
-                title="Run Compliance Check",
-                description="Compare your internal policy against the matched regulation clause.",
-            ),
-            RecommendedAction(
-                type="view_document",
-                title="Open Regulation Document",
-                description="Review the original legal source document in viewer.",
-            ),
-            RecommendedAction(
-                type="view_graph",
-                title="Explore Knowledge Graph",
-                description="Inspect Neo4j 2-hop legal relationships and connected entities.",
-            ),
-        ]
+        has_report = any("report" in str(c.get("title", "")).lower() for c in (extra_docs or [])) or any("report" in str(getattr(item, "document_name", "")).lower() for item in clauses)
+        has_reg = any("regulation" in str(c.get("title", "")).lower() or "act" in str(c.get("title", "")).lower() for c in (extra_docs or [])) or any("regulation" in str(getattr(item, "document_name", "")).lower() for item in clauses)
+
+        if has_report:
+            actions = [
+                RecommendedAction(
+                    type="view_report",
+                    title="View Report",
+                    description="Inspect the audit report and full compliance findings.",
+                ),
+                RecommendedAction(
+                    type="view_findings",
+                    title="View Findings",
+                    description="Review non-compliant clauses and risk levels.",
+                ),
+            ]
+        elif has_reg:
+            actions = [
+                RecommendedAction(
+                    type="view_document",
+                    title="Open Regulation",
+                    description="Review statutory clauses in the legal viewer.",
+                ),
+                RecommendedAction(
+                    type="view_policies",
+                    title="View Related Policies",
+                    description="Check internal policies evaluated against this regulation.",
+                ),
+            ]
+        else:
+            actions = [
+                RecommendedAction(
+                    type="view_document",
+                    title="Inspect Sources",
+                    description="Open matched source document in viewer.",
+                ),
+                RecommendedAction(
+                    type="view_graph",
+                    title="Explore Evidence Graph",
+                    description="Inspect legal knowledge graph relationships in Neo4j.",
+                ),
+            ]
 
     # 4. Derive related documents from extra_docs and retrieved context clauses
     seen_docs: set[str] = set()
@@ -559,6 +774,10 @@ def process_chat_request(
         db=db,
         organization_id=target_org_id,
         question=payload.question,
+        report_id=payload.report_id,
+        finding_id=payload.finding_id,
+        document_id=payload.document_id,
+        regulation_id=payload.regulation_id,
     )
 
     # 5. Hybrid context retrieval (Qdrant vector + Neo4j graph)
@@ -591,23 +810,33 @@ def process_chat_request(
             has_entity_evidence,
             payload.question,
         )
-        answer = NO_EVIDENCE_MESSAGE
+        answer, follow_ups, actions = _build_insufficient_evidence_response(
+            db=db,
+            organization_id=target_org_id,
+            question=payload.question,
+            report_id=payload.report_id,
+            finding_id=payload.finding_id,
+            document_id=payload.document_id,
+            regulation_id=payload.regulation_id,
+        )
+        metadata_dict = {
+            "follow_up_questions": follow_ups,
+            "recommended_actions": [a.model_dump() for a in actions],
+            "related_documents": [],
+        }
         save_message_pair(
             db,
             conversation_id=session.id,
             user_message=payload.question,
             assistant_message=answer,
             sources=None,
+            metadata=metadata_dict,
         )
         return ChatResponse(
             answer=answer,
             sources=[],
-            follow_up_questions=[
-                "Upload policy documents to query against?",
-                "Select a specific compliance audit report to examine?",
-                "Try searching for data protection or labour regulations?",
-            ],
-            recommended_actions=[],
+            follow_up_questions=follow_ups,
+            recommended_actions=actions,
             related_documents=[],
             conversation_id=conv_id_str,
         )
@@ -632,7 +861,7 @@ def process_chat_request(
     # Combine sources and pass through server-side citation authorization gate
     retrieved_sources = _format_source_citations(context.clauses)
     all_candidate_sources = extra_sources + retrieved_sources
-    authorized_sources = authorize_citations(
+    authorized_sources =  authorize_citations(
         db=db,
         organization_id=target_org_id,
         citations=all_candidate_sources,
@@ -640,11 +869,17 @@ def process_chat_request(
 
     if not llm_answer or (NO_EVIDENCE_MESSAGE.lower() in llm_answer.lower() and not has_entity_evidence):
         logger.info("[CHAT_SERVICE] LLM response returned low confidence or empty.")
-        answer = NO_EVIDENCE_MESSAGE
+        answer, follow_ups, actions = _build_insufficient_evidence_response(
+            db=db,
+            organization_id=target_org_id,
+            question=payload.question,
+            report_id=payload.report_id,
+            finding_id=payload.finding_id,
+            document_id=payload.document_id,
+            regulation_id=payload.regulation_id,
+        )
         sources = []
         sources_dict_list = None
-        follow_ups = []
-        actions = []
         related_docs = []
     else:
         clean_ans, follow_ups, actions, raw_related_docs = _extract_recommendations_and_clean_answer(
@@ -744,6 +979,10 @@ async def stream_chat_request(
         db=db,
         organization_id=target_org_id,
         question=payload.question,
+        report_id=payload.report_id,
+        finding_id=payload.finding_id,
+        document_id=payload.document_id,
+        regulation_id=payload.regulation_id,
     )
 
     # 5. Hybrid context retrieval (Qdrant vector + Neo4j graph)
@@ -780,16 +1019,31 @@ async def stream_chat_request(
 
     if not has_retrieved_clauses and not has_entity_evidence:
         logger.info("[CHAT_STREAM] Low confidence or zero clauses found and no entity context.")
+        ans, f_ups, r_actions = _build_insufficient_evidence_response(
+            db=db,
+            organization_id=target_org_id,
+            question=payload.question,
+            report_id=payload.report_id,
+            finding_id=payload.finding_id,
+            document_id=payload.document_id,
+            regulation_id=payload.regulation_id,
+        )
+        rec_payload = {
+            "follow_up_questions": f_ups,
+            "recommended_actions": [a.model_dump() for a in r_actions],
+            "related_documents": [],
+        }
         save_message_pair(
             db,
             conversation_id=session.id,
             user_message=payload.question,
-            assistant_message=NO_EVIDENCE_MESSAGE,
+            assistant_message=ans,
             sources=None,
+            metadata=rec_payload,
         )
-        yield f"event: token\ndata: {json.dumps({'text': NO_EVIDENCE_MESSAGE})}\n\n"
+        yield f"event: token\ndata: {json.dumps({'text': ans})}\n\n"
         yield f"event: sources\ndata: {json.dumps([])}\n\n"
-        yield f"event: recommendations\ndata: {json.dumps({'follow_up_questions': ['Select a specific compliance audit report to examine?', 'Try searching for data protection or labour regulations?'], 'recommended_actions': [], 'related_documents': []})}\n\n"
+        yield f"event: recommendations\ndata: {json.dumps(rec_payload)}\n\n"
         yield f"event: done\ndata: {json.dumps({'conversation_id': conv_id_str})}\n\n"
         return
 
@@ -846,9 +1100,20 @@ async def stream_chat_request(
         )
 
         if not clean_ans or (NO_EVIDENCE_MESSAGE.lower() in clean_ans.lower() and not has_entity_evidence):
-            clean_ans = NO_EVIDENCE_MESSAGE
+            fallback_ans, fallback_fups, fallback_acts = _build_insufficient_evidence_response(
+                db=db,
+                organization_id=target_org_id,
+                question=payload.question,
+                report_id=payload.report_id,
+                finding_id=payload.finding_id,
+                document_id=payload.document_id,
+                regulation_id=payload.regulation_id,
+            )
+            clean_ans = fallback_ans
             sources_dict_list = None
             final_sources_payload = []
+            follow_ups = fallback_fups
+            actions = fallback_acts
         else:
             sources_dict_list = [s.model_dump() for s in authorized_sources]
             final_sources_payload = sources_payload

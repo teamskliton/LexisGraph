@@ -17,6 +17,7 @@ interface RecommendedActionsProps {
   sources?: any[];
   onOpenViewer?: (documentId?: string, clauseId?: string) => void;
   onSelectQuestion?: (question: string) => void;
+  onManageContext?: () => void;
 }
 
 export function RecommendedActions({
@@ -24,6 +25,7 @@ export function RecommendedActions({
   sources,
   onOpenViewer,
   onSelectQuestion,
+  onManageContext,
 }: RecommendedActionsProps) {
   const router = useRouter();
 
@@ -31,10 +33,10 @@ export function RecommendedActions({
 
   const getActionIcon = (type: string) => {
     const t = type.toLowerCase();
+    if (t.includes("report")) return Download;
     if (t.includes("compare") || t.includes("compliance")) return Scale;
-    if (t.includes("document") || t.includes("view")) return FileText;
+    if (t.includes("document") || t.includes("view") || t.includes("policy") || t.includes("regulation")) return FileText;
     if (t.includes("graph") || t.includes("network")) return Network;
-    if (t.includes("export") || t.includes("report")) return Download;
     return Sparkles;
   };
 
@@ -42,10 +44,37 @@ export function RecommendedActions({
     const typeStr = (action.type || "").toLowerCase();
     const titleStr = (action.title || "").toLowerCase();
 
+    if (typeStr.includes("manage_context") || titleStr.includes("context")) {
+      if (onManageContext) {
+        onManageContext();
+      } else if (onSelectQuestion) {
+        onSelectQuestion("What are our major compliance risks?");
+      }
+      return;
+    }
+
+    if (
+      typeStr.includes("view_report") ||
+      titleStr.includes("open report") ||
+      titleStr.includes("view report") ||
+      typeStr.includes("view_findings") ||
+      titleStr.includes("findings")
+    ) {
+      const hexMatch = titleStr.match(/#?([0-9a-fA-F]{8,36})/);
+      if (hexMatch) {
+        router.push(`/compliance/reports/${hexMatch[1]}`);
+      } else if (sources && sources.length > 0 && sources[0].document_id) {
+        router.push(`/compliance/reports/${sources[0].document_id}`);
+      } else {
+        router.push("/compliance/reports");
+      }
+      return;
+    }
+
     if (
       typeStr.includes("document") ||
       typeStr.includes("view_document") ||
-      titleStr.includes("open") ||
+      titleStr.includes("open regulation") ||
       titleStr.includes("regulation")
     ) {
       const docId = sources && sources.length > 0 ? sources[0].document_id : undefined;
@@ -55,13 +84,8 @@ export function RecommendedActions({
       } else {
         router.push("/documents");
       }
-    } else if (
-      typeStr.includes("compare") ||
-      typeStr.includes("compliance") ||
-      titleStr.includes("compliance") ||
-      titleStr.includes("check")
-    ) {
-      router.push("/compliance");
+    } else if (typeStr.includes("view_policies") || titleStr.includes("policies")) {
+      router.push("/documents");
     } else if (
       typeStr.includes("graph") ||
       typeStr.includes("knowledge") ||
@@ -70,16 +94,16 @@ export function RecommendedActions({
       if (onSelectQuestion) {
         onSelectQuestion("Show knowledge graph connections for this context");
       } else {
-        router.push("/compliance");
+        router.push("/knowledge-graph");
       }
     } else if (
-      typeStr.includes("export") ||
-      typeStr.includes("report") ||
-      titleStr.includes("export")
+      typeStr.includes("compare") ||
+      typeStr.includes("compliance") ||
+      titleStr.includes("compliance")
     ) {
-      router.push("/reports");
-    } else {
       router.push("/compliance");
+    } else {
+      router.push("/compliance/reports");
     }
   };
 
