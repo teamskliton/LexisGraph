@@ -68,6 +68,11 @@ from app.schemas.finding import (
 from app.services import audit_service
 from app.services.activity_service import log_activity
 from app.services.notification_service import create_notification, notify_finding_stakeholders
+from app.services.inbox_service import (
+    create_or_update_inbox_item,
+    reassign_inbox_task,
+    resolve_inbox_items_for_entity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2157,6 +2162,18 @@ def submit_finding_for_review(
             report_id=report.id,
             actor_id=current_user.id,
         )
+        create_or_update_inbox_item(
+            db=db,
+            organization_id=report.organization_id,
+            recipient_id=r_id,
+            entity_type="FINDING",
+            entity_id=finding.id,
+            action_type="REVIEW_REQUESTED",
+            priority="HIGH",
+            title=f"Review Finding #{str(finding.id)[:8]}",
+            description=f"{current_user.full_name} requested review{note_text}.",
+            due_at=getattr(finding, "due_date", None),
+        )
 
     db.commit()
     return _format_finding_response(db, finding)
@@ -2411,6 +2428,29 @@ def assign_finding(
         title="Finding Assigned",
         message=f"Finding #{str(finding.id)[:8]} was assigned to {assignee_name} by {current_user.full_name}.",
     )
+
+    # Sync Action Inbox: update task ownership for new vs old assignee
+    if data.assignee_id:
+        reassign_inbox_task(
+            db=db,
+            organization_id=report.organization_id,
+            entity_id=finding.id,
+            old_assignee_id=old_assignee_id,
+            new_assignee_id=data.assignee_id,
+            action_type="REMEDIATION_REQUIRED",
+            priority=finding.severity or "MEDIUM",
+            title=f"Remediate Finding #{str(finding.id)[:8]}",
+            description=f"{current_user.full_name} assigned you Finding #{str(finding.id)[:8]} for remediation.",
+            due_at=getattr(finding, "due_date", None),
+        )
+    elif old_assignee_id:
+        resolve_inbox_items_for_entity(
+            db=db,
+            organization_id=report.organization_id,
+            entity_id=finding.id,
+            action_types=["REMEDIATION_REQUIRED"],
+        )
+
     db.commit()
 
     return _format_finding_response(db, finding)
@@ -2617,6 +2657,14 @@ def resolve_finding(
         title="Finding Resolved",
         message=f"Finding #{str(locked_finding.id)[:8]} was resolved by Admin {current_user.full_name}{desc_note}.",
     )
+
+    # Sync Action Inbox: resolve pending tasks associated with this finding
+    resolve_inbox_items_for_entity(
+        db=db,
+        organization_id=report.organization_id,
+        entity_id=locked_finding.id,
+    )
+
     db.commit()
 
     return _format_finding_response(db, locked_finding)
@@ -3329,6 +3377,17 @@ def add_comment(
                 report_id=report.id,
                 comment_id=comment.id,
                 actor_id=current_user.id,
+            )
+            create_or_update_inbox_item(
+                db=db,
+                organization_id=report.organization_id,
+                recipient_id=m_uid,
+                entity_type="FINDING",
+                entity_id=finding.id,
+                action_type="MENTION_RESPONSE",
+                priority=finding.severity or "MEDIUM",
+                title=f"Mentioned in Finding #{str(finding.id)[:8]}",
+                description=f"{current_user.full_name}: \"{content_stripped[:120]}\"",
             )
 
     # 3. Notify parent comment author if reply

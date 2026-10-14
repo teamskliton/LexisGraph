@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { useRouter, usePathname } from "next/navigation";
+import { formatDistanceToNowStrict } from "date-fns";
 import {
   Bell,
   UserCheck,
@@ -33,6 +33,8 @@ interface NotificationBellProps {
 
 export function NotificationBell({ organizationId, className, dropUp }: NotificationBellProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isOnNotificationsPage = pathname === "/notifications";
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -55,16 +57,16 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
     }
   }, [organizationId]);
 
-  // Fetch recent notifications for popover
+  // Fetch recent notifications for popover (max 5 as specified)
   const fetchNotifications = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const data = await notificationsService.getNotifications(organizationId, {
         unread_only: filterTab === "UNREAD",
-        limit: 25,
+        limit: 5,
       });
-      setNotifications(data || []);
+      setNotifications((data || []).slice(0, 5));
     } catch (err: any) {
       console.error("Failed to load notifications:", err);
       setError("Unable to load notifications.");
@@ -163,14 +165,35 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
     }
   };
 
+  const getRelativeTime = (created_at: string) => {
+    try {
+      return formatDistanceToNowStrict(new Date(created_at), { addSuffix: true });
+    } catch {
+      return "recently";
+    }
+  };
+
   return (
     <div className={cn("inline-block", className)}>
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <Popover
+        open={isOnNotificationsPage ? false : isOpen}
+        onOpenChange={(v) => {
+          if (!isOnNotificationsPage) {
+            setIsOpen(v);
+          }
+        }}
+      >
         <PopoverTrigger
           render={
             <Button
               variant="ghost"
               size="icon"
+              onClick={(e) => {
+                if (isOnNotificationsPage) {
+                  e.preventDefault();
+                  fetchUnreadCount();
+                }
+              }}
               className="relative h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer"
               aria-label="Notifications"
             >
@@ -188,7 +211,7 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
           side={dropUp ? "top" : "bottom"}
           align={dropUp ? "start" : "end"}
           sideOffset={8}
-          className="w-80 sm:w-96 p-0 z-50 rounded-xl border border-border bg-card text-card-foreground shadow-2xl overflow-hidden flex flex-col max-h-[500px]"
+          className="w-80 sm:w-96 p-0 z-50 rounded-xl border border-border bg-card text-card-foreground shadow-2xl overflow-hidden flex flex-col max-h-[480px]"
         >
           {/* Header */}
           <div className="p-3 border-b border-border/60 bg-muted/20 space-y-2">
@@ -296,8 +319,8 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
                       <span className={cn("text-xs leading-snug truncate", !n.is_read ? "font-bold text-foreground" : "font-medium text-muted-foreground")}>
                         {n.title}
                       </span>
-                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-                        {format(new Date(n.created_at), "MMM d, HH:mm")}
+                      <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
+                        {getRelativeTime(n.created_at)}
                       </span>
                     </div>
 
@@ -333,7 +356,7 @@ export function NotificationBell({ organizationId, className, dropUp }: Notifica
               }}
               className="w-full text-xs font-semibold text-primary hover:text-primary-hover gap-1 cursor-pointer"
             >
-              <span>View Notification Center</span>
+              <span>View All Notifications</span>
               <ExternalLink className="h-3 w-3" />
             </Button>
           </div>

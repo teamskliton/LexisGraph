@@ -56,6 +56,7 @@ from fastapi import Header
 def list_notifications(
     organization_id: Optional[uuid.UUID] = Query(None, description="Optional organization UUID filter"),
     unread_only: bool = Query(False, description="Filter unread notifications only"),
+    category: Optional[str] = Query(None, description="Category filter: ALL, UNREAD, MENTIONS, SYSTEM_UPDATES"),
     limit: int = Query(30, ge=1, le=100, description="Page limit"),
     offset: int = Query(0, ge=0, description="Page offset"),
     x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
@@ -78,8 +79,23 @@ def list_notifications(
         _verify_org_access(db, current_user, target_org_id)
         query = query.where(Notification.organization_id == target_org_id)
 
-    if unread_only:
+    cat_upper = (category or "").upper().strip()
+    if unread_only or cat_upper == "UNREAD":
         query = query.where(Notification.is_read == False)
+    elif cat_upper == "MENTIONS":
+        query = query.where(Notification.type.in_(["FINDING_MENTIONED", "FINDING_COMMENT_REPLIED", "MENTION"]))
+    elif cat_upper == "SYSTEM_UPDATES":
+        query = query.where(
+            Notification.type.in_([
+                "ANALYSIS_COMPLETED",
+                "ANALYSIS_FAILED",
+                "ROLE_CHANGED",
+                "SYSTEM_UPDATE",
+                "FINDING_STATUS_CHANGED",
+                "REPORT_GENERATED",
+                "FINDING_REOPENED",
+            ])
+        )
 
     query = query.order_by(Notification.created_at.desc()).offset(offset).limit(limit)
 
@@ -188,6 +204,49 @@ def mark_notification_read(
         )
 
     notification.is_read = True
+    db.commit()
+    db.refresh(notification)
+
+    return NotificationResponse(
+        id=str(notification.id),
+        user_id=str(notification.user_id),
+        organization_id=str(notification.organization_id),
+        type=notification.type,
+        title=notification.title,
+        message=notification.message,
+        is_read=notification.is_read,
+        finding_id=str(notification.finding_id) if notification.finding_id else None,
+        report_id=str(notification.report_id) if notification.report_id else None,
+        comment_id=str(notification.comment_id) if notification.comment_id else None,
+        created_at=notification.created_at,
+    )
+
+
+@router.patch(
+    "/{notification_id}/unread",
+    response_model=NotificationResponse,
+    summary="Mark single notification as unread",
+)
+def mark_notification_unread(
+    notification_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NotificationResponse:
+    """Mark a notification as unread."""
+    notification = db.get(Notification, notification_id)
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found.",
+        )
+
+    if notification.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage your own notifications.",
+        )
+
+    notification.is_read = False
     db.commit()
     db.refresh(notification)
 

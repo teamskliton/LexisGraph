@@ -21,6 +21,9 @@ import {
   ShieldAlert,
   Info,
   ExternalLink,
+  Upload,
+  Image as ImageIcon,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { organizationsService, Organization } from '@/services/api/organizations';
@@ -31,6 +34,55 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatRoleLabel } from '@/utils/role-utils';
 import { cn } from '@/lib/utils';
+import { NotificationPreferencesCard } from '@/components/settings/NotificationPreferencesCard';
+
+const compressImageFile = (file: File): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.src = url;
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      const maxSize = 128;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxSize) {
+          height = Math.round((height * maxSize) / width);
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width = Math.round((width * maxSize) / height);
+          height = maxSize;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl =
+          canvas.toDataURL("image/webp", 0.8) ||
+          canvas.toDataURL("image/jpeg", 0.8);
+        resolve(dataUrl);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) || "");
+        reader.readAsDataURL(file);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string) || "");
+      reader.readAsDataURL(file);
+    };
+  });
+};
 
 const STANDARD_INDUSTRIES = [
   'Information Technology & Services',
@@ -64,6 +116,9 @@ export function OrganizationSettingsContent() {
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
   const [customIndustry, setCustomIndustry] = useState<string>('');
   const [website, setWebsite] = useState<string>('');
+  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [showLogoUrlInput, setShowLogoUrlInput] = useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Field-level validation errors
   const [errors, setErrors] = useState<{ name?: string; website?: string }>({});
@@ -96,6 +151,7 @@ export function OrganizationSettingsContent() {
       setName(data.name || '');
       setDescription(data.description || '');
       setWebsite(data.website || '');
+      setLogoUrl(data.logo_url || '');
 
       const currentInd = data.industry || '';
       if (STANDARD_INDUSTRIES.slice(0, -1).includes(currentInd)) {
@@ -134,6 +190,30 @@ export function OrganizationSettingsContent() {
   const effectiveIndustry =
     selectedIndustry === 'Other' ? customIndustry.trim() : selectedIndustry;
 
+  // Handle Logo Upload from Local File
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload a valid image file (PNG, JPG, WebP, SVG).');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Logo file size exceeds the 2MB limit.');
+      return;
+    }
+
+    try {
+      const dataUrl = await compressImageFile(file);
+      setLogoUrl(dataUrl);
+      toast.success('Logo uploaded. Click "Save Changes" to apply.');
+    } catch {
+      toast.error('Failed to process logo image.');
+    }
+  };
+
   // Dirty state tracking (compares against loaded org data)
   const isDirty = useMemo(() => {
     if (!org) return false;
@@ -141,14 +221,16 @@ export function OrganizationSettingsContent() {
     const initialDesc = org.description || '';
     const initialInd = org.industry || '';
     const initialWeb = org.website || '';
+    const initialLogo = org.logo_url || '';
 
     return (
       name.trim() !== initialName.trim() ||
       description.trim() !== initialDesc.trim() ||
       effectiveIndustry !== initialInd ||
-      website.trim() !== initialWeb.trim()
+      website.trim() !== initialWeb.trim() ||
+      logoUrl.trim() !== initialLogo.trim()
     );
-  }, [org, name, description, effectiveIndustry, website]);
+  }, [org, name, description, effectiveIndustry, website, logoUrl]);
 
   // Warn user before navigating away if form is dirty
   useEffect(() => {
@@ -168,6 +250,7 @@ export function OrganizationSettingsContent() {
     setName(org.name || '');
     setDescription(org.description || '');
     setWebsite(org.website || '');
+    setLogoUrl(org.logo_url || '');
     setErrors({});
 
     const currentInd = org.industry || '';
@@ -224,12 +307,13 @@ export function OrganizationSettingsContent() {
         description: description.trim() || undefined,
         industry: effectiveIndustry || undefined,
         website: website.trim() || undefined,
+        logo_url: logoUrl.trim() || '',
       });
 
       setOrg(updated);
       toast.success(`Organization profile for '${updated.name}' saved successfully!`);
-      // Notify other components if org name changed
-      if (updated.name !== org.name) {
+      // Notify other components if org name or logo changed
+      if (updated.name !== org.name || (updated.logo_url || '') !== (org.logo_url || '')) {
         window.dispatchEvent(new Event('organization_changed'));
       }
     } catch (err: any) {
@@ -449,6 +533,117 @@ export function OrganizationSettingsContent() {
         </div>
 
         <form onSubmit={handleSaveProfile} className="space-y-5">
+          {/* ── Organization Logo ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border/60">
+            <div className="relative group shrink-0">
+              <div className="w-16 h-16 rounded-xl border-2 border-dashed border-border flex items-center justify-center overflow-hidden bg-background shadow-xs">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={name || "Workspace logo"}
+                    className="w-full h-full object-cover rounded-xl"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-primary/5">
+                    <span className="text-xl font-bold text-primary select-none">
+                      {name ? name.trim().charAt(0).toUpperCase() : "W"}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSaving}
+                  className="absolute inset-0 rounded-xl bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[11px] font-medium transition-opacity cursor-pointer"
+                  title="Change logo"
+                >
+                  <Upload className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-primary" /> Workspace Logo
+                </label>
+                {logoUrl && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  >
+                    Custom Logo Active
+                  </Badge>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Add a logo to customize your workspace avatar across navigation, reports, and team views.
+                Recommended: square PNG, WebP, SVG, or JPG up to 2MB.
+              </p>
+
+              {canEdit && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                    disabled={isSaving}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isSaving}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-7 text-xs px-2.5 gap-1.5 border-border bg-background hover:bg-muted text-foreground cursor-pointer shadow-2xs"
+                  >
+                    <Upload className="w-3 h-3 text-muted-foreground" />
+                    <span>{logoUrl ? "Change Logo" : "Upload Logo"}</span>
+                  </Button>
+
+                  {logoUrl && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isSaving}
+                      onClick={() => setLogoUrl("")}
+                      className="h-7 text-xs px-2 gap-1 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remove</span>
+                    </Button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowLogoUrlInput((v) => !v)}
+                    className="text-[11px] text-muted-foreground hover:text-primary transition-colors cursor-pointer underline-offset-2 hover:underline ml-1"
+                  >
+                    {showLogoUrlInput ? "Hide URL input" : "Or link by image URL"}
+                  </button>
+                </div>
+              )}
+
+              {canEdit && showLogoUrlInput && (
+                <div className="pt-2">
+                  <Input
+                    type="url"
+                    disabled={isSaving}
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="bg-background border-border text-xs h-8 text-foreground rounded-lg"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Organization Name */}
             <div className="space-y-1.5">
@@ -656,6 +851,9 @@ export function OrganizationSettingsContent() {
           </p>
         </div>
       </Card>
+ 
+      {/* ── Section: Notifications & Communication Preferences ── */}
+      <NotificationPreferencesCard organizationId={activeOrgId} />
 
       {/* ── Section 3: Danger Zone ── */}
       {canDelete && (

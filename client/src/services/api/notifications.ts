@@ -21,7 +21,7 @@ export interface UnreadCountResponse {
 export const notificationsService = {
   getNotifications: async (
     organizationId?: string,
-    params?: { unread_only?: boolean; limit?: number; offset?: number }
+    params?: { unread_only?: boolean; category?: string; limit?: number; offset?: number }
   ): Promise<NotificationItem[]> => {
     const response = await api.get<NotificationItem[]>("/notifications", {
       params: { organization_id: organizationId, ...params },
@@ -38,6 +38,11 @@ export const notificationsService = {
 
   markAsRead: async (notificationId: string): Promise<NotificationItem> => {
     const response = await api.patch<NotificationItem>(`/notifications/${notificationId}/read`);
+    return response.data;
+  },
+
+  markAsUnread: async (notificationId: string): Promise<NotificationItem> => {
+    const response = await api.patch<NotificationItem>(`/notifications/${notificationId}/unread`);
     return response.data;
   },
 

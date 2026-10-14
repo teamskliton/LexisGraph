@@ -71,6 +71,15 @@ def test_connection() -> bool:
                 conn.commit()
             except Exception as e:
                 logger.debug("finding_comments column migration check: %s", e)
+
+            # Auto-ensure inbox_items and notification_preferences tables exist
+            try:
+                from app.db.models.inbox import InboxItem
+                from app.db.models.preference import NotificationPreference
+                from app.db.session import Base
+                Base.metadata.create_all(bind=engine, tables=[InboxItem.__table__, NotificationPreference.__table__])
+            except Exception as e:
+                logger.debug("inbox and preferences table create check: %s", e)
         logger.info("PostgreSQL connectivity OK")
         return True
     except OperationalError as exc:
