@@ -28,6 +28,12 @@ export interface DocumentResponse {
   uploader_name?: string | null;
   analysis_status?: string | null;
   version?: string | null;
+  policy_identifier?: string | null;
+  effective_date?: string | null;
+  review_cadence?: string | null;
+  next_review_date?: string | null;
+  source_draft_id?: string | null;
+  lifecycle_status?: "ACTIVE" | "PENDING_EFFECTIVE" | "SUPERSEDED" | string | null;
 }
 
 /** Returned by GET /documents/{id}/status */

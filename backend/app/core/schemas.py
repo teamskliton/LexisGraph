@@ -247,6 +247,12 @@ class DocumentResponse(DocumentBase):
     uploader_name: str | None = Field(default=None, description="Display name of the user who uploaded this document")
     analysis_status: str | None = Field(default="Not Analyzed", description="Analysis status: Not Analyzed, Under Review, Compliant, Non-Compliant")
     version: str | None = Field(default="v1.0", description="Policy version in this workspace")
+    policy_identifier: str | None = Field(default=None, description="Policy code/identifier e.g. POL-DATA-PROT")
+    effective_date: datetime | None = Field(default=None, description="Effective date")
+    review_cadence: str | None = Field(default=None, description="Review cadence e.g. Annual")
+    next_review_date: datetime | None = Field(default=None, description="Next review date")
+    source_draft_id: uuid.UUID | None = Field(default=None, description="Linked PolicyDraft UUID")
+    lifecycle_status: str | None = Field(default="ACTIVE", description="ACTIVE, PENDING_EFFECTIVE, or SUPERSEDED")
 
 
 class DocumentStatusResponse(BaseModel):

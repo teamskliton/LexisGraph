@@ -50,6 +50,7 @@ from app.routes.regulations import router as regulations_router
 from app.routes.notifications import router as notifications_router
 from app.routes.inbox import router as inbox_router
 from app.routes.remediations import router as remediations_router
+from app.routes.policy_formation import router as policy_formation_router
 from app.services.health import get_system_health
 from app.services.retrieval import is_model_loaded, preload_model
 from app.services.scraper import fetch_and_process_external_data
@@ -121,8 +122,31 @@ def start_scheduler() -> BackgroundScheduler:
         coalesce=True,
         max_instances=1,
     )
+
+    def _sync_policies_job():
+        try:
+            from app.db.session import SessionLocal
+            from app.services.policy_formation_service import PolicyFormationAnalysisService
+            db = SessionLocal()
+            try:
+                PolicyFormationAnalysisService.sync_effective_policy_lifecycles(db)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning("Error in policy effective date scheduler job: %s", exc)
+
+    scheduler.add_job(
+        _sync_policies_job,
+        trigger="interval",
+        hours=1,
+        id="policy_effective_date_sync",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with 6-hour external ingestion job")
+    logger.info("Scheduler started with external ingestion and policy lifecycle sync jobs")
     _scheduler = scheduler
     return scheduler
 
@@ -276,6 +300,8 @@ def create_app() -> FastAPI:
     app.include_router(inbox_router, prefix="/api/v1")
     app.include_router(remediations_router)
     app.include_router(remediations_router, prefix="/api/v1")
+    app.include_router(policy_formation_router)
+    app.include_router(policy_formation_router, prefix="/api/v1")
     app.include_router(documents_router, tags=["documents"])
     app.include_router(chat_router)
     app.include_router(compliance_router)
