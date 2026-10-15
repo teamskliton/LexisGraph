@@ -290,6 +290,13 @@ def list_documents(
 
     org = _validate_organization_ownership(db, target_org_id, current_user.id)
 
+    # 0. Sync any matured PENDING_EFFECTIVE policies whose effective date has arrived
+    try:
+        from app.services.policy_formation_service import PolicyFormationAnalysisService
+        PolicyFormationAnalysisService.sync_effective_policy_lifecycles(db, org.id)
+    except Exception as exc:
+        logger.warning("Failed to auto-sync effective policies: %s", exc)
+
     # 1. Fetch organization-owned policy documents
     policies = db.query(Document).filter(
         Document.organization_id == org.id,
