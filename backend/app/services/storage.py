@@ -220,3 +220,37 @@ def store_remediation_evidence(file: UploadFile) -> StoredFileMetadata:
         size=len(file_content),
         mime_type=content_type or "application/octet-stream",
     )
+
+
+def store_published_policy_content(policy_text: str, filename: str) -> StoredFileMetadata:
+    """
+    Store a formatted policy markdown/text document from Policy Formation into the policies storage directory.
+    """
+    _, policies_dir, _ = _ensure_storage_dirs()
+    file_bytes = policy_text.encode("utf-8")
+    extension = _get_extension(filename) or ".txt"
+    stored_filename = f"{uuid.uuid4()}{extension}"
+    checksum = _compute_sha256(file_bytes)
+    file_path = policies_dir / stored_filename
+    file_path.write_bytes(file_bytes)
+
+    return StoredFileMetadata(
+        original_filename=filename,
+        stored_filename=stored_filename,
+        path=str(file_path),
+        checksum=checksum,
+        size=len(file_bytes),
+        mime_type="text/plain",
+    )
+
+
+def delete_stored_file(file_path: str) -> None:
+    """Safely delete a stored file from disk if it exists, logging warnings on failure."""
+    try:
+        p = Path(file_path)
+        if p.exists() and p.is_file():
+            p.unlink()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Failed to clean up stored file %s: %s", file_path, exc)
+

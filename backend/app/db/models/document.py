@@ -184,6 +184,41 @@ class Document(Base):
         index=True,
     )
 
+    # Optional policy lifecycle fields (Stage 5 Policy Formation publishing)
+    policy_identifier: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+    )
+
+    effective_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    review_cadence: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    next_review_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    source_draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("policy_drafts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    lifecycle_status: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        default="ACTIVE",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
