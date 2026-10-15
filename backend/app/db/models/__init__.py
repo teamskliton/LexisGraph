@@ -18,8 +18,12 @@ from app.compliance.models import ComplianceReport, ComplianceReportStatus, Comp
 from app.db.models.remediation import FindingRemediation, RemediationEvidence, RemediationCycle
 from app.db.models.rbac import OrganizationMember, OrganizationInvitation, AuditLog, UserRole, MemberStatus
 from app.db.models.notification import Notification
-from app.db.models.inbox import InboxItem
-from app.db.models.preference import NotificationPreference
+from app.db.models.policy_formation import (
+    OrganizationAssessment,
+    PolicyNeedsAnalysis,
+    PolicyDraft,
+    PolicyApprovalAudit,
+)
 from app.models.report import Report
 
 __all__ = [
@@ -52,4 +56,8 @@ __all__ = [
     "Notification",
     "InboxItem",
     "NotificationPreference",
+    "OrganizationAssessment",
+    "PolicyNeedsAnalysis",
+    "PolicyDraft",
+    "PolicyApprovalAudit",
 ]
