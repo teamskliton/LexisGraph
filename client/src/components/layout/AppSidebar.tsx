@@ -307,6 +307,7 @@ function CommandSearchModal({
   const allActions = useMemo(
     () => [
       { label: "Dashboard (Overview)", href: "/dashboard", group: "Pages", icon: LayoutDashboard },
+      { label: "Policy Formation", href: "/policy-formation", group: "Home", icon: Sparkles },
       { label: "Policies", href: "/policies", group: "Home", icon: Shield },
       { label: "Regulations", href: "/regulations", group: "Home", icon: BookOpen },
       { label: "Analyses", href: "/compliance/history", group: "Home", icon: Zap },
@@ -684,6 +685,7 @@ function RecentItemsSection({
 
     const pageLabels: Record<string, string> = {
       "/dashboard": "Dashboard",
+      "/policy-formation": "Policy Formation",
       "/compliance": "Compliance Overview",
       "/compliance/new": "New Compliance Run",
       "/compliance/history": "Analysis History",
@@ -704,6 +706,7 @@ function RecentItemsSection({
     let title = pageLabels[pathname];
     if (!title) {
       if (pathname.startsWith("/reports/")) title = "Report Details";
+      else if (pathname.startsWith("/policy-formation/")) title = "Policy Formation";
       else if (pathname.startsWith("/organizations/")) title = "Organization Workspace";
       else if (pathname.startsWith("/compliance/")) title = "Compliance Run";
       else if (pathname.startsWith("/findings/")) title = "Finding Detail";
@@ -893,6 +896,12 @@ export function AppSidebar({
         href: "/dashboard",
         icon: LayoutDashboard,
         isActive: (p) => p === "/dashboard",
+      },
+      {
+        label: "Policy Formation",
+        href: "/policy-formation",
+        icon: Sparkles,
+        isActive: (p) => p === "/policy-formation" || p.startsWith("/policy-formation/"),
       },
       {
         label: "Policies",
