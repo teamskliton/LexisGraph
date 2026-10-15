@@ -21,7 +21,9 @@
 
 ## Overview
 
-**LexisGraph** is an enterprise legal compliance analysis and knowledge-graph platform. It ingests complex regulatory documents and corporate policy files, extracts clause-level semantics, constructs interconnected knowledge graphs, and performs automated compliance gap analysis with dense vector embeddings and explainable legal citations.
+**LexisGraph** is an enterprise legal compliance analysis, policy formation, and knowledge-graph platform. It ingests complex regulatory documents and corporate policy files, extracts clause-level semantics, constructs interconnected knowledge graphs, and performs automated compliance gap analysis with dense vector embeddings and explainable legal citations.
+
+In addition to compliance audits, LexisGraph features an autonomous **Policy Formation** governance workflow that guides startups and established enterprises from organizational circumstance discovery to grounded policy drafting, formal multi-stage review, cryptographic approval hashing, and direct production repository publication.
 
 ---
 
@@ -32,6 +34,7 @@
                                   │      Client Layer (Next.js 16)          │
                                   │ - Executive Dashboard  - Knowledge Graph│
                                   │ - Compliance Viewer    - AI Assistant   │
+                                  │ - Policy Formation     - Policy Center  │
                                   └────────────────────┬────────────────────┘
                                                        │ REST / WebSocket
                                                        ▼
@@ -39,6 +42,7 @@
                                   │      Backend API (FastAPI / Python)     │
                                   │  - Auth & RBAC         - Clause Parser  │
                                   │  - GraphRAG Engine     - Background Jobs│
+                                  │  - Policy Formation    - Lifecycle Sync │
                                   └───────┬────────────┬────────────┬───────┘
                                           │            │            │
             ┌─────────────────────────────┼────────────┼────────────┼─────────────────────────────┐
@@ -46,7 +50,8 @@
 ┌───────────────────────┐     ┌──────────────────────┐   ┌──────────────────────┐     ┌───────────────────────┐
 │     PostgreSQL 16     │     │       Neo4j 5        │   │        Qdrant        │     │        Redis 7        │
 │ Relational Data, RBAC,│     │ Knowledge Graph:     │   │ Dense Clause Vector  │     │ Job Queue, Real-time  │
-│ Documents, Audit Logs │     │ Clauses, Acts, Rules │   │ Similarity Search    │     │ Status & Cache        │
+│ Documents, Assessments│     │ Clauses, Acts, Rules │   │ Similarity Search    │     │ Status & Cache        │
+│ Drafts, Audit Logs    │     │                      │   │                      │     │                       │
 └───────────────────────┘     └──────────────────────┘   └──────────────────────┘     └───────────────────────┘
 ```
 
@@ -54,7 +59,7 @@
 
 | Engine | Role & Stored Entities | Port |
 |---|---|---|
-| **PostgreSQL 16** | Users, Organizations, Document metadata, Compliance reports, Findings, Remediations, Audit logs | `5433:5432` |
+| **PostgreSQL 16** | Users, Organizations, Document metadata, Compliance reports, Findings, Remediations, Assessments, Policy Drafts, Approval Audits | `5433:5432` |
 | **Neo4j 5** | Knowledge Graph: Regulation clauses, Policy clauses, Legal entities, Cross-references | `7474`, `7687` |
 | **Qdrant** | High-dimensional dense embeddings for clause similarity and semantic search | `6333` |
 | **Redis 7** | Cache, task orchestration, asynchronous job tracking | `6379` |
@@ -186,19 +191,42 @@ The application is now live at [http://localhost:3000](http://localhost:3000).
 
 ---
 
+## Policy Formation Governance Lifecycle (Stages 1–5)
+
+LexisGraph delivers a complete, end-to-end policy formation and lifecycle management workflow designed to take organizations from circumstance discovery to live compliance enforcement:
+
+```
+Assess ──> Analyze ──> Draft ──> Review ──> Approve ──> Publish ──> Maintain
+```
+
+| Lifecycle Stage | Implementation & Governance Controls | Key Artifacts & Models |
+|---|---|---|
+| **1. Assess** | 6-step guided Organization Assessment Wizard capturing corporate structure, jurisdictions, industries, data categories, and operational scale. Fully persisted with resume capability. | `OrganizationAssessment` |
+| **2. Analyze** | Discovers statutory obligations against a canonical legal registry (DPDP Act, IT Act, CERT-In, SEBI CS Framework, ISO 27001), evaluates existing policy coverage, and generates a traceable Policy Needs Analysis. | `PolicyNeedsAnalysis` |
+| **3. Draft** | AI-assisted drafting grounded in specific statutory requirements and user evidence. Features section-level regeneration, debounced autosave, and strict fallback telemetry (`generation_method`, `is_template_fallback`, retry grounding). | `PolicyDraft` |
+| **4. Review** | Review queue with workspace role filtering (`ADMIN`, `COMPLIANCE_ANALYST`, `REVIEWER`). Draft locks against concurrent modifications during review. | `READY_FOR_REVIEW` |
+| **5. Approve** | Assigned approver review with mandatory feedback, optimistic concurrency control (`expected_version`), self-approval blocking in multi-member workspaces, and canonical SHA-256 content hashing. | `PolicyApprovalAudit` |
+| **6. Publish** | Direct integration into the production `Document` table (`document_type = DocumentType.POLICY`). Triggers automated text processing and vector indexing without duplicate tables. Atomic file rollback cleanup on failure. | `Document` (POLICY) |
+| **7. Maintain** | Version branching (`vN+1`), effective date scheduler (`PENDING_EFFECTIVE` to `ACTIVE`), review cadence tracking (`Annual`, `Semi-Annual`, `Quarterly`), and automatic superseding of prior active policies. | `SUPERSEDED` / `ACTIVE` |
+
+---
+
 ## Testing & Quality Assurance
 
-### Backend Tests
-The backend includes an extensive suite of unit and integration tests:
+### Comprehensive Test Suites (75+ Automated Tests)
+LexisGraph enforces end-to-end test coverage across all compliance, policy formation, and workspace isolation boundaries:
 
 ```powershell
 cd backend
-.\.venv\Scripts\pytest.exe
-```
 
-Run a specific test module:
-```powershell
-.\.venv\Scripts\pytest.exe tests/test_activity_service.py
+# Run the complete Policy Formation suite (Stages 1–5)
+.\venv\Scripts\python.exe -m unittest tests/test_policy_formation_assessment.py tests/test_policy_needs_analysis.py tests/test_policy_drafting.py tests/test_policy_approval_publishing.py -v
+
+# Run the Workspace Isolation & Multitenancy suite
+.\venv\Scripts\python.exe -m unittest tests/test_workspace_isolation.py -v
+
+# Run all backend tests via pytest
+.\venv\Scripts\pytest.exe
 ```
 
 ### Frontend Build & Typecheck
@@ -206,6 +234,11 @@ Verify production build correctness and strict TypeScript compilation:
 
 ```powershell
 cd client
+
+# Validate strict TypeScript types (0 errors)
+npx tsc --noEmit
+
+# Run production build and lint
 npm run build
 npm run lint
 ```
@@ -214,12 +247,14 @@ npm run lint
 
 ## Core Platform Capabilities
 
-1. **Multi-Tenant RBAC Workspaces**: Role-based access control (Admin, Compliance Officer, Auditor, Viewer) with isolated organization boundaries.
-2. **Automated Document Ingestion**: Upload internal policy documents or statutory regulations (PDF, DOCX, TXT) with automated clause segmentation.
-3. **GraphRAG Compliance Scoring**: Evaluates compliance alignment (`compliant`, `partial`, `gap`) using dense vector similarity combined with Neo4j graph context.
-4. **Remediation & Evidence Management**: End-to-end corrective action workflows, evidence uploads, auditor review verification, and full audit trails.
-5. **Interactive Knowledge Graph Canvas**: Visual graph explorer mapping policies, regulations, legal entities, and cross-document dependencies.
-6. **Conversational AI Legal Assistant**: Grounded legal query interface providing answers directly citing clauses and confidence metrics.
+1. **Autonomous Policy Formation Lifecycle**: End-to-end 7-step governance workflow from organizational assessment to grounded AI drafting, cryptographic approval hashing, and publication into the active Policies repository.
+2. **Multi-Tenant RBAC Workspaces**: Role-based access control (Admin, Compliance Analyst, Legal Analyst, Reviewer, Organization Admin) with strictly isolated tenant boundaries and audit logs.
+3. **Automated Document Ingestion & Storage**: Safe upload and parsing of internal policy documents and global statutory regulations with SHA-256 deduplication and atomic rollbacks.
+4. **GraphRAG Compliance Scoring**: Evaluates compliance alignment (`compliant`, `partial`, `gap`) using dense vector similarity (Qdrant) combined with interconnected graph context (Neo4j).
+5. **Remediation & Evidence Management**: Corrective action tracking, evidence document verification, auditor approval cycles, and chronological compliance health timelines.
+6. **Interactive Knowledge Graph Canvas**: Visual graph explorer mapping policies, statutory regulations, legal entities, clauses, and cross-document dependencies.
+7. **Conversational AI Legal Assistant**: Grounded legal query interface citing specific statutory provisions and policy clauses with confidence metrics.
+8. **Automated Policy Lifecycle Engine**: Effective date scheduling (`PENDING_EFFECTIVE` to `ACTIVE`), review cadence reminders, and automatic version superseding.
 
 ---
 
