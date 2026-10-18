@@ -31,6 +31,7 @@ from app.db.models.policy_formation import (
     PolicyDraft,
     PolicyApprovalAudit,
 )
+from app.db.models.organization import Organization
 from app.db.models.regulation import OrganizationRegulation, Regulation
 from app.db.models.user import User
 from app.db.models.rbac import OrganizationMember, UserRole, MemberStatus
@@ -1337,6 +1338,434 @@ class PolicyFormationAnalysisService:
             need_id,
             draft.status,
             ws.organization_id,
+        )
+        return draft
+
+    @classmethod
+    def create_direct_draft(
+        cls,
+        title: str,
+        category: str,
+        purpose: str,
+        scope_type: str,
+        branch_name: Optional[str],
+        department_name: Optional[str],
+        primary_jurisdiction: Optional[str],
+        owner_role: Optional[str],
+        review_cadence: Optional[str],
+        specific_context: Optional[str],
+        linked_regulations: Optional[List[str]],
+        user_id: Optional[uuid.UUID],
+        db: Session,
+        ws: WorkspaceContext,
+    ) -> PolicyDraft:
+        """
+        Create an individual grounded policy draft directly without requiring
+        a full Organization Assessment or Policy Needs Analysis.
+        Strictly tenant-isolated, validates scope, gathers verified statutory grounding,
+        enriches with AI reasoning (or transparent fallback), and persists a PolicyDraft.
+        """
+        clean_title = (title or "").strip()
+        if len(clean_title) < 3:
+            raise ValueError("Policy title must be at least 3 characters.")
+        if len(clean_title) > 255:
+            raise ValueError("Policy title cannot exceed 255 characters.")
+
+        clean_purpose = (purpose or "").strip()
+        if len(clean_purpose) < 5:
+            raise ValueError("Policy purpose must be at least 5 characters.")
+
+        norm_scope = (scope_type or "ORGANIZATION").upper()
+        if norm_scope not in ("ORGANIZATION", "BRANCH", "DEPARTMENT"):
+            raise ValueError(f"Invalid scope type '{scope_type}'. Must be ORGANIZATION, BRANCH, or DEPARTMENT.")
+
+        clean_branch = (branch_name or "").strip() if norm_scope == "BRANCH" else None
+        if norm_scope == "BRANCH" and not clean_branch:
+            raise ValueError("Branch or regional office name is required when policy scope is set to Branch.")
+
+        clean_dept = (department_name or "").strip() if norm_scope == "DEPARTMENT" else None
+        if norm_scope == "DEPARTMENT" and not clean_dept:
+            raise ValueError("Department name is required when policy scope is set to Specific Department.")
+
+        # Idempotency / Duplicate Prevention: Resume active draft with exact same title in workspace
+        existing_draft = db.query(PolicyDraft).filter(
+            PolicyDraft.organization_id == ws.organization_id,
+            PolicyDraft.title == clean_title,
+            PolicyDraft.status.in_(["DRAFTING", "DRAFT_SAVED", "NEEDS_VERIFICATION"]),
+        ).first()
+        if existing_draft:
+            logger.info(
+                "Resuming existing direct policy draft %s for title '%s' in workspace %s",
+                existing_draft.id,
+                clean_title,
+                ws.organization_id,
+            )
+            return existing_draft
+
+        # Retrieve organization name from workspace
+        org = db.query(Organization).filter(Organization.id == ws.organization_id).first()
+        org_name = org.name if org else "The Organization"
+
+        # Format scope representation
+        if norm_scope == "BRANCH":
+            scope_display = f"BRANCH: {clean_branch} ({org_name})"
+        elif norm_scope == "DEPARTMENT":
+            scope_display = f"DEPARTMENT: {clean_dept} ({org_name})"
+        else:
+            scope_display = f"ORGANIZATION-WIDE ({org_name})"
+
+        jurisdiction = (primary_jurisdiction or "India").strip()
+        role = (owner_role or "Compliance Officer").strip()
+        cadence = (review_cadence or "Annual").strip()
+        cat_lower = (category or "Governance").lower()
+
+        # Generate policy code and identifier
+        title_slug = re.sub(r"[^A-Z0-9]+", "-", clean_title.upper()).strip("-")[:16]
+        policy_code = f"POL-DIR-{title_slug}"
+        direct_need_id = f"direct-{re.sub(r'[^a-z0-9]+', '-', cat_lower)[:15]}-{uuid.uuid4().hex[:8]}"
+
+        # Gather Verified Statutory Grounding References
+        target_acts = list(linked_regulations or [])
+        if not target_acts:
+            if any(k in cat_lower for k in ("data", "privacy", "gdpr", "dpdp")):
+                target_acts.extend(["DPDP Act", "Information Technology Act", "GDPR"])
+            elif any(k in cat_lower for k in ("security", "cyber", "infosec", "access", "incident")):
+                target_acts.extend(["Information Technology Act"])
+            elif any(k in cat_lower for k in ("hr", "posh", "workplace", "harassment", "ethics")):
+                target_acts.extend(["POSH Act", "Companies Act"])
+            elif any(k in cat_lower for k in ("vendor", "supplier", "third-party", "outsourcing")):
+                target_acts.extend(["Companies Act", "Information Technology Act"])
+            elif any(k in cat_lower for k in ("governance", "whistleblower", "director")):
+                target_acts.extend(["Companies Act"])
+
+        source_refs: List[Dict[str, Any]] = []
+        unresolved_notes: List[str] = []
+
+        for act_key, meta in STATUTORY_INSTRUMENTS_METADATA.items():
+            if act_key in target_acts or any(act_key.lower() in t.lower() for t in target_acts):
+                source_refs.append({
+                    "act_name": meta.get("act_name", act_key),
+                    "instrument_name": meta.get("title", act_key),
+                    "instrument_type": meta.get("legal_instrument_type", "Statutory Act"),
+                    "jurisdiction": meta.get("jurisdiction", jurisdiction),
+                    "official_citation": meta.get("official_citation", ""),
+                    "provisions": meta.get("verified_provisions", []),
+                    "source_origin": "canonical_registry_reference",
+                })
+                comm = meta.get("commencement_status")
+                if comm and any(w in comm.lower() for w in ("pending", "phased", "subordinate")):
+                    unresolved_notes.append(f"Statutory Notice ({meta.get('act_name')}): {comm}")
+                thresh = meta.get("applicability_thresholds")
+                if thresh:
+                    unresolved_notes.append(f"Applicability Threshold ({meta.get('act_name')}): {thresh}")
+
+        metadata_props = {
+            "policy_identifier": policy_code,
+            "origin_type": "DIRECT_CREATION",
+            "category": category,
+            "owner_role": role,
+            "target_audience": f"All Personnel, Contractors, and Third Parties operating within {scope_display}",
+            "scope": scope_display,
+            "scope_type": norm_scope,
+            "branch_name": clean_branch,
+            "department_name": clean_dept,
+            "classification": "Internal Governance Document",
+            "review_cadence": cadence,
+            "effective_date": None,  # Explicitly unset until Stage 5 approval
+            "primary_jurisdiction": jurisdiction,
+            "purpose": clean_purpose,
+        }
+
+        # Build Standard 12-Section Architecture for Direct Policy
+        sections: List[Dict[str, Any]] = [
+            {
+                "section_id": "sec-metadata",
+                "section_number": "1.0",
+                "heading": "Document Control & Metadata",
+                "content": (
+                    f"**Document Title:** {clean_title}\n"
+                    f"**Document Identifier:** {policy_code}\n"
+                    f"**Designated Owner / Role:** {role}\n"
+                    f"**Applicable Scope:** {scope_display}\n"
+                    f"**Policy Classification:** Internal Governance Document\n"
+                    f"**Drafting Version:** v1.0 (Direct Draft)\n"
+                    f"**Effective Date:** [UNSET — Requires Executive Approval Prior to Activation]\n"
+                    f"**Scheduled Review Cadence:** {cadence}\n"
+                    f"**Target Audience:** All workforce members and relevant external contractors governed by {scope_display}."
+                ),
+                "rationale": "Establishes authoritative ownership, unique document code, and operational boundaries.",
+                "source_clauses": [f"{s['act_name']}: Governance Standards" for s in source_refs[:2]],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-purpose",
+                "section_number": "2.0",
+                "heading": "Purpose & Strategic Objectives",
+                "content": (
+                    f"{org_name} is committed to maintaining robust governance, statutory compliance, and ethical operations.\n\n"
+                    f"**Policy Purpose:** {clean_purpose}\n\n"
+                    f"This policy establishes mandatory operational directives to mitigate legal, operational, and financial risks "
+                    f"across {scope_display}, adhering to recognized statutory benchmarks in {jurisdiction}."
+                ),
+                "rationale": "Articulates the core mission, risk rationale, and mandatory compliance intent.",
+                "source_clauses": [f"{s['act_name']}: Statutory Objective" for s in source_refs[:1]],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-scope",
+                "section_number": "3.0",
+                "heading": "Scope & Operational Applicability",
+                "content": (
+                    f"1. **Operational Boundary:** This policy applies strictly to **{scope_display}**.\n"
+                    f"2. **Covered Individuals:** All permanent employees, part-time personnel, contract staff, "
+                    f"and third-party consultants engaged within this scope must adhere to this document.\n"
+                    + (
+                        f"3. **Specific Operational Context:** {specific_context.strip()}\n"
+                        if specific_context and specific_context.strip()
+                        else ""
+                    )
+                    + f"4. **Exceptions & Exclusions:** Any operations or functional units outside {scope_display} "
+                    f"must establish equivalent governance policies approved by the {role}."
+                ),
+                "rationale": "Defines explicit workforce and jurisdictional applicability boundaries.",
+                "source_clauses": ["Applicability Scope Governance"],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-definitions",
+                "section_number": "4.0",
+                "heading": "Definitions & Key Terminology",
+                "content": (
+                    "For the interpretation of this policy, the following terms apply:\n"
+                    f"- **Organization:** {org_name}.\n"
+                    f"- **Designated Officer:** The designated {role} with executive oversight.\n"
+                    "- **Workforce Member:** Any individual engaged by or operating on behalf of the Organization.\n"
+                    "- **Confidential Assets:** Non-public proprietary, technical, client, or financial information.\n"
+                    "- **Applicable Legal Standard:** Statutory laws, subordinate rules, and recognized regulatory frameworks in "
+                    f"{jurisdiction}."
+                ),
+                "rationale": "Eliminates ambiguity in key legal and operational definitions.",
+                "source_clauses": [f"{s['act_name']}: Statutory Definitions" for s in source_refs[:2]],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-core-requirements",
+                "section_number": "5.0",
+                "heading": "Core Policy Requirements & Mandatory Commitments",
+                "content": (
+                    f"All individuals and operational processes within {scope_display} must strictly uphold the following mandatory requirements:\n\n"
+                    f"1. **Mandatory Compliance with Law:** All actions must conform to statutory obligations in {jurisdiction} and corporate codes of conduct.\n"
+                    f"2. **Implementation of Operational Safeguards:** Appropriate administrative, technical, and physical safeguards must be maintained to prevent unauthorized access, loss, or operational compromise.\n"
+                    f"3. **Accurate Recordkeeping & Verification:** Operational activities and decisions must be logged and auditable.\n"
+                    f"4. **Third-Party & Vendor Due Diligence:** External collaborators must be screened and bound by contractual compliance covenants.\n"
+                    f"5. **Prohibition of Non-Compliant Actions:** Willful circumvention of security controls, unauthorized disclosures, or non-compliance is strictly prohibited."
+                ),
+                "rationale": "Defines binding obligations and operational requirements.",
+                "source_clauses": [p for s in source_refs for p in s.get("provisions", [])[:2]][:4],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-roles",
+                "section_number": "6.0",
+                "heading": "Roles, Responsibilities & Governance Structure",
+                "content": (
+                    f"Governance responsibilities for {clean_title} are allocated as follows:\n\n"
+                    f"1. **Executive Leadership / Board:** Authorizes policy enactment and allocates adequate resources.\n"
+                    f"2. **Policy Owner ({role}):** Holds day-to-day governance authority, monitors adherence, and manages the {cadence.lower()} review cycle.\n"
+                    f"3. **Department Supervisors / Regional Leads:** Ensure team members complete required briefings, enforce day-to-day adherence, and escalate potential non-compliance.\n"
+                    f"4. **Workforce Members:** Review and acknowledge this policy upon induction and uphold all operational rules."
+                ),
+                "rationale": "Establishes clear operational accountability across management and staff.",
+                "source_clauses": ["Corporate Governance Structure"],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-procedures",
+                "section_number": "7.0",
+                "heading": "Operational Procedures & Implementation Controls",
+                "content": (
+                    f"1. **Standard Operating Procedures (SOPs):** Detailed SOPs must be maintained and aligned with this policy.\n"
+                    f"2. **Access & Control Management:** Access to sensitive operations, systems, or records must follow the principle of least privilege.\n"
+                    f"3. **Training & Awareness:** Mandatory training on this policy shall be conducted upon onboarding and refreshed at least annually.\n"
+                    + (
+                        f"4. **Workspace Specific Controls:** {specific_context.strip()}"
+                        if specific_context and specific_context.strip()
+                        else "4. **Change Management:** Any modification to operational workflows must be reviewed for policy alignment prior to deployment."
+                    )
+                ),
+                "rationale": "Bridges high-level governance commitments with actionable daily controls.",
+                "source_clauses": ["Standard Operating Procedure Framework"],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-monitoring",
+                "section_number": "8.0",
+                "heading": "Compliance Monitoring, Auditing & Verification",
+                "content": (
+                    f"1. **Periodic Audits:** Formal compliance verification shall be performed on a {cadence.lower()} schedule under the direction of the {role}.\n"
+                    f"2. **Evidence Preservation:** Audit logs, training attestations, and compliance assessments must be retained securely for a minimum of 3 years.\n"
+                    f"3. **Deficiency Remediation:** Any compliance gaps identified during audits must be documented with an assigned corrective action plan."
+                ),
+                "rationale": "Defines auditing, metric tracking, and evidence-gathering requirements.",
+                "source_clauses": ["Audit & Recordkeeping Standards"],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-exceptions",
+                "section_number": "9.0",
+                "heading": "Exceptions, Waivers & Deviation Governance",
+                "content": (
+                    f"1. **Exception Criteria:** Deviations from this policy are granted only under documented operational necessity with compensatory safeguards.\n"
+                    f"2. **Formal Approval:** All waiver requests must be submitted in writing and approved by the {role}.\n"
+                    f"3. **Time Limitation:** Approved exceptions are valid for a maximum period of 180 days, after which re-evaluation is required."
+                ),
+                "rationale": "Provides a controlled mechanism for justified operational deviations.",
+                "source_clauses": ["Exception Governance Framework"],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-enforcement",
+                "section_number": "10.0",
+                "heading": "Incident Reporting & Disciplinary Enforcement",
+                "content": (
+                    f"1. **Duty to Report:** Workforce members must report known or suspected violations immediately to the {role} or via confidential reporting channels.\n"
+                    f"2. **Whistleblower Protection:** {org_name} maintains a strict non-retaliation policy for reports submitted in good faith.\n"
+                    f"3. **Enforcement Measures:** Violations of this policy are subject to disciplinary action up to and including termination of employment or contractual termination, in accordance with applicable labor regulations in {jurisdiction}."
+                ),
+                "rationale": "Establishes non-retaliatory reporting channels and enforcement consequences.",
+                "source_clauses": ["Disciplinary Enforcement & Whistleblower Standards"],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-statutory",
+                "section_number": "11.0",
+                "heading": "Statutory References & Grounded Citations",
+                "content": (
+                    "This policy incorporates principles from the following verified statutory instruments and benchmarks:\n\n"
+                    + "\n\n".join([
+                        f"### {s['act_name']} ({s['jurisdiction']})\n"
+                        f"- **Instrument Type:** {s['instrument_type']}\n"
+                        f"- **Official Citation:** {s['official_citation']}\n"
+                        f"- **Verified Statutory Provisions:**\n"
+                        + "\n".join([f"  • {p}" for p in s['provisions'][:5]])
+                        for s in source_refs
+                    ])
+                    if source_refs
+                    else f"Grounding established against corporate governance baselines and commercial standards in {jurisdiction}."
+                ),
+                "rationale": "Preserves explicit legal traceability to verified legislation without fabricated citations.",
+                "source_clauses": [p for s in source_refs for p in s.get("provisions", [])[:3]],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+            {
+                "section_id": "sec-limitations",
+                "section_number": "12.0",
+                "heading": "Assumptions, Verification Warnings & Review Schedule",
+                "content": (
+                    f"**Legal Notice & Limitations Disclaimer:**\n"
+                    f"This document is an internal draft generated directly via LexisGraph Policy Formation. "
+                    f"It constitutes internal operational policy and does not replace formal legal counsel review.\n\n"
+                    f"**Operational Scope & Jurisdiction:**\n"
+                    f"- Applicable Scope: {scope_display}.\n"
+                    f"- Primary Jurisdiction: {jurisdiction}.\n"
+                    f"- Scheduled Review Frequency: {cadence}.\n\n"
+                    + (
+                        "**Statutory Notices & Applicability Warnings:**\n"
+                        + "\n".join([f"- {n}" for n in unresolved_notes])
+                        + "\n\n"
+                        if unresolved_notes
+                        else ""
+                    )
+                    + f"**Next Review Cadence:** Mandatory executive review scheduled on an {cadence.lower()} cycle following formal adoption."
+                ),
+                "rationale": "Prevents false claims of legal certification and documents verified statutory warnings.",
+                "source_clauses": ["Statutory Compliance Limitations Disclaimer"],
+                "is_customized": False,
+                "last_regenerated_at": None,
+            },
+        ]
+
+        # Telemetry initialization
+        gen_telemetry = {
+            "generator": "lexisgraph-direct-grounded-drafter",
+            "generation_method": "deterministic_rule_based",
+            "is_template_fallback": True,
+            "fallback_reason": None,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "llm_enhanced": False,
+        }
+
+        # Attempt AI Reasoning Enrichment on Core Commitments
+        try:
+            llm_prompt = (
+                f"You are LexisGraph AI Legal Policy Drafter. Enrich the mandatory commitments section for an organization policy.\n"
+                f"Organization: {org_name}\n"
+                f"Policy Title: {clean_title}\n"
+                f"Category: {category}\n"
+                f"Scope: {scope_display}\n"
+                f"Jurisdiction: {jurisdiction}\n"
+                f"Policy Purpose: {clean_purpose}\n"
+                + (f"Specific Context: {specific_context}\n" if specific_context else "")
+                + f"Statutory References: {', '.join([s['act_name'] for s in source_refs])}\n"
+                f"Provide 5 concise, professional, enforceable policy statements formatted as markdown numbered points. Do NOT invent fake legal citations."
+            )
+            enriched_text = _resolve_reasoning(llm_prompt)
+            if enriched_text and len(enriched_text.strip()) > 80:
+                core_sec = next((s for s in sections if s["section_id"] == "sec-core-requirements"), None)
+                if core_sec:
+                    core_sec["content"] = enriched_text.strip()
+                    gen_telemetry["generator"] = "lexisgraph-ai-policy-drafter"
+                    gen_telemetry["generation_method"] = "ai_llm_generated"
+                    gen_telemetry["is_template_fallback"] = False
+                    gen_telemetry["fallback_reason"] = None
+                    gen_telemetry["llm_enhanced"] = True
+                    gen_telemetry["provider"] = "gemini_or_openrouter"
+            else:
+                gen_telemetry["fallback_reason"] = "AI provider response was empty or too brief; applied grounded deterministic template."
+        except Exception as exc:
+            logger.info("Direct drafting LLM enrichment skipped (using grounded template): %s", exc)
+            gen_telemetry["fallback_reason"] = f"AI provider error: {str(exc)}"
+
+        # Persist new PolicyDraft record
+        draft = PolicyDraft(
+            id=uuid.uuid4(),
+            organization_id=ws.organization_id,
+            assessment_id=None,
+            analysis_id=None,
+            analysis_version=None,
+            need_id=direct_need_id,
+            created_by=user_id,
+            title=clean_title,
+            status="DRAFT_SAVED",
+            version=1,
+            metadata_properties=metadata_props,
+            sections=sections,
+            source_references=source_refs,
+            unresolved_questions=unresolved_notes,
+            generation_metadata=gen_telemetry,
+            history=[],
+        )
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+
+        logger.info(
+            "Created Direct PolicyDraft %s ('%s') in workspace %s (status=%s, version=1)",
+            draft.id,
+            clean_title,
+            ws.organization_id,
+            draft.status,
         )
         return draft
 
