@@ -22,6 +22,7 @@ import {
   FileText,
   AlertCircle,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -44,6 +45,7 @@ import {
 import { OrganizationAssessmentWizard } from "./OrganizationAssessmentWizard";
 import { PolicyNeedsAnalysisView } from "./PolicyNeedsAnalysisView";
 import { PolicyDraftEditorView } from "./PolicyDraftEditorView";
+import { CreateSpecificPolicyModal } from "./CreateSpecificPolicyModal";
 
 interface PolicyFormationLandingProps {
   organizationId: string;
@@ -72,6 +74,7 @@ export function PolicyFormationLanding({
   const [latestDraft, setLatestDraft] = useState<OrganizationAssessment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingNew, setIsStartingNew] = useState(false);
+  const [downloadingDraftId, setDownloadingDraftId] = useState<string | null>(null);
 
   // Stage 3 preview modal for "Create a Specific Policy"
   const [isSpecificPolicyModalOpen, setIsSpecificPolicyModalOpen] = useState(false);
@@ -184,6 +187,22 @@ export function PolicyFormationLanding({
     } catch (err: any) {
       console.error("Failed to delete draft:", err);
       toast.error(err?.response?.data?.detail || "Failed to delete draft.");
+    }
+  };
+
+  // Download Draft PDF Handler
+  const handleDownloadDraftPdf = async (draftId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (downloadingDraftId) return;
+    try {
+      setDownloadingDraftId(draftId);
+      await policyFormationService.downloadDraftPdf(draftId);
+      toast.success("Policy PDF downloaded successfully.");
+    } catch (err: any) {
+      console.error("Failed to download draft PDF:", err);
+      toast.error(err?.response?.data?.detail || "Failed to download policy PDF.");
+    } finally {
+      setDownloadingDraftId(null);
     }
   };
 
@@ -549,16 +568,26 @@ export function PolicyFormationLanding({
                       </h3>
                     </div>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteDraft(draft.id);
-                      }}
-                      className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-destructive/10 transition-colors cursor-pointer"
-                      title="Delete draft"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => handleDownloadDraftPdf(draft.id, e)}
+                        disabled={downloadingDraftId === draft.id}
+                        className="text-muted-foreground hover:text-primary p-1 rounded-md hover:bg-primary/10 transition-colors cursor-pointer"
+                        title="Download PDF"
+                      >
+                        <Download className={cn("h-3.5 w-3.5", downloadingDraftId === draft.id && "animate-bounce text-primary")} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDraft(draft.id);
+                        }}
+                        className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-destructive/10 transition-colors cursor-pointer"
+                        title="Delete draft"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
@@ -743,65 +772,17 @@ export function PolicyFormationLanding({
         )}
       </section>
 
-      {/* ─── 4. STAGE 3 PREVIEW MODAL FOR "CREATE SPECIFIC POLICY" ─────────── */}
-      <Dialog open={isSpecificPolicyModalOpen} onOpenChange={setIsSpecificPolicyModalOpen}>
-        <DialogContent className="sm:max-w-md border-border/60 bg-card">
-          <DialogHeader className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20">
-                <FilePlus className="h-4 w-4" />
-              </div>
-              <DialogTitle className="text-base font-bold text-foreground">
-                Create a Specific Policy
-              </DialogTitle>
-            </div>
-            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-              The individual policy builder provides interactive template-based drafting with real-time statutory regulatory citations and clause-level validation.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3 my-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Rollout Stage</span>
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/25 font-semibold text-[10px]">
-                Stage 3 Feature (Upcoming)
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Active Workspace</span>
-              <span className="font-semibold text-foreground truncate max-w-[200px]">
-                {organizationName}
-              </span>
-            </div>
-            <div className="text-[11px] text-muted-foreground border-t border-border/40 pt-2.5 flex items-start gap-1.5">
-              <Info className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-              <span>
-                Individual policy generation and the AI drafting editor are scheduled for Stage 3 &amp; 4. Use the Assessment Wizard to define your baseline first.
-              </span>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Link
-              href="/policies"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "text-xs cursor-pointer border-border"
-              )}
-            >
-              <BookOpen className="h-3.5 w-3.5 mr-1.5" />
-              Existing Policies
-            </Link>
-            <Button
-              size="sm"
-              onClick={() => setIsSpecificPolicyModalOpen(false)}
-              className="text-xs cursor-pointer"
-            >
-              Understood
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* ─── 4. FUNCTIONAL "CREATE SPECIFIC POLICY" MODAL ────────────────── */}
+      <CreateSpecificPolicyModal
+        isOpen={isSpecificPolicyModalOpen}
+        onOpenChange={setIsSpecificPolicyModalOpen}
+        organizationId={organizationId}
+        organizationName={organizationName}
+        onSuccess={(draft) => {
+          fetchDrafts();
+          handleOpenDraft(draft.id);
+        }}
+      />
     </div>
   );
 }

@@ -39,6 +39,7 @@ import {
   UserCheck,
   Lock,
   Unlock,
+  Download,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,8 @@ export function PolicyDraftEditorView({
 
   const [isRetryingAi, setIsRetryingAi] = useState(false);
   const [isBranchingRevision, setIsBranchingRevision] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [downloadingVersion, setDownloadingVersion] = useState<number | null>(null);
 
   // Right Drawer Tab State
   const [showRightDrawer, setShowRightDrawer] = useState(true);
@@ -517,6 +520,39 @@ export function PolicyDraftEditorView({
     }
   };
 
+  // Export Print-Ready Policy PDF (Draft watermark, Published metadata, or Historical Snapshot)
+  const handleDownloadPdf = async (historicalVer?: number) => {
+    if (!draft || isDownloadingPdf) return;
+
+    try {
+      setIsDownloadingPdf(true);
+      if (historicalVer !== undefined) {
+        setDownloadingVersion(historicalVer);
+      } else {
+        setDownloadingVersion(null);
+      }
+
+      // If downloading current active draft and there are unsaved changes, persist them first
+      if (historicalVer === undefined && hasUnsavedChanges && !isLocked) {
+        toast.info("Saving draft changes before generating PDF...");
+        await handleSaveDraft();
+      }
+
+      await policyFormationService.downloadDraftPdf(draft.id, historicalVer);
+      toast.success(
+        historicalVer !== undefined
+          ? `Historical snapshot v${historicalVer} PDF downloaded successfully.`
+          : `Policy PDF downloaded successfully (${draft.status === "PUBLISHED" ? "Published" : "Draft"}).`
+      );
+    } catch (err: any) {
+      console.error("Failed to download policy PDF:", err);
+      toast.error(err?.response?.data?.detail || "Failed to download policy PDF.");
+    } finally {
+      setIsDownloadingPdf(false);
+      setDownloadingVersion(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[450px] space-y-4">
@@ -677,6 +713,18 @@ export function PolicyDraftEditorView({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Download PDF Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleDownloadPdf()}
+            disabled={isDownloadingPdf || isSaving}
+            className="text-xs gap-1.5 cursor-pointer border-border hover:bg-muted font-medium"
+          >
+            <Download className={cn("h-3.5 w-3.5 text-primary", isDownloadingPdf && downloadingVersion === null && "animate-bounce")} />
+            {isDownloadingPdf && downloadingVersion === null ? "Exporting PDF..." : "Download PDF"}
+          </Button>
+
           {/* History Button */}
           <Button
             variant="outline"
@@ -1863,6 +1911,17 @@ export function PolicyDraftEditorView({
                     Last modified {new Date(draft.updated_at).toLocaleString()}
                   </span>
                 </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-7 text-primary hover:bg-primary/10 gap-1"
+                  disabled={isDownloadingPdf}
+                  onClick={() => handleDownloadPdf()}
+                >
+                  <Download className="h-3 w-3" />
+                  {isDownloadingPdf && downloadingVersion === null ? "Exporting..." : "Download PDF"}
+                </Button>
               </div>
 
               {/* Historical Snapshots */}
@@ -1887,6 +1946,16 @@ export function PolicyDraftEditorView({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-7 text-muted-foreground hover:text-foreground gap-1"
+                        disabled={isDownloadingPdf}
+                        onClick={() => handleDownloadPdf(snap.version)}
+                      >
+                        <Download className="h-3 w-3" />
+                        {isDownloadingPdf && downloadingVersion === snap.version ? "Exporting..." : "Download PDF"}
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

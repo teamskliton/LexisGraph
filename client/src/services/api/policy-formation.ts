@@ -283,6 +283,19 @@ export const policyFormationService = {
   },
 
   /**
+   * Create an individual policy draft directly without completing an assessment
+   */
+  createDirectDraft: async (
+    data: PolicyDirectDraftCreateRequest
+  ): Promise<PolicyDraft> => {
+    const response = await api.post<PolicyDraft>(
+      "/policy-formation/drafts/direct",
+      data
+    );
+    return response.data;
+  },
+
+  /**
    * List all policy drafts in active workspace
    */
   listDrafts: async (): Promise<PolicyDraftListItem[]> => {
@@ -488,6 +501,46 @@ export const policyFormationService = {
     );
     return response.data;
   },
+
+  /**
+   * Export print-ready compliance policy PDF (draft watermark, published metadata, or historical snapshot)
+   */
+  downloadDraftPdf: async (
+    draftId: string,
+    version?: number,
+    suggestedFilename?: string
+  ): Promise<void> => {
+    const url =
+      version !== undefined
+        ? `/policy-formation/drafts/${draftId}/pdf?version=${version}`
+        : `/policy-formation/drafts/${draftId}/pdf`;
+
+    const response = await api.get(url, {
+      responseType: "blob",
+    });
+
+    let filename = suggestedFilename;
+    const disposition = response.headers["content-disposition"];
+    if (disposition) {
+      const match = disposition.match(/filename=["']?([^"';]+)["']?/);
+      if (match && match[1]) {
+        filename = match[1].trim();
+      }
+    }
+    if (!filename) {
+      filename = `policy_${version ? `v${version}` : "draft"}.pdf`;
+    }
+
+    const blob = new Blob([response.data], { type: "application/pdf" });
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  },
 };
 
 
@@ -609,12 +662,26 @@ export interface PolicyDraftMetadataProperties {
   [key: string]: any;
 }
 
+export interface PolicyDirectDraftCreateRequest {
+  title: string;
+  category: string;
+  purpose: string;
+  scope_type: "ORGANIZATION" | "BRANCH" | "DEPARTMENT" | string;
+  branch_name?: string | null;
+  department_name?: string | null;
+  primary_jurisdiction?: string;
+  owner_role?: string;
+  review_cadence?: string;
+  specific_context?: string | null;
+  linked_regulations?: string[];
+}
+
 export interface PolicyDraft {
   id: string;
   organization_id: string;
-  assessment_id: string;
-  analysis_id: string;
-  analysis_version: number;
+  assessment_id?: string | null;
+  analysis_id?: string | null;
+  analysis_version?: number | null;
   need_id: string;
   created_by?: string | null;
   title: string;
