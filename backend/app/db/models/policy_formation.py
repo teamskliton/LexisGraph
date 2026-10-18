@@ -251,23 +251,23 @@ class PolicyDraft(Base):
         index=True,
     )
 
-    assessment_id: Mapped[uuid.UUID] = mapped_column(
+    assessment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organization_assessments.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
-    analysis_id: Mapped[uuid.UUID] = mapped_column(
+    analysis_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("policy_needs_analyses.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
-    analysis_version: Mapped[int] = mapped_column(
+    analysis_version: Mapped[Optional[int]] = mapped_column(
         Integer,
-        nullable=False,
+        nullable=True,
         default=1,
     )
 
