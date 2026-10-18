@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import and_, desc, select
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.core.dependencies import get_current_user
 from app.core.workspace_context import WorkspaceContext, get_active_workspace_context
 from app.db.models.document import Document, DocumentType
+from app.db.models.organization import Organization
 from app.db.models.policy_formation import (
     OrganizationAssessment,
     PolicyNeedsAnalysis,
@@ -26,6 +28,7 @@ from app.db.models.policy_formation import (
     PolicyApprovalAudit,
 )
 from app.db.models.user import User
+from app.services.policy_pdf_service import generate_policy_pdf
 from app.db.session import get_db
 from app.schemas.policy_formation import (
     AssessmentAnswers,
@@ -36,6 +39,7 @@ from app.schemas.policy_formation import (
     PolicyNeedsAnalysisResponse,
     UpdateDecisionsRequest,
     PolicyDraftCreateRequest,
+    PolicyDirectDraftCreateRequest,
     PolicyDraftUpdateRequest,
     PolicyDraftRegenerateSectionRequest,
     PolicyDraftResponse,
@@ -649,6 +653,50 @@ def create_or_get_draft(
         )
 
 
+@router.post("/drafts/direct", response_model=PolicyDraftResponse, status_code=status.HTTP_201_CREATED, summary="Create an individual policy draft directly")
+def create_direct_draft(
+    payload: PolicyDirectDraftCreateRequest,
+    db: Session = Depends(get_db),
+    ws: WorkspaceContext = Depends(get_active_workspace_context),
+) -> PolicyDraftResponse:
+    """
+    Create an individual policy draft directly without requiring a completed assessment.
+    Validates scope, attaches verified statutory grounding, and persists a PolicyDraft.
+    """
+    try:
+        draft = PolicyFormationAnalysisService.create_direct_draft(
+            title=payload.title,
+            category=payload.category,
+            purpose=payload.purpose,
+            scope_type=payload.scope_type,
+            branch_name=payload.branch_name,
+            department_name=payload.department_name,
+            primary_jurisdiction=payload.primary_jurisdiction,
+            owner_role=payload.owner_role,
+            review_cadence=payload.review_cadence,
+            specific_context=payload.specific_context,
+            linked_regulations=payload.linked_regulations,
+            user_id=ws.user.id,
+            db=db,
+            ws=ws,
+        )
+        return PolicyDraftResponse.model_validate(draft)
+    except HTTPException:
+        raise
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(val_err),
+        )
+    except Exception as exc:
+        logger.exception("Unexpected error creating direct policy draft: %s", exc)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while generating the policy draft. Please try again.",
+        )
+
+
 @router.get("/drafts", response_model=List[PolicyDraftListItem], summary="List all policy drafts in active workspace")
 def list_drafts(
     db: Session = Depends(get_db),
@@ -1022,6 +1070,144 @@ def retry_draft_ai_generation(
         return PolicyDraftResponse.model_validate(updated)
     except ValueError as val_err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
+
+
+@router.get(
+    "/drafts/{draft_id}/pdf",
+    summary="Download Policy PDF (Draft, Historical Version, or Published)",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "Returns print-ready PDF binary stream",
+        },
+        404: {"description": "Draft or requested version snapshot not found"},
+        403: {"description": "Workspace access denied"},
+    },
+)
+def export_policy_draft_pdf(
+    draft_id: uuid.UUID,
+    version: Optional[int] = Query(None, description="Optional historical version number"),
+    db: Session = Depends(get_db),
+    ws: WorkspaceContext = Depends(get_active_workspace_context),
+) -> Response:
+    """
+    Export an authoritative, print-ready compliance policy PDF for a policy draft.
+    Supports:
+    - Active draft policy (labeled with prominent DRAFT watermark banner).
+    - Published policy (with complete verification metadata, effective date, and content hash).
+    - Historical version snapshots retrieved from draft history.
+    Enforces strict multi-tenant workspace isolation.
+    """
+    draft = _verify_draft_access(draft_id, db, ws)
+
+    # Resolve organization name
+    org_name = "LexisGraph Enterprise"
+    if ws.organization_id:
+        org = db.get(Organization, ws.organization_id)
+        if org and org.name:
+            org_name = org.name
+
+    target_data: Dict[str, Any]
+    target_version: Optional[int] = None
+
+    if version is not None and version != draft.version:
+        # User requested an explicit historical version snapshot
+        history_list = draft.history or []
+        snapshot = None
+        for item in history_list:
+            if isinstance(item, dict) and item.get("version") == version:
+                snapshot = item
+                break
+
+        if not snapshot:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Historical version v{version} not found for policy draft.",
+            )
+
+        target_data = {
+            "title": snapshot.get("title") or draft.title,
+            "status": snapshot.get("status") or draft.status,
+            "version": snapshot.get("version", version),
+            "sections": snapshot.get("sections") or [],
+            "metadata_properties": snapshot.get("metadata_properties") or draft.metadata_properties or {},
+            "published_at": draft.published_at.isoformat() if draft.published_at else None,
+            "effective_date": draft.effective_date.isoformat() if draft.effective_date else None,
+        }
+        target_version = version
+    else:
+        # Current active draft or published policy
+        target_data = {
+            "title": draft.title,
+            "status": draft.status,
+            "version": draft.version,
+            "sections": draft.sections or [],
+            "metadata_properties": draft.metadata_properties or {},
+            "published_at": draft.published_at.isoformat() if draft.published_at else None,
+            "effective_date": draft.effective_date.isoformat() if draft.effective_date else None,
+            "content_hash": draft.content_hash,
+        }
+        target_version = draft.version
+
+        # If approved or published, enrich with approval audit or Document record
+        if draft.status in ("APPROVED", "PUBLISHED"):
+            # Fetch latest approval audit for genuine approver info
+            approval_audit = (
+                db.query(PolicyApprovalAudit)
+                .filter(
+                    PolicyApprovalAudit.draft_id == draft.id,
+                    PolicyApprovalAudit.action == "POLICY_APPROVED",
+                )
+                .order_by(desc(PolicyApprovalAudit.created_at))
+                .first()
+            )
+            if approval_audit:
+                target_data["approved_at"] = approval_audit.created_at
+                target_data["approved_by"] = approval_audit.actor_name
+
+            # If published policy Document exists, enrich with publication metadata
+            if draft.published_policy_id:
+                doc = db.get(Document, draft.published_policy_id)
+                if doc:
+                    if getattr(doc, "effective_date", None):
+                        target_data["effective_date"] = doc.effective_date
+                    checksum_val = getattr(doc, "checksum", None)
+                    if checksum_val:
+                        target_data["content_hash"] = checksum_val
+                    if getattr(doc, "next_review_date", None):
+                        target_data["next_review_date"] = doc.next_review_date
+
+    try:
+        pdf_bytes = generate_policy_pdf(
+            policy_data=target_data,
+            organization_name=org_name,
+            historical_version=target_version if (version is not None and version != draft.version) else None,
+        )
+    except Exception as exc:
+        logger.exception("Failed to generate policy PDF for draft %s: %s", draft_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate policy PDF. Please verify policy content structure.",
+        )
+
+    # Sanitize title for filename
+    clean_title = re.sub(r"[^\w\s-]", "", target_data.get("title", "Policy")).strip()
+    clean_title = re.sub(r"[\s_-]+", "_", clean_title) or "Policy"
+    v_tag = f"v{target_version}" if target_version else "draft"
+    status_tag = "published" if draft.status == "PUBLISHED" else ("hist" if (version is not None and version != draft.version) else "draft")
+    safe_filename = f"{clean_title}_{v_tag}_{status_tag}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 
