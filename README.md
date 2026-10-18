@@ -211,21 +211,50 @@ Assess ──> Analyze ──> Draft ──> Review ──> Approve ──> Publ
 
 ---
 
+## Direct Policy Formation ("Create a Specific Policy")
+
+In addition to the comprehensive 6-step organizational assessment wizard, LexisGraph supports an autonomous **Direct Policy Creation** workflow:
+
+- **Assessment-Independent Drafting**: Enables compliance and legal teams with predetermined policy requirements to immediately draft targeted policies without completing a full corporate assessment or needs analysis.
+- **Configurable Scope & Context**: Full control over organizational level (`organization`, `branch`, `department`), target jurisdiction (India, EU, US, UK, Singapore, Global), policy owner role, and review cadence.
+- **Contextual Knowledge Grounding**: Prompts users for specific operational details, risk mitigations, and compliance nuances, automatically incorporating relevant statutory provisions and templates into the generated draft.
+- **Unified Policy Lifecycle Integration**: Policies created via the direct workflow immediately inherit the complete editor, section regeneration, review queues, version snapshots, cryptographic approvals, and PDF export capabilities.
+
+---
+
+## Professional Compliance PDF Export Engine
+
+LexisGraph incorporates an enterprise-grade document rendering engine built on ReportLab, purpose-engineered for audit-ready compliance policy documentation:
+
+- **Two-Pass `PolicyNumberedCanvas`**: Computes accurate dynamic total page counts (`"Page X of Y"`), generating running headers and footers with policy titles, generation timestamps, and tenant document identifiers across multi-page layouts.
+- **Dynamic Status Watermark Banners**: Visual status banners reflecting exact lifecycle states:
+  - `DRAFT — NOT APPROVED` (Crimson `#DC2626`)
+  - `UNDER REVIEW — PENDING APPROVAL` (Royal Blue `#2563EB`)
+  - `APPROVED POLICY` (Purple `#7C3AED`)
+  - `OFFICIAL PUBLISHED COMPLIANCE POLICY` (Emerald `#059669`)
+  - `(HISTORICAL SNAPSHOT: v{N})` indicators for point-in-time version audits
+- **Automated Table of Contents**: Compact two-column table of contents dynamically generated for structured policies containing three or more sections.
+- **Audit Metadata & Citations**: Formats policy metadata tables, section hierarchies with `keepWithNext` orphan-prevention, statutory references, and legal compliance disclaimers.
+- **Point-in-Time Version Exports**: Supports downloading both the current working draft and historical version snapshots via `GET /api/v1/policy-formation/drafts/{draft_id}/pdf?version={version_number}`.
+- **Client Integration**: Seamless one-click download buttons embedded within the Policy Editor toolbar, Version History modal, and Policy Formation cards with progress feedback.
+
+---
+
 ## Testing & Quality Assurance
 
-### Comprehensive Test Suites (75+ Automated Tests)
-LexisGraph enforces end-to-end test coverage across all compliance, policy formation, and workspace isolation boundaries:
+### Comprehensive Test Suites (94 Automated Tests)
+LexisGraph enforces end-to-end test coverage across all compliance, policy formation, direct drafting, PDF export, and workspace isolation boundaries:
 
 ```powershell
 cd backend
 
-# Run the complete Policy Formation suite (Stages 1–5)
-.\venv\Scripts\python.exe -m unittest tests/test_policy_formation_assessment.py tests/test_policy_needs_analysis.py tests/test_policy_drafting.py tests/test_policy_approval_publishing.py -v
+# Run the complete Policy Formation suite (Stages 1–5, Direct Drafting, PDF Export)
+.\venv\Scripts\python.exe -m unittest tests/test_policy_formation_assessment.py tests/test_policy_needs_analysis.py tests/test_policy_drafting.py tests/test_policy_approval_publishing.py tests/test_policy_direct_drafting.py tests/test_policy_pdf_export.py -v
 
 # Run the Workspace Isolation & Multitenancy suite
 .\venv\Scripts\python.exe -m unittest tests/test_workspace_isolation.py -v
 
-# Run all backend tests via pytest
+# Run all 94 backend tests via pytest
 .\venv\Scripts\pytest.exe
 ```
 
@@ -248,13 +277,15 @@ npm run lint
 ## Core Platform Capabilities
 
 1. **Autonomous Policy Formation Lifecycle**: End-to-end 7-step governance workflow from organizational assessment to grounded AI drafting, cryptographic approval hashing, and publication into the active Policies repository.
-2. **Multi-Tenant RBAC Workspaces**: Role-based access control (Admin, Compliance Analyst, Legal Analyst, Reviewer, Organization Admin) with strictly isolated tenant boundaries and audit logs.
-3. **Automated Document Ingestion & Storage**: Safe upload and parsing of internal policy documents and global statutory regulations with SHA-256 deduplication and atomic rollbacks.
-4. **GraphRAG Compliance Scoring**: Evaluates compliance alignment (`compliant`, `partial`, `gap`) using dense vector similarity (Qdrant) combined with interconnected graph context (Neo4j).
-5. **Remediation & Evidence Management**: Corrective action tracking, evidence document verification, auditor approval cycles, and chronological compliance health timelines.
-6. **Interactive Knowledge Graph Canvas**: Visual graph explorer mapping policies, statutory regulations, legal entities, clauses, and cross-document dependencies.
-7. **Conversational AI Legal Assistant**: Grounded legal query interface citing specific statutory provisions and policy clauses with confidence metrics.
-8. **Automated Policy Lifecycle Engine**: Effective date scheduling (`PENDING_EFFECTIVE` to `ACTIVE`), review cadence reminders, and automatic version superseding.
+2. **Direct Standalone Policy Drafting**: On-demand policy creation for targeted organizational, branch, or department scopes with statutory grounding and zero assessment prerequisites.
+3. **Audit-Ready PDF Export Engine**: Two-pass ReportLab document generation with status watermark banners, automated Table of Contents, metadata summaries, and historical version snapshots.
+4. **Multi-Tenant RBAC Workspaces**: Role-based access control (Admin, Compliance Analyst, Legal Analyst, Reviewer, Organization Admin) with strictly isolated tenant boundaries and audit logs.
+5. **Automated Document Ingestion & Storage**: Safe upload and parsing of internal policy documents and global statutory regulations with SHA-256 deduplication and atomic rollbacks.
+6. **GraphRAG Compliance Scoring**: Evaluates compliance alignment (`compliant`, `partial`, `gap`) using dense vector similarity (Qdrant) combined with interconnected graph context (Neo4j).
+7. **Remediation & Evidence Management**: Corrective action tracking, evidence document verification, auditor approval cycles, and chronological compliance health timelines.
+8. **Interactive Knowledge Graph Canvas**: Visual graph explorer mapping policies, statutory regulations, legal entities, clauses, and cross-document dependencies.
+9. **Conversational AI Legal Assistant**: Grounded legal query interface citing specific statutory provisions and policy clauses with confidence metrics.
+10. **Automated Policy Lifecycle Engine**: Effective date scheduling (`PENDING_EFFECTIVE` to `ACTIVE`), review cadence reminders, and automatic version superseding.
 
 ---
 
