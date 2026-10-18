@@ -217,6 +217,21 @@ class PolicyDraftCreateRequest(BaseModel):
     force_preliminary: Optional[bool] = False  # Set to True when drafting from REQUIRES_VERIFICATION
 
 
+class PolicyDirectDraftCreateRequest(BaseModel):
+    """Payload to create an individual policy draft directly without completing an assessment."""
+    title: str = Field(..., min_length=3, max_length=255)
+    category: str = Field(..., min_length=2, max_length=100)
+    purpose: str = Field(..., min_length=5, max_length=2000)
+    scope_type: str = Field("ORGANIZATION", pattern="^(ORGANIZATION|BRANCH|DEPARTMENT)$")
+    branch_name: Optional[str] = Field(None, max_length=150)
+    department_name: Optional[str] = Field(None, max_length=150)
+    primary_jurisdiction: Optional[str] = Field("India", max_length=100)
+    owner_role: Optional[str] = Field("Compliance Officer", max_length=150)
+    review_cadence: Optional[str] = Field("Annual", max_length=50)
+    specific_context: Optional[str] = Field(None, max_length=3000)
+    linked_regulations: Optional[List[str]] = Field(default_factory=list)
+
+
 class PolicyDraftUpdateRequest(BaseModel):
     title: Optional[str] = None
     status: Optional[str] = None  # DRAFTING, DRAFT_SAVED, NEEDS_VERIFICATION, READY_FOR_REVIEW
@@ -235,9 +250,9 @@ class PolicyDraftRegenerateSectionRequest(BaseModel):
 class PolicyDraftResponse(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
-    assessment_id: uuid.UUID
-    analysis_id: uuid.UUID
-    analysis_version: int
+    assessment_id: Optional[uuid.UUID] = None
+    analysis_id: Optional[uuid.UUID] = None
+    analysis_version: Optional[int] = 1
     need_id: str
     created_by: Optional[uuid.UUID] = None
     title: str
@@ -273,8 +288,8 @@ class PolicyDraftResponse(BaseModel):
 class PolicyDraftListItem(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
-    assessment_id: uuid.UUID
-    analysis_id: uuid.UUID
+    assessment_id: Optional[uuid.UUID] = None
+    analysis_id: Optional[uuid.UUID] = None
     need_id: str
     title: str
     status: str
