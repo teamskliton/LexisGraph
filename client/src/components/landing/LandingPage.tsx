@@ -69,7 +69,7 @@ export default function LandingPage() {
       {/* ==================================================================== */}
       {/* 1. STICKY NAVBAR                                                     */}
       {/* ==================================================================== */}
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-card/90 backdrop-blur-xl transition-colors">
+      <header className="sticky top-0 z-50 w-full border-b border-[#E2E8F0] dark:border-border bg-white/95 dark:bg-card/90 backdrop-blur-md shadow-[0_1px_3px_0_rgba(15,23,42,0.04)] transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo with Node Icon */}
           <Link
@@ -79,72 +79,72 @@ export default function LandingPage() {
           >
             <div className="relative flex items-center justify-center">
               <BrandLogo size={30} rounded="rounded-lg" />
-              <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary border border-card flex items-center justify-center text-[8px] text-primary-foreground">
+              <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#0A61C9] dark:bg-primary border border-white dark:border-card flex items-center justify-center text-[8px] text-white dark:text-primary-foreground shadow-2xs">
                 <Boxes className="w-2 h-2" />
               </div>
             </div>
-            <span className="text-lg font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+            <span className="text-lg font-bold tracking-tight text-[#0F172A] dark:text-foreground group-hover:text-[#0A61C9] dark:group-hover:text-primary transition-colors">
               LexisGraph
             </span>
           </Link>
 
           {/* Nav links (Desktop) */}
-          <nav className="hidden md:flex items-center gap-1.5" aria-label="Main Navigation">
+          <nav className="hidden md:flex items-center gap-1 sm:gap-1.5" aria-label="Main Navigation">
             <a
               href="#hero"
-              className="px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md transition-colors"
+              className="px-3.5 py-2 text-xs sm:text-[13px] font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated active:text-[#0A61C9] focus-visible:text-[#0A61C9] rounded-lg transition-all duration-150"
             >
               Product
             </a>
             <a
               href="#how-it-works"
-              className="px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md transition-colors"
+              className="px-3.5 py-2 text-xs sm:text-[13px] font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated active:text-[#0A61C9] focus-visible:text-[#0A61C9] rounded-lg transition-all duration-150"
             >
               How It Works
             </a>
             <a
               href="#capabilities"
-              className="px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md transition-colors"
+              className="px-3.5 py-2 text-xs sm:text-[13px] font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated active:text-[#0A61C9] focus-visible:text-[#0A61C9] rounded-lg transition-all duration-150"
             >
               Capabilities
             </a>
             <a
               href="#security"
-              className="px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md transition-colors"
+              className="px-3.5 py-2 text-xs sm:text-[13px] font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated active:text-[#0A61C9] focus-visible:text-[#0A61C9] rounded-lg transition-all duration-150"
             >
               Security
             </a>
             <a
               href="#contrast"
-              className="px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md transition-colors"
+              className="px-3.5 py-2 text-xs sm:text-[13px] font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated active:text-[#0A61C9] focus-visible:text-[#0A61C9] rounded-lg transition-all duration-150"
             >
               About
             </a>
           </nav>
 
           {/* Right Controls: Theme Toggle, Sign In, Get Started */}
-          <div className="hidden md:flex items-center gap-3">
-            <ThemeToggle className="text-muted-foreground hover:text-foreground hover:bg-surface-elevated" />
+          <div className="hidden md:flex items-center gap-2.5">
+            <ThemeToggle className="text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-colors" />
             <Link
               href="/login"
-              className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="px-3.5 py-2 text-xs sm:text-[13px] font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-all duration-150"
             >
               Sign In
             </Link>
             <Link
               href="/register"
-              className="px-4 py-2 text-xs font-semibold bg-primary hover:bg-primary-hover text-primary-foreground hover:text-primary-foreground hover:underline underline-offset-4 border border-primary rounded-md transition-colors duration-150"
+              className="px-4 py-2 text-xs sm:text-[13px] font-semibold bg-[#0A61C9] hover:bg-[#084FA5] active:bg-[#063D80] text-white dark:bg-primary dark:hover:bg-primary-hover dark:text-primary-foreground shadow-xs hover:shadow-sm rounded-lg transition-all duration-150 flex items-center justify-center"
             >
               Get Started
             </Link>
           </div>
 
           {/* Mobile hamburger button */}
-          <div className="flex md:hidden items-center gap-2">
-            <ThemeToggle className="text-muted-foreground hover:text-foreground hover:bg-surface-elevated" />
+          <div className="flex md:hidden items-center gap-1.5">
+            <ThemeToggle className="text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-colors" />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-elevated focus:outline-none"
+              className="p-2 rounded-lg text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated focus:outline-none transition-colors"
               aria-label="Toggle Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -154,52 +154,54 @@ export default function LandingPage() {
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-b border-border bg-card px-4 pt-2 pb-5 space-y-2">
+          <div className="md:hidden border-b border-[#E2E8F0] dark:border-border bg-white dark:bg-card px-4 pt-2 pb-5 space-y-1.5 shadow-md">
             <a
               href="#hero"
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md"
+              className="block px-3.5 py-2 text-sm font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-colors"
             >
               Product
             </a>
             <a
               href="#how-it-works"
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md"
+              className="block px-3.5 py-2 text-sm font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-colors"
             >
               How It Works
             </a>
             <a
               href="#capabilities"
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md"
+              className="block px-3.5 py-2 text-sm font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-colors"
             >
               Capabilities
             </a>
             <a
               href="#security"
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md"
+              className="block px-3.5 py-2 text-sm font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-colors"
             >
               Security
             </a>
             <a
               href="#contrast"
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-surface-elevated rounded-md"
+              className="block px-3.5 py-2 text-sm font-medium text-[#334155] dark:text-muted-foreground hover:text-[#0A61C9] dark:hover:text-foreground hover:bg-[#EAF3FF]/80 dark:hover:bg-surface-elevated rounded-lg transition-colors"
             >
               About
             </a>
-            <div className="pt-3 border-t border-border flex items-center gap-3">
+            <div className="pt-3 border-t border-[#E2E8F0] dark:border-border flex items-center gap-3">
               <Link
                 href="/login"
-                className="flex-1 py-2 text-center text-xs font-semibold text-foreground border border-border hover:bg-surface-elevated rounded-md"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex-1 py-2.5 text-center text-xs font-semibold text-[#0F172A] dark:text-foreground border border-[#E2E8F0] dark:border-border hover:bg-[#EAF3FF]/60 dark:hover:bg-surface-elevated rounded-lg transition-colors"
               >
                 Sign In
               </Link>
               <Link
                 href="/register"
-                className="flex-1 py-2 text-center text-xs font-semibold bg-primary hover:bg-primary-hover text-primary-foreground hover:text-primary-foreground border border-primary rounded-md"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex-1 py-2.5 text-center text-xs font-semibold bg-[#0A61C9] hover:bg-[#084FA5] active:bg-[#063D80] text-white dark:bg-primary dark:hover:bg-primary-hover dark:text-primary-foreground rounded-lg transition-colors shadow-xs"
               >
                 Get Started
               </Link>
