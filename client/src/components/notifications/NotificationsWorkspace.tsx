@@ -159,7 +159,7 @@ export function NotificationsWorkspace() {
   const renderIcon = (type: string) => {
     switch (type) {
       case "FINDING_SUBMITTED_FOR_REVIEW":
-        return <Send className="h-4 w-4 text-sky-500 shrink-0" />;
+        return <Send className="h-4 w-4 text-[#0A61C9] dark:text-sky-500 shrink-0" />;
       case "FINDING_RESOLVED":
         return <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />;
       case "FINDING_REJECTED":
@@ -171,7 +171,7 @@ export function NotificationsWorkspace() {
       case "FINDING_COMMENTED":
       case "FINDING_COMMENT_REPLIED":
       case "FINDING_MENTIONED":
-        return <MessageSquare className="h-4 w-4 text-blue-500 shrink-0" />;
+        return <MessageSquare className="h-4 w-4 text-[#0A61C9] dark:text-blue-500 shrink-0" />;
       case "FINDING_COMMENT_RESOLVED":
         return <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />;
       case "FINDING_REOPENED":

@@ -229,7 +229,7 @@ export function ConversationSidebar({
                   }}
                   className="w-full text-left px-2.5 py-1.5 hover:bg-muted rounded-lg flex items-center gap-2"
                 >
-                  <Download className="h-3.5 w-3.5 text-sky-500" />
+                  <Download className="h-3.5 w-3.5 text-[#0A61C9] dark:text-sky-500" />
                   <span>Export Markdown</span>
                 </button>
 

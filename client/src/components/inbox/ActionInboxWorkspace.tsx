@@ -235,10 +235,10 @@ export function ActionInboxWorkspace() {
       case "REMEDIATION_REQUIRED":
         return <ShieldAlert className="h-4 w-4 text-amber-500" />;
       case "REVIEW_REQUESTED":
-        return <SendHorizontal className="h-4 w-4 text-sky-500" />;
+        return <SendHorizontal className="h-4 w-4 text-[#0A61C9] dark:text-sky-500" />;
       case "CLARIFICATION_REQUESTED":
       case "MENTION_RESPONSE":
-        return <MessageSquare className="h-4 w-4 text-blue-500" />;
+        return <MessageSquare className="h-4 w-4 text-[#0A61C9] dark:text-blue-500" />;
       case "DEADLINE_APPROACHING":
         return <Clock className="h-4 w-4 text-rose-500" />;
       default:

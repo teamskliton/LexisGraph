@@ -516,7 +516,7 @@ export function FindingAnalyticsDashboard({
                 // Proportional width calculation — 0% for zero count, never full-width!
                 const pct = totalFindings > 0 ? Number(((count / totalFindings) * 100).toFixed(1)) : 0;
 
-                let colorClass = "bg-blue-500";
+                let colorClass = "bg-[#0A61C9] dark:bg-blue-500";
                 if (item.status === "RESOLVED") colorClass = "bg-emerald-500";
                 if (item.status === "REMEDIATION") colorClass = "bg-amber-500";
                 if (item.status === "IN_REVIEW") colorClass = "bg-primary";
@@ -641,8 +641,8 @@ export function FindingAnalyticsDashboard({
 
             {/* Series Legend */}
             <div className="flex items-center gap-3 text-[11px] font-medium">
-              <span className="flex items-center gap-1.5 text-blue-500">
-                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" /> Created
+              <span className="flex items-center gap-1.5 text-[#0A61C9] dark:text-blue-500">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#0A61C9] dark:bg-blue-500 inline-block" /> Created
               </span>
               <span className="flex items-center gap-1.5 text-emerald-500">
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Resolved
@@ -665,7 +665,7 @@ export function FindingAnalyticsDashboard({
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="p-2.5 rounded-xl bg-background border border-border/60">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Created in Period</span>
-                  <span className="text-base font-bold text-blue-500 font-mono">+{createdTotal}</span>
+                  <span className="text-base font-bold text-[#0A61C9] dark:text-blue-500 font-mono">+{createdTotal}</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-background border border-border/60">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Resolved in Period</span>
@@ -695,14 +695,14 @@ export function FindingAnalyticsDashboard({
                         {/* Tooltip on hover */}
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-12 z-20 pointer-events-none bg-popover text-popover-foreground text-[10px] p-1.5 rounded-md shadow-md border border-border whitespace-nowrap">
                           <p className="font-bold">{pt.label}</p>
-                          <p className="text-blue-500">Created: +{pt.created}</p>
+                          <p className="text-[#0A61C9] dark:text-blue-500">Created: +{pt.created}</p>
                           <p className="text-emerald-500">Resolved: +{pt.resolved}</p>
                         </div>
 
                         {/* Dual Bar Pair */}
                         <div className="w-full flex items-end justify-center gap-1 h-32">
                           <div
-                            className="w-1/2 max-w-[14px] bg-blue-500 rounded-t-sm transition-all duration-300 group-hover:brightness-110"
+                            className="w-1/2 max-w-[14px] bg-[#0A61C9] dark:bg-blue-500 rounded-t-sm transition-all duration-300 group-hover:brightness-110"
                             style={{ height: `${createdHeight}%` }}
                           />
                           <div

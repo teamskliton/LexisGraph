@@ -14,7 +14,7 @@ const metricBadgeVariants = cva(
         error:
           "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20 dark:border-rose-500/30",
         info:
-          "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20 dark:border-sky-500/30",
+          "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30",
         neutral:
           "bg-secondary/60 text-secondary-foreground border-border/60 dark:bg-secondary/40",
       },
@@ -34,7 +34,7 @@ const dotVariants: Record<string, string> = {
   success: "bg-emerald-500",
   warning: "bg-amber-500",
   error: "bg-rose-500",
-  info: "bg-sky-500",
+  info: "bg-[#0A61C9] dark:bg-sky-500",
   neutral: "bg-muted-foreground/70",
 };
 

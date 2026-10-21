@@ -81,17 +81,17 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
   };
 
   return (
-    <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+    <div className="w-full bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
       {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E2E8F0] dark:border-slate-800 pb-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+          <h2 className="text-lg font-bold text-[#0F172A] dark:text-slate-100 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-primary" />
             Global Regulation Library
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
             Deduplicated shared repository. Link regulations to{' '}
-            <span className="font-semibold text-slate-200">{organizationName || 'your organization'}</span> without duplicating embeddings or storage.
+            <span className="font-semibold text-foreground dark:text-slate-200">{organizationName || 'your organization'}</span> without duplicating embeddings or storage.
           </p>
         </div>
         <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-xs self-start sm:self-auto">
@@ -101,27 +101,27 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
 
       {/* Search Input */}
       <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+        <Search className="w-4 h-4 text-muted-foreground dark:text-slate-400 absolute left-3 top-3" />
         <Input
           type="text"
           placeholder="Search global regulations (e.g. Code of Wages, DPDP Act, POSH Act)..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-500 text-xs h-10 rounded-xl"
+          className="pl-9 bg-white dark:bg-slate-950 border-[#E2E8F0] dark:border-slate-800 text-[#0F172A] dark:text-slate-200 placeholder:text-muted-foreground dark:placeholder:text-slate-500 text-xs h-10 rounded-xl"
         />
       </div>
 
       {/* Regulations List */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground dark:text-slate-400 gap-2">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
           <span className="text-xs">Searching global regulation library...</span>
         </div>
       ) : regulations.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-slate-800 rounded-xl">
-          <AlertCircle className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-          <p className="text-sm text-slate-300 font-medium">No regulations found</p>
-          <p className="text-xs text-slate-500 mt-1">
+        <div className="text-center py-12 border border-dashed border-[#E2E8F0] dark:border-slate-800 rounded-xl">
+          <AlertCircle className="w-8 h-8 text-muted-foreground dark:text-slate-600 mx-auto mb-2" />
+          <p className="text-sm text-foreground dark:text-slate-300 font-medium">No regulations found</p>
+          <p className="text-xs text-muted-foreground dark:text-slate-500 mt-1">
             {searchQuery ? 'Try adjusting your search criteria.' : 'Upload a regulation document to add it to the global library.'}
           </p>
         </div>
@@ -130,50 +130,50 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
           {regulations.map((reg) => (
             <Card
               key={reg.id}
-              className={`p-4 transition-all duration-200 border bg-slate-950/60 flex flex-col justify-between ${
+              className={`p-4 transition-all duration-200 border bg-white dark:bg-slate-950/60 flex flex-col justify-between ${
                 reg.is_linked
                   ? 'border-primary/40 shadow-lg shadow-primary/5 ring-1 ring-primary/20'
-                  : 'border-slate-800 hover:border-slate-700'
+                  : 'border-[#E2E8F0] dark:border-slate-800 hover:border-[#CBD5E1] dark:hover:border-slate-700'
               }`}
             >
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-100 line-clamp-1">{reg.title}</h3>
+                  <h3 className="text-sm font-semibold text-[#0F172A] dark:text-slate-100 line-clamp-1">{reg.title}</h3>
                   {reg.is_linked ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] shrink-0">
+                    <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] shrink-0">
                       Linked
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-slate-400 border-slate-700 text-[10px] shrink-0">
+                    <Badge variant="outline" className="text-muted-foreground dark:text-slate-400 border-[#E2E8F0] dark:border-slate-700 text-[10px] shrink-0">
                       Available
                     </Badge>
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground dark:text-slate-400">
                   {reg.act_name && (
                     <span className="flex items-center gap-1">
-                      <FileText className="w-3 h-3 text-slate-500" /> {reg.act_name}
+                      <FileText className="w-3 h-3 text-muted-foreground dark:text-slate-500" /> {reg.act_name}
                     </span>
                   )}
                   {reg.version && (
                     <span className="font-mono text-primary">v{reg.version}</span>
                   )}
                   {reg.act_year && (
-                    <span className="text-slate-500 font-mono">({reg.act_year})</span>
+                    <span className="text-muted-foreground dark:text-slate-500 font-mono">({reg.act_year})</span>
                   )}
                   {reg.jurisdiction && (
-                    <span className="text-slate-400">• {reg.jurisdiction}</span>
+                    <span className="text-muted-foreground dark:text-slate-400">• {reg.jurisdiction}</span>
                   )}
                 </div>
 
-                <p className="text-[11px] font-mono text-slate-500 truncate">
+                <p className="text-[11px] font-mono text-muted-foreground dark:text-slate-500 truncate">
                   SHA-256: {reg.document_hash?.slice(0, 16)}...
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/60 mt-3 flex items-center justify-between">
-                <span className="text-[11px] text-slate-400">
+              <div className="pt-4 border-t border-[#E2E8F0] dark:border-slate-800/60 mt-3 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground dark:text-slate-400">
                   {(reg.file_size / 1024).toFixed(0)} KB
                 </span>
                 <Button
@@ -183,7 +183,7 @@ export const RegulationLibraryModal: React.FC<RegulationLibraryModalProps> = ({
                   variant={reg.is_linked ? 'outline' : 'default'}
                   className={`h-8 text-xs font-medium px-3 rounded-lg transition-all ${
                     reg.is_linked
-                      ? 'border-slate-700 text-slate-300 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30'
+                      ? 'border-[#E2E8F0] dark:border-slate-700 text-foreground dark:text-slate-300 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-500/30'
                       : 'bg-primary hover:bg-primary-hover text-primary-foreground shadow-sm'
                   }`}
                 >

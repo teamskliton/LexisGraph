@@ -1128,7 +1128,7 @@ export const AnalysisHistoryTable: React.FC<AnalysisHistoryTableProps> = ({
                 {/* Event 2: Started */}
                 {selectedItem.startedAt && (
                   <div className="relative space-y-0.5">
-                    <div className="absolute -left-6 top-1 h-2.5 w-2.5 rounded-full bg-blue-500 border-2 border-background" />
+                    <div className="absolute -left-6 top-1 h-2.5 w-2.5 rounded-full bg-[#0A61C9] dark:bg-blue-500 border-2 border-background" />
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-foreground">Execution Started</span>
                       <span className="text-[10px] text-muted-foreground font-mono">{formatDateTime(selectedItem.startedAt)}</span>

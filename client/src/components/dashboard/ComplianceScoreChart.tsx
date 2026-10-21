@@ -56,9 +56,9 @@ export const ComplianceScoreChart: React.FC<ComplianceScoreChartProps> = ({
       label: "Good",
       range: "80–89%",
       count: data.good,
-      barColor: "bg-blue-500",
-      textColor: "text-blue-700 dark:text-blue-400",
-      trackColor: "bg-blue-500/10",
+      barColor: "bg-[#0A61C9] dark:bg-blue-500",
+      textColor: "text-[#0A61C9] dark:text-blue-400",
+      trackColor: "bg-[#EAF3FF] dark:bg-blue-500/10",
     },
     {
       label: "Needs Review",

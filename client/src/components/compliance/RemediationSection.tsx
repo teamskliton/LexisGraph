@@ -70,7 +70,7 @@ function deriveRemediationStatusBadge(status?: string, isOverdue?: boolean) {
     case "READY_FOR_REVIEW":
       return {
         label: "READY FOR REVIEW",
-        className: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
+        className: "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/30",
       };
     case "VERIFIED":
       return {
@@ -681,8 +681,8 @@ export function RemediationSection({
 
       {/* Verification & Approval Callouts */}
       {remediation.verification_note && (
-        <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs space-y-1">
-          <span className="font-bold text-sky-600 dark:text-sky-400 block uppercase text-[10px]">
+        <div className="p-3 rounded-xl bg-[#EAF3FF] border border-[#E2E8F0] dark:bg-sky-500/10 dark:border-sky-500/20 text-xs space-y-1">
+          <span className="font-bold text-[#0A61C9] dark:text-sky-400 block uppercase text-[10px]">
             Reviewer Verification Note ({remediation.verifier?.full_name || "Reviewer"})
           </span>
           <p className="text-foreground">{remediation.verification_note}</p>
@@ -730,7 +730,7 @@ export function RemediationSection({
             size="xs"
             onClick={handleSubmitForReview}
             disabled={isMutating}
-            className="h-8 text-xs font-semibold gap-1.5 bg-sky-600 hover:bg-sky-700 text-white cursor-pointer"
+            className="h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
           >
             <SendHorizontal className="h-3.5 w-3.5" />
             <span>Submit for Review</span>
@@ -861,7 +861,7 @@ export function RemediationSection({
                         </Badge>
                       )}
                       {ev.document_id && (
-                        <Badge variant="outline" className="text-[9px] font-medium px-1.5 py-0 bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30">
+                        <Badge variant="outline" className="text-[9px] font-medium px-1.5 py-0 bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/30">
                           <Link2 className="h-2.5 w-2.5 mr-0.5 inline" /> Library Doc
                         </Badge>
                       )}

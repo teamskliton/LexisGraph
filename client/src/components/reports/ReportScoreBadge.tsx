@@ -41,9 +41,9 @@ export const ReportScoreBadge: React.FC<ReportScoreBadgeProps> = ({
   if (numericScore >= 80) {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800 ${className}`}
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 text-xs font-semibold bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800 ${className}`}
       >
-        <ShieldCheck className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+        <ShieldCheck className="h-3.5 w-3.5 text-[#0A61C9] dark:text-blue-400" />
         {showNumericValue && <span className="font-mono">{numericScore}%</span>}
         <span>Good</span>
       </span>

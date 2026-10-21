@@ -33,21 +33,25 @@
   --sidebar:               #FFFFFF;
   --sidebar-foreground:    #0F172A;
   --sidebar-border:        #E2E8F0;
-  --sidebar-primary:       #0284C7;
+  --sidebar-primary:       #0A61C9;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent:        #F1F5F9;
-  --sidebar-accent-foreground: #0284C7;
+  --sidebar-accent:        #EAF3FF;
+  --sidebar-accent-foreground: #0A61C9;
   --sidebar-muted:         #475569;
-  --sidebar-ring:          #0284C7;
+  --sidebar-ring:          #0A61C9;
 
   /* ── Brand & Accents ─────────────────────────────────────────────────────── */
-  /* Primary Accent: #0284C7 */
-  --primary:               #0284C7;
+  /* Primary buttons and links: #0A61C9 */
+  --primary:               #0A61C9;
   --primary-foreground:    #FFFFFF;
-  --primary-hover:         #0369A1;
-  --primary-active:        #075985;
-  --primary-subtle:        rgba(2, 132, 199, 0.08);
-  --primary-muted:         rgba(2, 132, 199, 0.16);
+  --primary-hover:         #084FA5;
+  --primary-active:        #063D80;
+  --primary-subtle:        #EAF3FF;
+  --primary-muted:         rgba(10, 97, 201, 0.16);
+
+  /* Light-blue background tokens */
+  --light-blue:            #EAF3FF;
+  --bg-light-blue:         #EAF3FF;
 
   /* Secondary Surface & Accent: #F1F5F9 & Violet #7C3AED */
   --secondary:             #F1F5F9;
@@ -77,7 +81,7 @@
   --border-muted:          #F1F5F9;
   --input:                 #E2E8F0;
   --input-background:      #FFFFFF;
-  --ring:                  #0284C7;
+  --ring:                  #0A61C9;
 
   /* ── Semantic Compliance Statuses ───────────────────────────────────────── */
   /* Compliant / Success: #15803D */
@@ -104,13 +108,13 @@
   --error:                 #B91C1C;
   --error-foreground:      #FFFFFF;
 
-  --info:                  #0284C7;
+  --info:                  #0A61C9;
   --info-foreground:       #FFFFFF;
-  --info-subtle:           rgba(2, 132, 199, 0.10);
-  --info-border:           #BAE6FD;
+  --info-subtle:           #EAF3FF;
+  --info-border:           #C8E1FF;
 
   /* ── Data & Charts ──────────────────────────────────────────────────────── */
-  --chart-1:               #0284C7;
+  --chart-1:               #0A61C9;
   --chart-2:               #15803D;
   --chart-3:               #A16207;
   --chart-4:               #7C3AED;

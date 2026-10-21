@@ -114,12 +114,12 @@ const NODE_STYLES: Record<
     badge: "REGULATION",
   },
   requirement: {
-    bg: "bg-blue-500/15 dark:bg-blue-500/25",
-    border: "stroke-blue-600 dark:stroke-blue-400",
-    text: "fill-blue-950 dark:fill-blue-100",
-    iconColor: "text-blue-600 dark:text-blue-400",
-    dotColor: "bg-blue-500",
-    glow: "rgba(59, 130, 246, 0.5)",
+    bg: "bg-[#EAF3FF] dark:bg-blue-500/25",
+    border: "stroke-[#0A61C9] dark:stroke-blue-400",
+    text: "fill-slate-900 dark:fill-blue-100",
+    iconColor: "text-[#0A61C9] dark:text-blue-400",
+    dotColor: "bg-[#0A61C9] dark:bg-blue-500",
+    glow: "rgba(10, 97, 201, 0.5)",
     label: "Requirement",
     badge: "REQUIREMENT",
   },
@@ -474,7 +474,7 @@ export function InteractiveGraphCanvas({
             markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-blue-500" />
+            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-[#0A61C9] dark:fill-blue-500" />
           </marker>
           <marker
             id="arrow-has-finding"
@@ -539,7 +539,7 @@ export function InteractiveGraphCanvas({
               strokeColor = "stroke-purple-500/70 dark:stroke-purple-400/60";
               markerId = "url(#arrow-applies-to)";
             } else if (isHasReq) {
-              strokeColor = "stroke-blue-500/70 dark:stroke-blue-400/60";
+              strokeColor = "stroke-[#0A61C9]/70 dark:stroke-blue-400/60";
               markerId = "url(#arrow-has-req)";
             } else if (isHasFinding) {
               strokeColor = "stroke-amber-500/70 dark:stroke-amber-400/60";

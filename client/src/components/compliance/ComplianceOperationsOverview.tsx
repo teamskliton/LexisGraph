@@ -91,7 +91,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     default:
       return {
         label: "OPEN",
-        className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+        className: "bg-[#EAF3FF] text-[#0A61C9] dark:text-blue-400 border-[#E2E8F0] dark:border-blue-500/30",
       };
   }
 }
@@ -304,19 +304,19 @@ export function ComplianceOperationsOverview() {
                   {/* 2. Open Findings */}
                   <Card
                     onClick={() => router.push("/compliance/my-work?view=all&lifecycle_status=OPEN")}
-                    className="border border-blue-500/30 bg-blue-500/[0.03] hover:border-blue-500/60 p-4 rounded-2xl shadow-sm cursor-pointer group transition-all space-y-1.5"
+                    className="border border-[#E2E8F0] dark:border-blue-500/30 bg-[#EAF3FF]/40 dark:bg-blue-500/[0.03] hover:border-[#0A61C9]/60 dark:hover:border-blue-500/60 p-4 rounded-2xl shadow-sm cursor-pointer group transition-all space-y-1.5"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-[#0A61C9] dark:text-blue-400">
                         Open Findings
                       </span>
-                      <ShieldAlert className="h-4 w-4 text-blue-500" />
+                      <ShieldAlert className="h-4 w-4 text-[#0A61C9] dark:text-blue-500" />
                     </div>
                     <div className="flex items-baseline justify-between pt-1">
-                      <span className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400 font-mono">
+                      <span className="text-2xl font-bold tabular-nums text-[#0A61C9] dark:text-blue-400 font-mono">
                         {summary.open_findings}
                       </span>
-                      <ChevronRight className="h-3.5 w-3.5 text-blue-400/50 group-hover:translate-x-0.5 transition-transform" />
+                      <ChevronRight className="h-3.5 w-3.5 text-[#0A61C9]/50 dark:text-blue-400/50 group-hover:translate-x-0.5 transition-transform" />
                     </div>
                     <span className="text-[10px] text-muted-foreground block">
                       of {summary.total_findings} total findings

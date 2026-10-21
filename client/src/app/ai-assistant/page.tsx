@@ -777,7 +777,7 @@ export function AIAssistantContent() {
               <Copy className="h-3.5 w-3.5 mr-2 text-emerald-500" /> Duplicate
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleExportConversation(conv.id)}>
-              <Download className="h-3.5 w-3.5 mr-2 text-sky-500" /> Export Markdown
+              <Download className="h-3.5 w-3.5 mr-2 text-[#0A61C9] dark:text-sky-500" /> Export Markdown
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -970,7 +970,7 @@ export function AIAssistantContent() {
                       <Edit2 className="h-3.5 w-3.5 mr-2 text-primary" /> Rename Title
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleExportConversation(activeConvId)}>
-                      <Download className="h-3.5 w-3.5 mr-2 text-sky-500" /> Export Markdown
+                      <Download className="h-3.5 w-3.5 mr-2 text-[#0A61C9] dark:text-sky-500" /> Export Markdown
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

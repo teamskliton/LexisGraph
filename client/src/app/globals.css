@@ -84,6 +84,7 @@
   --color-primary-active: var(--primary-active);
   --color-primary-subtle: var(--primary-subtle);
   --color-primary-muted: var(--primary-muted);
+  --color-light-blue: var(--light-blue);
 
   --color-accent-subtle: var(--accent-subtle);
   --color-accent-muted: var(--accent-muted);

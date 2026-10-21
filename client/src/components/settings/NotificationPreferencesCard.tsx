@@ -134,10 +134,10 @@ export function NotificationPreferencesCard({
       </div>
 
       {/* Security notice distinction */}
-      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 text-xs">
-        <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-[#EAF3FF] dark:bg-blue-500/10 border border-[#E2E8F0] dark:border-blue-500/20 text-xs">
+        <Info className="w-4 h-4 text-[#0A61C9] dark:text-blue-500 shrink-0 mt-0.5" />
         <div className="space-y-0.5">
-          <span className="font-semibold text-blue-500">
+          <span className="font-semibold text-[#0A61C9] dark:text-blue-500">
             Compliance &amp; Security Distinction
           </span>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -151,7 +151,7 @@ export function NotificationPreferencesCard({
         {/* In-App Notifications Channel */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-foreground border-b border-border/60 pb-2">
-            <Bell className="w-3.5 h-3.5 text-sky-400" />
+            <Bell className="w-3.5 h-3.5 text-[#0A61C9] dark:text-sky-400" />
             <span>In-App Notifications &amp; Popover</span>
           </div>
 

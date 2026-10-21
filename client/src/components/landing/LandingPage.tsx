@@ -937,11 +937,11 @@ export default function LandingPage() {
                           onClick={() => setSelectedGraphNode("pol")}
                           className={`p-3 rounded-xl border transition-colors cursor-pointer ${
                             selectedGraphNode === "pol"
-                              ? "border-secondary bg-secondary/10 text-secondary"
+                              ? "border-accent bg-accent/10 text-accent"
                               : "border-border bg-card text-muted-foreground hover:bg-surface-elevated"
                           }`}
                         >
-                          <span className="text-[10px] text-secondary uppercase block font-mono">Node 3</span>
+                          <span className="text-[10px] text-accent uppercase block font-mono">Node 3</span>
                           <span className="font-bold">Policy</span>
                         </button>
                         <button
@@ -971,7 +971,7 @@ export default function LandingPage() {
                         )}
                         {selectedGraphNode === "pol" && (
                           <p>
-                            <span className="text-secondary font-bold">INSPECTION:</span> Policy DOC-RET-2026 §4.2 · Data Retention & Purge Protocol
+                            <span className="text-accent font-bold">INSPECTION:</span> Policy DOC-RET-2026 §4.2 · Data Retention & Purge Protocol
                           </p>
                         )}
                         {selectedGraphNode === "fnd" && (
@@ -1095,7 +1095,7 @@ export default function LandingPage() {
             <div className="group rounded-xl border border-border bg-card p-6 sm:p-7 flex flex-col justify-between shadow-xs transition-colors duration-150 hover:border-primary/40 hover:bg-surface-elevated">
               <div>
                 <div className="flex items-center justify-between mb-5">
-                  <div className="w-11 h-11 rounded-lg bg-surface-elevated border border-border text-secondary flex items-center justify-center transition-colors">
+                  <div className="w-11 h-11 rounded-lg bg-surface-elevated border border-border text-accent flex items-center justify-center transition-colors">
                     <Users className="w-5 h-5" />
                   </div>
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md bg-surface-elevated border border-border text-muted-foreground">

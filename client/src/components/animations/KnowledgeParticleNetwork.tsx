@@ -87,12 +87,12 @@ const DEFAULT_DARK_LINE_ACCENT: RGB = { r: 56, g: 189, b: 248 };
 
 // Light Mode Palette:
 // - Slate-gray particles: #475569
-// - Sky-blue accents: #0284C7
-// - Muted borders/connections: #CBD5E1 (normal) / #0284C7 (accent)
+// - Primary blue accents: #0A61C9
+// - Muted borders/connections: #E2E8F0 (normal) / #0A61C9 (accent)
 const DEFAULT_LIGHT_PARTICLE: RGB = { r: 71, g: 85, b: 105 };
-const DEFAULT_LIGHT_ACCENT: RGB = { r: 2, g: 132, b: 199 };
-const DEFAULT_LIGHT_LINE_NORMAL: RGB = { r: 203, g: 213, b: 225 };
-const DEFAULT_LIGHT_LINE_ACCENT: RGB = { r: 2, g: 132, b: 199 };
+const DEFAULT_LIGHT_ACCENT: RGB = { r: 10, g: 97, b: 201 };
+const DEFAULT_LIGHT_LINE_NORMAL: RGB = { r: 226, g: 232, b: 240 };
+const DEFAULT_LIGHT_LINE_ACCENT: RGB = { r: 10, g: 97, b: 201 };
 
 const parseColorToRGB = (colorStr?: string, defaultRGB: RGB = { r: 0, g: 0, b: 0 }): RGB => {
   if (!colorStr) return defaultRGB;

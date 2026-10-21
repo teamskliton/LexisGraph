@@ -205,9 +205,9 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
     if (et === "FINDING_UPDATED") {
       return {
         icon: <Edit3 className="h-3.5 w-3.5" />,
-        badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
-        borderClass: "border-blue-500/30",
-        dotClass: "bg-blue-500",
+        badgeClass: "bg-[#EAF3FF] text-[#0A61C9] dark:text-blue-400 border-[#E2E8F0] dark:border-blue-500/30",
+        borderClass: "border-[#E2E8F0] dark:border-blue-500/30",
+        dotClass: "bg-[#0A61C9] dark:bg-blue-500",
       };
     }
     if (et === "FINDING_ASSIGNED") {
@@ -233,9 +233,9 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
     ) {
       return {
         icon: <SendHorizontal className="h-3.5 w-3.5" />,
-        badgeClass: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
-        borderClass: "border-sky-500/30",
-        dotClass: "bg-sky-500",
+        badgeClass: "bg-[#EAF3FF] text-[#0A61C9] dark:text-sky-400 border-[#E2E8F0] dark:border-sky-500/30",
+        borderClass: "border-[#E2E8F0] dark:border-sky-500/30",
+        dotClass: "bg-[#0A61C9] dark:bg-sky-500",
       };
     }
     if (et === "FINDING_RESOLVED" || et === "REMEDIATION_APPROVED") {
@@ -579,7 +579,7 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
                               {meta.cycle_number && (
                                 <div className="flex items-center justify-between gap-2 text-[11px] bg-muted/30 p-2 rounded-lg border border-border/30">
                                   <span className="text-muted-foreground font-medium">Remediation Cycle:</span>
-                                  <Badge variant="outline" className="text-[10px] font-bold bg-sky-500/10 text-sky-600 border-sky-500/30">
+                                  <Badge variant="outline" className="text-[10px] font-bold bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/30">
                                     Cycle {meta.cycle_number}
                                   </Badge>
                                 </div>
@@ -587,8 +587,8 @@ export const FindingActivityTimeline: React.FC<FindingActivityTimelineProps> = (
 
                               {/* Submission Note */}
                               {meta.submission_note && (
-                                <div className="p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-[11px] space-y-0.5">
-                                  <span className="font-bold text-sky-600 dark:text-sky-400 block text-[9px] uppercase tracking-wider">
+                                <div className="p-2.5 rounded-lg bg-[#EAF3FF] dark:bg-sky-500/10 border border-[#E2E8F0] dark:border-sky-500/20 text-[11px] space-y-0.5">
+                                  <span className="font-bold text-[#0A61C9] dark:text-sky-400 block text-[9px] uppercase tracking-wider">
                                     Submission Note
                                   </span>
                                   <p className="text-foreground leading-relaxed">{meta.submission_note}</p>

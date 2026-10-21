@@ -134,7 +134,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
             </div>
           </div>
           <div className="flex items-start gap-1.5">
-            <BookOpen className="h-3.5 w-3.5 text-sky-400 shrink-0 mt-0.5" />
+            <BookOpen className="h-3.5 w-3.5 text-[#0A61C9] dark:text-sky-400 shrink-0 mt-0.5" />
             <div className="truncate">
               <span className="text-muted-foreground mr-1">Regulation:</span>
               <span className="font-medium text-foreground">{regTitle}</span>

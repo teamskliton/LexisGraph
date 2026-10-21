@@ -45,8 +45,8 @@ const iconMap: Record<string, { icon: React.ReactNode; bg: string; color: string
   },
   download: {
     icon: <Download className="h-3.5 w-3.5" />,
-    bg: "bg-blue-500/10",
-    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-[#EAF3FF] dark:bg-blue-500/10",
+    color: "text-[#0A61C9] dark:text-blue-400",
   },
 };
 

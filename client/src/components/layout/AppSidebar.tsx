@@ -487,7 +487,7 @@ function NavItemRow({
         <div className="pointer-events-none absolute left-full ml-2.5 px-2.5 py-1 rounded-md bg-neutral-900 text-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-xl border border-white/10 top-1/2 -translate-y-1/2">
           {item.label}
           {item.badge !== undefined && (
-            <span className="ml-1.5 px-1 py-0.2 rounded-full text-[9px] bg-blue-500/20 text-blue-400 font-bold">
+            <span className="ml-1.5 px-1 py-0.2 rounded-full text-[9px] bg-[#0A61C9]/20 text-[#0A61C9] dark:bg-blue-500/20 dark:text-blue-400 font-bold">
               {item.badge}
             </span>
           )}

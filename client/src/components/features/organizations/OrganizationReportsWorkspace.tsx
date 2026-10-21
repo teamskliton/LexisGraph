@@ -77,7 +77,7 @@ function deriveStatusBadge(status?: string) {
     return { label: "Completed", className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" };
   }
   if (s === "PROCESSING" || s === "RUNNING") {
-    return { label: "Processing", className: "bg-blue-500/10 text-blue-500 border-blue-500/20" };
+    return { label: "Processing", className: "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-blue-500/10 dark:text-blue-500 dark:border-blue-500/20" };
   }
   if (s === "FAILED") {
     return { label: "Failed", className: "bg-red-500/10 text-red-500 border-red-500/20" };
@@ -325,7 +325,7 @@ export function OrganizationReportsWorkspace({
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Latest Report
               </span>
-              <Calendar className="h-4 w-4 text-sky-500" />
+              <Calendar className="h-4 w-4 text-[#0A61C9] dark:text-sky-500" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-bold tabular-nums text-foreground">

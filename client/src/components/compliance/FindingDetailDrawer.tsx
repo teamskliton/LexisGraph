@@ -169,7 +169,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     case "ADMIN_REVIEW":
       return {
         label: "ADMIN REVIEW",
-        className: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
+        className: "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/30",
       };
     case "RESOLVED":
       return {
@@ -194,7 +194,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     default:
       return {
         label: "OPEN",
-        className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+        className: "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30",
       };
   }
 }
@@ -1063,7 +1063,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                           size="xs"
                           onClick={() => handleStatusChange("ADMIN_REVIEW")}
                           disabled={isUpdatingStatus}
-                          className="h-8 text-xs font-semibold gap-1 bg-sky-600 hover:bg-sky-700 text-white cursor-pointer"
+                          className="h-8 text-xs font-semibold gap-1 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
                         >
                           <SendHorizontal className="h-3.5 w-3.5" />
                           <span>Submit for Admin Review</span>
@@ -1117,7 +1117,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                           size="xs"
                           onClick={() => handleStatusChange("ADMIN_REVIEW")}
                           disabled={isUpdatingStatus}
-                          className="h-8 text-xs font-semibold gap-1 bg-sky-600 hover:bg-sky-700 text-white cursor-pointer"
+                          className="h-8 text-xs font-semibold gap-1 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
                         >
                           <SendHorizontal className="h-3.5 w-3.5" />
                           <span>Submit for Admin Review</span>
@@ -1155,7 +1155,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                           size="xs"
                           onClick={() => handleStatusChange("ADMIN_REVIEW")}
                           disabled={isUpdatingStatus}
-                          className="h-8 text-xs font-semibold gap-1 bg-sky-600 hover:bg-sky-700 text-white cursor-pointer"
+                          className="h-8 text-xs font-semibold gap-1 bg-primary hover:bg-primary-hover text-primary-foreground cursor-pointer"
                         >
                           <SendHorizontal className="h-3.5 w-3.5" />
                           <span>Submit for Admin Review</span>
@@ -1228,7 +1228,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                             </Button>
                           </>
                         ) : (
-                          <span className="text-xs text-sky-600 dark:text-sky-400 font-semibold flex items-center gap-1">
+                          <span className="text-xs text-[#0A61C9] dark:text-sky-400 font-semibold flex items-center gap-1">
                             <Clock className="h-3.5 w-3.5" />
                             <span>Under Administrator Review</span>
                           </span>
@@ -1478,8 +1478,8 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
 
                 {/* Verifier Note */}
                 {resolutionProof?.verification?.verification_note && (
-                  <div className="p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
-                    <span className="font-bold text-sky-700 dark:text-sky-300 uppercase text-[10px] block mb-0.5">
+                  <div className="p-2.5 rounded-lg bg-[#EAF3FF] border border-[#E2E8F0] dark:bg-sky-500/10 dark:border-sky-500/20">
+                    <span className="font-bold text-[#0A61C9] dark:text-sky-300 uppercase text-[10px] block mb-0.5">
                       Reviewer Verification Note ({resolutionProof.verification.verified_by_name || "Reviewer"})
                     </span>
                     <p className="text-foreground/90 leading-relaxed italic">
@@ -2307,7 +2307,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-background/80 animate-drawer-backdrop">
           <Card className="w-full max-w-md bg-card p-6 border border-border shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-sky-500/10 text-sky-500 border border-sky-500/20 shrink-0">
+              <div className="p-2 rounded-xl bg-[#EAF3FF] text-[#0A61C9] border border-[#E2E8F0] dark:bg-sky-500/10 dark:text-sky-500 dark:border-sky-500/20 shrink-0">
                 <SendHorizontal className="h-5 w-5" />
               </div>
               <div>
@@ -2342,7 +2342,7 @@ export const FindingDetailDrawer: React.FC<FindingDetailDrawerProps> = ({
                 size="sm"
                 onClick={handleConfirmSubmitReview}
                 disabled={isSubmittingReview}
-                className="text-xs font-semibold cursor-pointer bg-sky-600 hover:bg-sky-700 text-white"
+                className="text-xs font-semibold cursor-pointer bg-primary hover:bg-primary-hover text-primary-foreground"
               >
                 {isSubmittingReview ? "Submitting..." : "Submit to Admin"}
               </Button>

@@ -185,18 +185,18 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-[#E2E8F0] dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            <div className="p-2.5 rounded-xl bg-[#EAF3FF] text-[#0A61C9] dark:text-blue-400 border border-[#E2E8F0] dark:border-blue-500/20">
               <FileText className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <h2 className="text-base font-bold text-[#0F172A] dark:text-slate-100 flex items-center gap-2">
                 Generate Compliance Report & Management Summary
-                <Badge variant="outline" className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-300">
+                <Badge variant="outline" className="text-[10px] bg-[#EAF3FF] dark:bg-blue-950/40 text-[#0A61C9] dark:text-blue-300 border-[#E2E8F0] dark:border-blue-800">
                   Sprint 7.14
                 </Badge>
               </h2>
@@ -217,10 +217,10 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           
           {/* Filter Configuration Toolbar */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-slate-950/40 border border-[#E2E8F0] dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Filter className="h-3.5 w-3.5 text-blue-500" />
+                <Filter className="h-3.5 w-3.5 text-[#0A61C9] dark:text-blue-500" />
                 Report Scope & Filters
               </span>
               <Button
@@ -228,7 +228,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 size="sm"
                 onClick={fetchReportPreview}
                 disabled={isLoadingPreview}
-                className="h-7 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                className="h-7 text-xs text-[#0A61C9] dark:text-blue-400 hover:bg-[#EAF3FF] dark:hover:bg-blue-950/40"
               >
                 <RefreshCw className={cn("h-3 w-3 mr-1", isLoadingPreview && "animate-spin")} />
                 Update Preview
@@ -245,7 +245,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 <select
                   value={dateRange}
                   onChange={(e) => setDateRange(e.target.value)}
-                  className="w-full text-xs h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-blue-500"
+                  className="w-full text-xs h-8 rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-[#0F172A] dark:text-slate-100 focus:ring-1 focus:ring-[#0A61C9]"
                 >
                   <option value="7d">Last 7 Days</option>
                   <option value="30d">Last 30 Days</option>
@@ -264,7 +264,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 <select
                   value={selectedSeverity}
                   onChange={(e) => setSelectedSeverity(e.target.value)}
-                  className="w-full text-xs h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-blue-500"
+                  className="w-full text-xs h-8 rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-[#0F172A] dark:text-slate-100 focus:ring-1 focus:ring-[#0A61C9]"
                 >
                   <option value="ALL">All Severities</option>
                   <option value="CRITICAL">Critical Severity</option>
@@ -282,7 +282,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="w-full text-xs h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-blue-500"
+                  className="w-full text-xs h-8 rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-[#0F172A] dark:text-slate-100 focus:ring-1 focus:ring-[#0A61C9]"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="OPEN">Open</option>
@@ -302,7 +302,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 <select
                   value={selectedPolicyId}
                   onChange={(e) => setSelectedPolicyId(e.target.value)}
-                  className="w-full text-xs h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 truncate"
+                  className="w-full text-xs h-8 rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-[#0F172A] dark:text-slate-100 focus:ring-1 focus:ring-[#0A61C9] truncate"
                 >
                   <option value="ALL">All Policies</option>
                   {policyOptions.map((doc) => (
@@ -321,7 +321,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 <select
                   value={selectedRegId}
                   onChange={(e) => setSelectedRegId(e.target.value)}
-                  className="w-full text-xs h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 truncate"
+                  className="w-full text-xs h-8 rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-[#0F172A] dark:text-slate-100 focus:ring-1 focus:ring-[#0A61C9] truncate"
                 >
                   <option value="ALL">All Regulations</option>
                   {regOptions.map((reg) => (
@@ -336,7 +336,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
 
             {/* Custom Date Pickers */}
             {dateRange === "custom" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800 animate-in fade-in duration-150">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#E2E8F0] dark:border-slate-800 animate-in fade-in duration-150">
                 <div>
                   <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                     Start Date
@@ -345,7 +345,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                     type="date"
                     value={customFromDate}
                     onChange={(e) => setCustomFromDate(e.target.value)}
-                    className="w-full text-xs h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-slate-900 dark:text-slate-100"
+                    className="w-full text-xs h-8 rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-[#0F172A] dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -356,7 +356,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                     type="date"
                     value={customToDate}
                     onChange={(e) => setCustomToDate(e.target.value)}
-                    className="w-full text-xs h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-slate-900 dark:text-slate-100"
+                    className="w-full text-xs h-8 rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-[#0F172A] dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -396,7 +396,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
-                    <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                    <Building2 className="h-3.5 w-3.5 text-[#0A61C9] dark:text-blue-500" />
                     Executive Compliance Snapshot ({reportData.reporting_period})
                   </h3>
                   <span className="text-[11px] text-slate-500">
@@ -409,9 +409,9 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                   {/* Total Findings */}
                   <div
                     onClick={() => handleNavigateToFindings({})}
-                    className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 cursor-pointer transition-all hover:shadow-sm group"
+                    className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#0A61C9] dark:hover:border-blue-500 cursor-pointer transition-all hover:shadow-sm group"
                   >
-                    <div className="text-xl font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 transition-colors">
+                    <div className="text-xl font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#0A61C9] dark:group-hover:text-blue-400 transition-colors">
                       {reportData.executive_metrics.total_findings}
                     </div>
                     <div className="text-[11px] font-semibold text-slate-500 mt-0.5 flex items-center justify-between">
@@ -476,7 +476,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                     variant="link"
                     size="sm"
                     onClick={() => handleNavigateToFindings({ severity: "CRITICAL" })}
-                    className="h-auto p-0 text-xs text-blue-600 dark:text-blue-400"
+                    className="h-auto p-0 text-xs text-[#0A61C9] hover:text-[#084FA5] dark:text-blue-400"
                   >
                     View in Findings Table →
                   </Button>
@@ -583,7 +583,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
                 {/* Regulation Gaps */}
                 <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
-                    <Layers className="h-3.5 w-3.5 text-blue-500" />
+                    <Layers className="h-3.5 w-3.5 text-[#0A61C9] dark:text-blue-500" />
                     Top Regulation Gaps
                   </h4>
                   {reportData.regulation_gaps.length === 0 ? (
@@ -617,7 +617,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
               {reportData.audit_summary.length > 0 && (
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                   <span className="flex items-center gap-2">
-                    <Clock className="h-3.5 w-3.5 text-blue-500" />
+                    <Clock className="h-3.5 w-3.5 text-[#0A61C9] dark:text-blue-500" />
                     <b>Sprint 7.13 Audit Events:</b> {reportData.audit_summary.map((a) => `${a.count} ${a.label}`).join(" • ")}
                   </span>
                 </div>
@@ -629,7 +629,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
         </div>
 
         {/* Action Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E2E8F0] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-900/50">
           <div className="text-xs text-slate-500 flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5 text-slate-400" />
             PDF generation is audited under <code className="text-[10px] font-bold">COMPLIANCE_REPORT_GENERATED</code>.
@@ -641,7 +641,7 @@ export const ComplianceReportModal: React.FC<ComplianceReportModalProps> = ({
             <Button
               onClick={handleDownloadPdf}
               disabled={isDownloadingPdf || isLoadingPreview || !reportData}
-              className="text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 shadow-sm"
+              className="text-xs h-9 bg-primary hover:bg-primary-hover text-primary-foreground flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               {isDownloadingPdf ? (
                 <>

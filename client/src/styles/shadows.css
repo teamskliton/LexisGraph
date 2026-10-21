@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    LexisGraph Design System — Shadows
    Philosophy: Soft, layered, Stripe/Vercel-like
    No hard black shadows. Always use rgba with low opacity.
@@ -49,15 +49,15 @@
 
   /* Glow Shadows — Brand */
   --glow-primary:
-    0 0 24px rgba(37, 99, 235, 0.18),
-    0 0 48px rgba(37, 99, 235, 0.10);
+    0 0 24px rgba(10, 97, 201, 0.18),
+    0 0 48px rgba(10, 97, 201, 0.10);
 
   --glow-accent:
     0 0 24px rgba(16, 185, 129, 0.18),
     0 0 48px rgba(16, 185, 129, 0.10);
 
   --glow-sm-primary:
-    0 0 12px rgba(37, 99, 235, 0.20);
+    0 0 12px rgba(10, 97, 201, 0.20);
 
   --glow-sm-accent:
     0 0 12px rgba(16, 185, 129, 0.20);

@@ -105,7 +105,7 @@ export const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
                             ? "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/50 dark:text-rose-400"
                             : item.priority === "Medium"
                             ? "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400"
-                            : "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400"
+                            : "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-blue-950/50 dark:text-blue-400"
                         }`}
                       >
                         {item.priority}

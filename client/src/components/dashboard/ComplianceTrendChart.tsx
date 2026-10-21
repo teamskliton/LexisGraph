@@ -124,8 +124,8 @@ export const ComplianceTrendChart: React.FC<ComplianceTrendChartProps> = ({
             >
               <defs>
                 <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
@@ -162,7 +162,7 @@ export const ComplianceTrendChart: React.FC<ComplianceTrendChartProps> = ({
               <path
                 d={linePath}
                 fill="none"
-                stroke="#38BDF8"
+                stroke="var(--primary)"
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -181,7 +181,7 @@ export const ComplianceTrendChart: React.FC<ComplianceTrendChartProps> = ({
                       cy={p.y}
                       r={isHovered ? 6 : 4}
                       fill={pointColor}
-                      stroke="#020817"
+                      stroke="var(--card)"
                       strokeWidth="2"
                       onMouseEnter={() => setHoveredIdx(idx)}
                       onMouseLeave={() => setHoveredIdx(null)}

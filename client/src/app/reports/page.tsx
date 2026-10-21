@@ -280,7 +280,7 @@ function ReportsPageContent() {
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Latest Score
               </span>
-              <Calendar className="h-4 w-4 text-sky-400" />
+              <Calendar className="h-4 w-4 text-[#0A61C9] dark:text-sky-400" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-bold tabular-nums text-foreground">

@@ -460,7 +460,7 @@ export function RecommendationsWorkspace({ reportId }: RecommendationsWorkspaceP
 
                     <Badge
                       variant="outline"
-                      className="text-[10px] font-bold uppercase bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                      className="text-[10px] font-bold uppercase bg-[#EAF3FF] text-[#0A61C9] dark:text-blue-400 border-[#E2E8F0] dark:border-blue-500/30"
                     >
                       Finding Status: {item.lifecycle_status || "OPEN"}
                     </Badge>

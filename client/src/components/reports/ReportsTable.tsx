@@ -278,7 +278,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                       className="flex items-center gap-1.5 text-muted-foreground line-clamp-1 max-w-[280px]"
                       title={`Regulation: ${regTitle}`}
                     >
-                      <BookOpen className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+                      <BookOpen className="h-3.5 w-3.5 text-[#0A61C9] dark:text-sky-400 shrink-0" />
                       <span className="truncate">{regTitle}</span>
                     </div>
                   </div>
@@ -384,7 +384,7 @@ export const ReportsTable: React.FC<ReportsTableProps> = ({
                           {downloadingId === reportId ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <Download className="h-4 w-4 text-sky-400" />
+                            <Download className="h-4 w-4 text-[#0A61C9] dark:text-sky-400" />
                           )}
                           <span>Download PDF</span>
                         </DropdownMenuItem>

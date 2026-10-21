@@ -573,7 +573,7 @@ export function ComplianceCalendarWorkspace() {
                               ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
                               : item.severity.toUpperCase() === "HIGH"
                               ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
-                              : "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                              : "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30"
                           )}
                         >
                           {item.severity}

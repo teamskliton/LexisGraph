@@ -89,7 +89,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     case "ADMIN_REVIEW":
       return {
         label: "ADMIN REVIEW",
-        className: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
+        className: "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/30",
       };
     case "RESOLVED":
       return {
@@ -114,7 +114,7 @@ function deriveLifecycleBadge(lifecycleStatus?: string) {
     default:
       return {
         label: "OPEN",
-        className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+        className: "bg-[#EAF3FF] text-[#0A61C9] border-[#E2E8F0] dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30",
       };
   }
 }

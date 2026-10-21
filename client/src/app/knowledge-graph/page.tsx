@@ -391,7 +391,7 @@ function KnowledgeGraphContent() {
           </Card>
 
           <Card className="p-3 border-border/60 flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-lg bg-[#EAF3FF] text-[#0A61C9] border border-[#E2E8F0] dark:bg-blue-500/10 dark:text-blue-400 dark:border-transparent flex items-center justify-center shrink-0">
               <BookOpen className="h-4 w-4" />
             </div>
             <div>
